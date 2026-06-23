@@ -26,12 +26,12 @@ interface Props {
 const ENGINE_LABEL: Record<ChartEngine, string> = {
   echarts: 'ECharts',
   mermaid: 'Mermaid',
-  'antv-g6': 'AntV G6',
+  infographic: 'Infographic',
 }
 const ENGINE_COLOR: Record<ChartEngine, string> = {
   echarts: 'bg-emerald-100 text-emerald-700',
   mermaid: 'bg-amber-100 text-amber-700',
-  'antv-g6': 'bg-rose-100 text-rose-700',
+  infographic: 'bg-rose-100 text-rose-700',
 }
 
 export function SavedChartsDialog({ open, onOpenChange, onLoad }: Props) {

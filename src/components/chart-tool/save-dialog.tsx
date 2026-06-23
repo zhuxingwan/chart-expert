@@ -37,7 +37,7 @@ export function SaveDialog({
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    if (open) setTitle(`我的${engine === 'echarts' ? '数据图表' : engine === 'mermaid' ? '流程图' : '关系图'} ${new Date().toLocaleString('zh-CN', { hour12: false })}`)
+    if (open) setTitle(`我的${engine === 'echarts' ? '数据图表' : engine === 'mermaid' ? '流程图' : '信息图'} ${new Date().toLocaleString('zh-CN', { hour12: false })}`)
   }, [open, engine])
 
   const handleSave = async () => {

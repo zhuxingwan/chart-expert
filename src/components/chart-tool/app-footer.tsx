@@ -12,7 +12,7 @@ export function AppFooter() {
           <span>·</span>
           <span className="font-medium text-foreground">Mermaid 11</span>
           <span>·</span>
-          <span className="font-medium text-foreground">AntV G6 5</span>
+          <span className="font-medium text-foreground">AntV Infographic</span>
           <span>构建</span>
         </div>
         <div className="flex items-center gap-3">

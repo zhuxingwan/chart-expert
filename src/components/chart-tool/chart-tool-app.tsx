@@ -7,7 +7,7 @@ import { AppFooter } from './app-footer'
 import { SaveDialog } from './save-dialog'
 import { SavedChartsDialog } from './saved-charts-dialog'
 import { AISuggestDialog } from './ai-suggest-dialog'
-import type { ChartEngine, EChartsConfig, MermaidConfig, AntVConfig } from '@/types/chart'
+import type { ChartEngine, EChartsConfig, MermaidConfig, InfographicConfig } from '@/types/chart'
 import { toast } from 'sonner'
 
 // Editors are loaded dynamically because they pull in large vendor libraries
@@ -19,8 +19,8 @@ const MermaidEditor = dynamic(
   () => import('@/components/mermaid-editor/mermaid-editor').then(m => m.MermaidEditor),
   { ssr: false, loading: () => <EditorSkeleton /> }
 )
-const AntVEditor = dynamic(
-  () => import('@/components/antv-editor/antv-editor').then(m => m.AntVEditor),
+const InfographicEditor = dynamic(
+  () => import('@/components/infographic-editor/infographic-editor').then(m => m.InfographicEditor),
   { ssr: false, loading: () => <EditorSkeleton /> }
 )
 
@@ -38,7 +38,7 @@ export function ChartToolApp() {
 
   const [echartsConfig, setEchartsConfig] = useState<EChartsConfig | null>(null)
   const [mermaidConfig, setMermaidConfig] = useState<MermaidConfig | null>(null)
-  const [antvConfig, setAntvConfig] = useState<AntVConfig | null>(null)
+  const [infographicConfig, setInfographicConfig] = useState<InfographicConfig | null>(null)
 
   // Dialogs
   const [saveOpen, setSaveOpen] = useState(false)
@@ -49,7 +49,7 @@ export function ChartToolApp() {
     (suggestedEngine: ChartEngine, config: unknown) => {
       if (suggestedEngine === 'echarts') setEchartsConfig(config as EChartsConfig)
       else if (suggestedEngine === 'mermaid') setMermaidConfig(config as MermaidConfig)
-      else setAntvConfig(config as AntVConfig)
+      else setInfographicConfig(config as InfographicConfig)
       setEngine(suggestedEngine)
       toast.success('已应用 AI 推荐')
     },
@@ -83,10 +83,10 @@ export function ChartToolApp() {
                 previewRef={previewRef}
               />
             )}
-            {engine === 'antv-g6' && (
-              <AntVEditor
-                config={antvConfig}
-                onChange={setAntvConfig}
+            {engine === 'infographic' && (
+              <InfographicEditor
+                config={infographicConfig}
+                onChange={setInfographicConfig}
                 previewRef={previewRef}
               />
             )}
@@ -103,7 +103,7 @@ export function ChartToolApp() {
         getConfig={() => {
           if (engine === 'echarts') return echartsConfig
           if (engine === 'mermaid') return mermaidConfig
-          return antvConfig
+          return infographicConfig
         }}
         previewRef={previewRef}
       />
@@ -113,7 +113,7 @@ export function ChartToolApp() {
         onLoad={(loaded) => {
           if (loaded.engine === 'echarts') setEchartsConfig(loaded.config as EChartsConfig)
           else if (loaded.engine === 'mermaid') setMermaidConfig(loaded.config as MermaidConfig)
-          else setAntvConfig(loaded.config as AntVConfig)
+          else setInfographicConfig(loaded.config as InfographicConfig)
           setEngine(loaded.engine)
           toast.success(`已载入：${loaded.title}`)
         }}

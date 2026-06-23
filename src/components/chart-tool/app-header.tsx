@@ -1,6 +1,6 @@
 'use client'
 
-import { BarChart3, GitFork, Network, Sparkles, Save, FolderOpen } from 'lucide-react'
+import { BarChart3, GitFork, Wand2, Sparkles, Save, FolderOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { ChartEngine } from '@/types/chart'
@@ -21,7 +21,7 @@ const TABS: {
 }[] = [
   { id: 'echarts', name: '数据图表', desc: 'ECharts · 柱状 / 折线 / 饼图 / 雷达 …', icon: BarChart3 },
   { id: 'mermaid', name: '流程与结构图', desc: 'Mermaid · 流程图 / 时序 / 思维导图 …', icon: GitFork },
-  { id: 'antv-g6', name: '关系网络图', desc: 'AntV G6 · 力导向 / 树形 / 拓扑 …', icon: Network },
+  { id: 'infographic', name: '信息图', desc: 'AntV Infographic · 流程 / 列表 / 树形 / 关系 …', icon: Wand2 },
 ]
 
 export function AppHeader({

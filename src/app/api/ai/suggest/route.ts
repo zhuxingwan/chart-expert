@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 interface SuggestBody {
-  engine: 'echarts' | 'mermaid' | 'antv-g6'
+  engine: 'echarts' | 'mermaid' | 'infographic'
   prompt: string
   currentType?: string
 }
@@ -51,15 +51,33 @@ For mermaid config, use:
   "theme": "default|dark|forest|neutral|base"
 }
 
-=== AntV G6 types (engine: "antv-g6") ===
-Available type ids: force-network, tree-dendrogram, dagre-flow, radial-tree, compact-box
-For antv-g6 config, use:
+=== AntV Infographic types (engine: "infographic") ===
+Available type ids are template names from the @antv/infographic library (276 built-in templates).
+Pick the closest template id from these popular ones:
+- list-row-simple-horizontal-arrow, list-row-horizontal-icon-line, list-grid-compact-card, list-grid-badge-card, list-grid-progress-card, list-grid-circular-progress, list-pyramid-badge-card, list-sector-simple, list-waterfall-compact-card, list-zigzag-up-compact-card
+- sequence-timeline-simple, sequence-timeline-done-list, sequence-timeline-rounded-rect-node, sequence-steps-badge-card, sequence-steps-simple, sequence-snake-steps-compact-card, sequence-snake-steps-pill-badge, sequence-roadmap-vertical-badge-card, sequence-roadmap-vertical-pill-badge, sequence-circular-simple, sequence-ascending-stairs-3d-simple, sequence-funnel-simple, sequence-pyramid-simple, sequence-interaction-default-badge-card, sequence-interaction-compact-capsule-item
+- compare-binary-horizontal-simple-vs, compare-binary-horizontal-compact-card-arrow, compare-hierarchy-row-letter-card-compact-card, compare-hierarchy-left-right-circle-node-pill-badge, compare-swot, compare-quadrant-simple-illus
+- hierarchy-tree-tech-style-capsule-item, hierarchy-tree-tech-style-compact-card, hierarchy-tree-distributed-origin-capsule-item, hierarchy-tree-curved-line-badge-card, hierarchy-tree-lr-tech-style-capsule-item, hierarchy-mindmap-default-capsule-item (if available), hierarchy-structure-default-compact-card (if available)
+- relation-network-simple-circle-node, relation-network-icon-badge, relation-circle-icon-badge, relation-dagre-flow-tb-compact-card, relation-dagre-flow-lr-compact-card, relation-dagre-flow-tb-animated-capsule
+- chart-pie-plain-text, chart-pie-donut-compact-card, chart-pie-pill-badge, chart-column-simple, chart-bar-plain-text, chart-line-plain-text, chart-wordcloud
+For infographic config, use:
 {
-  "layout": "<force|dendrogram|dagre|radial|compactBox>",
-  "nodes": [ { "id": "string", "label": "string", "group": "string" } ],
-  "edges": [ { "source": "string", "target": "string", "label": "string" } ],
-  "theme": "default|dark"
+  "template": "<template id from above>",
+  "data": {
+    "title": { "text": "string", "subtext": "string" },
+    "lists": [ { "label": "string", "desc": "string", "value": 0, "icon": "emoji-or-keyword", "children": [ ...recursive... ] } ],
+    "nodes": [ { "id": "string", "label": "string", "group": "string" } ],
+    "edges": [ { "from": "string", "to": "string", "label": "string" } ]
+  },
+  "theme": "light" | "dark" | "hand-drawn"
 }
+Rules for infographic:
+- For list / sequence / chart templates, use "lists" array with simple flat items.
+- For hierarchy templates, use "lists" with one root whose "children" form the tree.
+- For relation templates, use "nodes" and "edges" (edge uses "from"/"to" referencing node ids).
+- For compare templates, use "lists" with 2 (binary) or 4 (quadrant) top-level groups, each with children.
+- "icon" can be a single emoji or a short keyword (e.g. "rocket", "trophy", "target").
+- Always include a Chinese title in "data.title.text".
 
 Rules:
 - Always fill in concrete sample data based on the user's description (don't use "Lorem ipsum" placeholders).

@@ -28,8 +28,8 @@ const PLACEHOLDERS: Record<ChartEngine, string> = {
     '例如：展示 2024 年四个季度各产品线的销售额对比，产品线包括手机、电脑、平板。',
   mermaid:
     '例如：画一个用户下单的流程图，从加入购物车到支付成功，包括库存检查与支付校验。',
-  'antv-g6':
-    '例如：展示公司组织架构图，CEO 下设 CTO、CFO、COO，各自带领若干团队。',
+  infographic:
+    '例如：做一个产品发布路线图，包含设计、开发、测试、上线四个阶段，每个阶段有简短说明。',
 }
 
 const PROMPT_TIPS: Record<ChartEngine, string[]> = {
@@ -45,11 +45,11 @@ const PROMPT_TIPS: Record<ChartEngine, string[]> = {
     '思维发散 → 思维导图',
     '项目排期 → 甘特图',
   ],
-  'antv-g6': [
-    '组织层级 → 树形图',
-    '人物关系 → 力导向',
-    '数据流向 → 拓扑图',
-    '概念分类 → 紧凑树',
+  infographic: [
+    '步骤列表 → 流程时间线',
+    '并列要点 → 网格卡片',
+    '层级结构 → 树形图',
+    '关系网络 → 力导向',
   ],
 }
 
