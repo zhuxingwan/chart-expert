@@ -53,20 +53,31 @@ export async function decryptLicense(
   encryptedData: Uint8Array,
   key: ArrayBuffer,
 ): Promise<any> {
-  const iv = encryptedData.slice(0, IV_LENGTH);
-  const ciphertext = encryptedData.slice(IV_LENGTH);
   const keyMaterial = new Uint8Array(key);
-  const decryptedBuffer = new Uint8Array(ciphertext.length);
-  for (let i = 0; i < ciphertext.length; i++) {
-    decryptedBuffer[i] = ciphertext[i] ^ keyMaterial[i % keyMaterial.length];
+  // Try multiple IV lengths — the note app's server may generate keys with
+  // a different IV length than the client-side IV_LENGTH constant.
+  // We attempt to decrypt starting at each possible offset and return the
+  // first one that produces valid JSON.
+  for (const ivLen of [16, 12, 0, 8, 4, 20, 24]) {
+    if (ivLen >= encryptedData.length) continue;
+    const ciphertext = encryptedData.slice(ivLen);
+    const decryptedBuffer = new Uint8Array(ciphertext.length);
+    for (let i = 0; i < ciphertext.length; i++) {
+      decryptedBuffer[i] = ciphertext[i] ^ keyMaterial[i % keyMaterial.length];
+    }
+    const decoder = new TextDecoder();
+    const jsonString = decoder.decode(decryptedBuffer);
+    try {
+      const parsed = JSON.parse(jsonString);
+      // Validate it has the expected license structure
+      if (parsed && typeof parsed === 'object' && parsed.user && parsed.expiry && parsed.type) {
+        return parsed;
+      }
+    } catch (e) {
+      // Try next IV length
+    }
   }
-  const decoder = new TextDecoder();
-  const jsonString = decoder.decode(decryptedBuffer);
-  try {
-    return JSON.parse(jsonString);
-  } catch (e) {
-    throw new Error("Decryption failed or resulted in invalid JSON");
-  }
+  throw new Error("Decryption failed or resulted in invalid JSON");
 }
 
 // ─── Helper: get salt from webicon (EXACT COPY from note app) ───────────
