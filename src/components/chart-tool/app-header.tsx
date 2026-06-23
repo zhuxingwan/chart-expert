@@ -25,14 +25,19 @@ export function AppHeader({
   return (
     <header className="sticky top-0 z-30 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70">
       <div className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center justify-between gap-3 px-4 py-2.5">
-        {/* Brand: NoteRich icon + subtitle */}
+        {/* Brand: NoteRich icon + product name */}
         <div className="flex items-center gap-2.5">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-foreground">
             <NoteRichIcon size={20} />
           </div>
-          <p className="hidden text-xs text-muted-foreground sm:block">
-            {templateName ? t('app.current', { name: templateName }) : t('app.subtitle')}
-          </p>
+          <div>
+            <h1 className="text-sm font-semibold leading-tight sm:text-base">
+              {t('app.title')}
+            </h1>
+            <p className="hidden text-xs text-muted-foreground sm:block">
+              {templateName ? t('app.current', { name: templateName }) : t('app.subtitle')}
+            </p>
+          </div>
         </div>
 
         {/* Actions */}
