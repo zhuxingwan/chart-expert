@@ -87,7 +87,6 @@ import {
   type TemplateMeta,
   type InfographicTemplateCategory,
 } from './template-registry'
-import { exportSvg } from '@/lib/chart/export'
 import { useT, useI18n } from '@/lib/i18n'
 import {
   getInfographicTemplateName,
@@ -531,76 +530,43 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
   const handleReset = () => setZoom(1)
 
   const handleDownloadSvg = async () => {
-    const svg = containerRef.current?.querySelector('svg')
-    if (!svg) {
-      toast.error(t('toasts.noContent'))
-      return
-    }
-    // Add background rect if needed
-    const clone = svg.cloneNode(true) as SVGSVGElement
-    if (config.background && config.background !== 'transparent') {
-      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
-      rect.setAttribute('width', '100%')
-      rect.setAttribute('height', '100%')
-      rect.setAttribute('fill', config.background)
-      clone.insertBefore(rect, clone.firstChild)
-    }
-    exportSvg(clone, `infographic-${Date.now()}.svg`)
-    toast.success(t('toasts.exported'))
-  }
-
-  const handleDownloadPng = async () => {
-    const svg = containerRef.current?.querySelector('svg')
-    if (!svg) {
+    if (!engineRef.current) {
       toast.error(t('toasts.noContent'))
       return
     }
     try {
-      const clone = svg.cloneNode(true) as SVGSVGElement
-      const bbox = svg.getBoundingClientRect()
-      const w = Math.max(100, bbox.width)
-      const h = Math.max(100, bbox.height)
-      clone.setAttribute('width', String(w))
-      clone.setAttribute('height', String(h))
-      clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
-      if (config.background && config.background !== 'transparent') {
-        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
-        rect.setAttribute('width', '100%')
-        rect.setAttribute('height', '100%')
-        rect.setAttribute('fill', config.background)
-        clone.insertBefore(rect, clone.firstChild)
-      }
-      const str = new XMLSerializer().serializeToString(clone)
-      const blob = new Blob([str], { type: 'image/svg+xml;charset=utf-8' })
-      const url = URL.createObjectURL(blob)
-      const img = new Image()
-      img.crossOrigin = 'anonymous'
-      img.onload = () => {
-        const canvas = document.createElement('canvas')
-        const scale = 2
-        canvas.width = w * scale
-        canvas.height = h * scale
-        const ctx = canvas.getContext('2d')
-        if (!ctx) return
-        ctx.fillStyle = config.background
-        ctx.fillRect(0, 0, canvas.width, canvas.height)
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-        URL.revokeObjectURL(url)
-        canvas.toBlob((b) => {
-          if (!b) return
-          const a = document.createElement('a')
-          a.href = URL.createObjectURL(b)
-          a.download = `infographic-${Date.now()}.png`
-          a.click()
-          setTimeout(() => URL.revokeObjectURL(a.href), 1000)
-        }, 'image/png')
-        toast.success(t('toasts.exported'))
-      }
-      img.onerror = () => {
-        URL.revokeObjectURL(url)
-        toast.error(t('toasts.exportFailed', { error: 'PNG' }))
-      }
-      img.src = url
+      // Use the engine's built-in toDataURL which handles resource embedding
+      const dataUrl = await engineRef.current.toDataURL({ type: 'svg' })
+      const a = document.createElement('a')
+      a.href = dataUrl
+      a.download = `infographic-${Date.now()}.svg`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      toast.success(t('toasts.exported'))
+    } catch (e) {
+      toast.error(t('toasts.exportFailed', { error: (e as Error).message }))
+    }
+  }
+
+  const handleDownloadPng = async () => {
+    if (!engineRef.current) {
+      toast.error(t('toasts.noContent'))
+      return
+    }
+    try {
+      // Use the engine's built-in toDataURL — it handles resource embedding
+      // internally, avoiding the "tainted canvas" SecurityError that occurs
+      // when manually drawing an SVG (containing external CDN fonts/images)
+      // onto a canvas via drawImage().
+      const dataUrl = await engineRef.current.toDataURL({ type: 'png', dpr: 2 })
+      const a = document.createElement('a')
+      a.href = dataUrl
+      a.download = `infographic-${Date.now()}.png`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      toast.success(t('toasts.exported'))
     } catch (e) {
       toast.error(t('toasts.exportFailed', { error: (e as Error).message }))
     }
