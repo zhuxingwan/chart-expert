@@ -30,6 +30,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
+        suppressHydrationWarning
       >
         {/* Hidden NoteRich webicon SVG — used by the license key derivation
             salt (getDeriveSalt reads the path 'd' attribute, matching the

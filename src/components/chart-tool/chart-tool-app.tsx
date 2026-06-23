@@ -107,14 +107,16 @@ export function ChartToolApp() {
 
   // On first mount, check the URL for a ?chart= param. If present, activate
   // that template directly (no picker dialog). Otherwise start empty.
-  const [doc, setDoc] = React.useState<ActiveDoc | null>(() => {
-    if (typeof window === 'undefined') return null
+  // Use useEffect to avoid hydration mismatch (server has no window).
+  const [doc, setDoc] = React.useState<ActiveDoc | null>(null)
+
+  React.useEffect(() => {
     const chartParam = getChartFromUrl()
     if (chartParam) {
-      return activateFromTemplateId(chartParam)
+      const newDoc = activateFromTemplateId(chartParam)
+      if (newDoc) setDoc(newDoc)
     }
-    return null
-  })
+  }, [])
 
   // Dialogs
   const [pickerOpen, setPickerOpen] = React.useState(false)

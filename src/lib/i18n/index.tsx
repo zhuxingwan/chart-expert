@@ -173,6 +173,9 @@ function updateUrlLang(locale: string) {
 }
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
+  // Start with loading=true to avoid hydration mismatch:
+  // Server renders with loading=true (no text), client also starts with
+  // loading=true, then useEffect resolves the locale and sets loading=false.
   const [locale, setLocaleState] = React.useState<string>(DEFAULT_LOCALE)
   const [messages, setMessages] = React.useState<Messages>({})
   const [loading, setLoading] = React.useState(true)
@@ -258,7 +261,17 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     t,
   }
 
-  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>
+  return (
+    <I18nContext.Provider value={value}>
+      {loading ? (
+        <div className="flex min-h-screen items-center justify-center bg-background">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-muted border-t-foreground" />
+        </div>
+      ) : (
+        children
+      )}
+    </I18nContext.Provider>
+  )
 }
 
 /** Hook to access the i18n context. */
