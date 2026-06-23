@@ -5,105 +5,117 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 interface SuggestBody {
-  engine: 'echarts' | 'mermaid' | 'infographic'
+  /** Optional hint about which engine to use. If omitted, AI picks freely. */
+  engine?: 'echarts' | 'mermaid' | 'infographic'
   prompt: string
-  currentType?: string
 }
 
-const SYSTEM_PROMPT = `You are a senior data visualization consultant. The user is a NON-technical person using a visual chart-making tool. Based on their natural-language description, you will:
+const SYSTEM_PROMPT = `You are a senior data visualization consultant working inside a NON-technical chart-making tool. The tool supports three rendering libraries but the user never sees them — you must pick the right one automatically based on what the user wants to express.
 
-1. Recommend the most suitable chart/diagram type
-2. Generate a ready-to-use configuration object
+Based on the user's natural-language description, you will:
+1. Decide which underlying library is the best fit
+2. Pick the most suitable template within that library
+3. Generate a ready-to-use configuration object with concrete sample data
 
-You MUST respond with valid JSON only, no markdown fences, no extra text.
+You MUST respond with valid JSON only — no markdown fences, no extra prose.
 
 Output schema:
 {
-  "recommendedType": "<one of the type ids listed below>",
+  "engine": "echarts" | "mermaid" | "infographic",
   "recommendedTypeName": "<human-readable Chinese name>",
-  "reason": "<one short Chinese sentence explaining why this type>",
-  "config": { ... engine-specific configuration ... }
+  "reason": "<one short Chinese sentence explaining why>",
+  "config": { ...engine-specific configuration, see below... }
 }
 
-=== ECharts types (engine: "echarts") ===
-Available type ids: bar, line, pie, scatter, radar, funnel, gauge, heatmap, treemap, sunburst, sankey, graph, boxplot, candlestick
-For echarts config, use the schema:
+=== How to pick the engine ===
+- Use "echarts" for: numerical data trends, comparisons between quantitative categories,占比 of measurable parts, distributions of values, single-metric gauges, heatmaps. Think: numbers + axes.
+- Use "mermaid" for: code-like diagrams with logical flow — flowcharts, sequence diagrams between actors, state machines, ER diagrams, class diagrams, git branches. Think: structured logic with text labels.
+- Use "infographic" for: visually rich presentations of qualitative content — step lists, roadmaps, mind maps, comparison cards, org trees, relationship circles, decorative timelines. Think: presentation-ready visuals with cards/illustrations.
+
+=== ECharts config schema (engine: "echarts") ===
+Pick a "type" from: bar, line, pie, scatter, radar, funnel, gauge, heatmap
 {
   "title": { "text": "string", "subtext": "string" },
-  "series": [
-    { "name": "string", "type": "<bar|line|pie|...>", "data": [number|{name,value}] }
-  ],
-  "categories": ["string", ...],   // x-axis categories for cartesian charts
-  "series_names": ["string", ...], // names of multiple series (optional)
-  "series_data": [[number,...], ...], // multi-series values, parallel to series_names
+  "type": "<bar|line|pie|scatter|radar|funnel|gauge|heatmap>",
+  "theme": "default" | "dark" | "vintage" | "macarons",
   "legend": true,
-  "theme": "default|dark|vintage|macarons|westeros|wonderland",
-  "stack": false,
-  "smooth": false,
-  "horizontal": false
+  "categories": ["string", ...],            // x-axis labels (bar/line/heatmap)
+  "series_names": ["string", ...],
+  "series_data": [[number,...], ...],       // multi-series values
+  "stack": false, "smooth": false, "horizontal": false,
+  "showLabel": true, "showToolbox": true,
+  "single_series_data": [{"name":"string","value":0}], // for pie/funnel
+  "radar_indicators": [{"name":"string","max":100}],  // for radar
+  "gauge_value": 0, "gauge_max": 100,                // for gauge
+  "scatter_data": [[x,y], ...]                       // for scatter
 }
 
-=== Mermaid types (engine: "mermaid") ===
-Available type ids: flowchart, sequence, class, state, er, gantt, journey, mindmap, pie, gitgraph, timeline
-For mermaid config, use:
+=== Mermaid config schema (engine: "mermaid") ===
+Pick a "type" from: flowchart, sequence, class, state, er, gantt, journey, mindmap, pie, gitgraph, timeline
 {
-  "code": "<full mermaid source code as a single string>",
-  "theme": "default|dark|forest|neutral|base"
+  "type": "<flowchart|sequence|class|state|er|gantt|journey|mindmap|pie|gitgraph|timeline>",
+  "code": "<complete, valid mermaid source code as a single string>",
+  "theme": "default" | "dark" | "forest" | "neutral" | "base",
+  "background": "#ffffff"
 }
 
-=== AntV Infographic types (engine: "infographic") ===
-Available type ids are template names from the @antv/infographic library (276 built-in templates).
-Pick the closest template id from these popular ones:
-- list-row-simple-horizontal-arrow, list-row-horizontal-icon-line, list-grid-compact-card, list-grid-badge-card, list-grid-progress-card, list-grid-circular-progress, list-pyramid-badge-card, list-sector-simple, list-waterfall-compact-card, list-zigzag-up-compact-card
-- sequence-timeline-simple, sequence-timeline-done-list, sequence-timeline-rounded-rect-node, sequence-steps-badge-card, sequence-steps-simple, sequence-snake-steps-compact-card, sequence-snake-steps-pill-badge, sequence-roadmap-vertical-badge-card, sequence-roadmap-vertical-pill-badge, sequence-circular-simple, sequence-ascending-stairs-3d-simple, sequence-funnel-simple, sequence-pyramid-simple, sequence-interaction-default-badge-card, sequence-interaction-compact-capsule-item
-- compare-binary-horizontal-simple-vs, compare-binary-horizontal-compact-card-arrow, compare-hierarchy-row-letter-card-compact-card, compare-hierarchy-left-right-circle-node-pill-badge, compare-swot, compare-quadrant-simple-illus
-- hierarchy-tree-tech-style-capsule-item, hierarchy-tree-tech-style-compact-card, hierarchy-tree-distributed-origin-capsule-item, hierarchy-tree-curved-line-badge-card, hierarchy-tree-lr-tech-style-capsule-item, hierarchy-mindmap-default-capsule-item (if available), hierarchy-structure-default-compact-card (if available)
-- relation-network-simple-circle-node, relation-network-icon-badge, relation-circle-icon-badge, relation-dagre-flow-tb-compact-card, relation-dagre-flow-lr-compact-card, relation-dagre-flow-tb-animated-capsule
-- chart-pie-plain-text, chart-pie-donut-compact-card, chart-pie-pill-badge, chart-column-simple, chart-bar-plain-text, chart-line-plain-text, chart-wordcloud
-For infographic config, use:
+=== Infographic config schema (engine: "infographic") ===
+Pick a "template" id from the curated list below. Match the user's intent to the closest template.
+Popular templates (use these when in doubt):
+- list-row-simple-horizontal-arrow, list-grid-compact-card, list-grid-badge-card, list-pyramid-badge-card, list-sector-simple
+- sequence-timeline-simple, sequence-timeline-done-list, sequence-steps-badge-card, sequence-snake-steps-compact-card, sequence-roadmap-vertical-badge-card, sequence-circular-simple, sequence-funnel-simple, sequence-pyramid-simple, sequence-interaction-default-badge-card
+- compare-binary-horizontal-simple-vs, compare-binary-horizontal-compact-card-arrow, compare-hierarchy-left-right-circle-node-pill-badge, compare-swot, compare-quadrant-simple-illus
+- hierarchy-tree-tech-style-capsule-item, hierarchy-tree-tech-style-compact-card, hierarchy-tree-distributed-origin-capsule-item, hierarchy-tree-lr-tech-style-capsule-item
+- relation-network-simple-circle-node, relation-circle-icon-badge, relation-dagre-flow-tb-compact-card, relation-dagre-flow-lr-compact-card, relation-dagre-flow-tb-animated-capsule
+- chart-pie-plain-text, chart-pie-donut-compact-card, chart-column-simple, chart-bar-plain-text, chart-line-plain-text, chart-wordcloud
 {
-  "template": "<template id from above>",
+  "type": "<template id>",
+  "template": "<same template id>",
   "data": {
     "title": { "text": "string", "subtext": "string" },
-    "lists": [ { "label": "string", "desc": "string", "value": 0, "icon": "emoji-or-keyword", "children": [ ...recursive... ] } ],
+    "lists": [ { "label": "string", "desc": "string", "value": 0, "icon": "emoji", "children": [ ...recursive... ] } ],
     "nodes": [ { "id": "string", "label": "string", "group": "string" } ],
     "edges": [ { "from": "string", "to": "string", "label": "string" } ]
   },
-  "theme": "light" | "dark" | "hand-drawn"
+  "theme": "light" | "dark" | "hand-drawn",
+  "background": "#ffffff",
+  "width": 900,
+  "height": 600
 }
-Rules for infographic:
-- For list / sequence / chart templates, use "lists" array with simple flat items.
-- For hierarchy templates, use "lists" with one root whose "children" form the tree.
-- For relation templates, use "nodes" and "edges" (edge uses "from"/"to" referencing node ids).
-- For compare templates, use "lists" with 2 (binary) or 4 (quadrant) top-level groups, each with children.
-- "icon" can be a single emoji or a short keyword (e.g. "rocket", "trophy", "target").
-- Always include a Chinese title in "data.title.text".
+Infographic data shape rules:
+- list / sequence / chart templates: use "lists" with flat items.
+- hierarchy templates: use "lists" with ONE root whose "children" form the tree.
+- relation templates: use "nodes" and "edges" (edges use "from"/"to" referencing node ids).
+- compare templates: use "lists" with 2 (binary) or 4 (quadrant) top-level groups, each with "children".
+- "icon" can be a single emoji or short keyword.
 
-Rules:
-- Always fill in concrete sample data based on the user's description (don't use "Lorem ipsum" placeholders).
-- Use Chinese labels for the sample data unless the user writes English.
-- Keep sample data small (5-12 entries) and realistic.
-- For mermaid, write complete, syntactically-valid mermaid code.
+=== Universal rules ===
+- Always fill in CONCRETE sample data based on the user's description (no "Lorem ipsum").
+- Use Chinese labels for sample data unless the user writes in English.
+- Keep sample data small (4-12 entries) and realistic.
+- For mermaid, write complete, syntactically-valid code.
+- Always include a Chinese title.
 - Output STRICT JSON only.`
 
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as SuggestBody
-    if (!body.engine || !body.prompt) {
+    if (!body.prompt) {
       return NextResponse.json(
-        { error: 'engine and prompt are required' },
-        { status: 400 }
+        { error: 'prompt is required' },
+        { status: 400 },
       )
     }
 
     const zai = await ZAI.create()
+    const userHint = body.engine
+      ? `User hinted engine: ${body.engine} (you may still override if a different library is clearly better).\nUser request: ${body.prompt}`
+      : `User request: ${body.prompt}`
+
     const completion = await zai.chat.completions.create({
       messages: [
         { role: 'assistant', content: SYSTEM_PROMPT },
-        {
-          role: 'user',
-          content: `Engine: ${body.engine}\nUser request: ${body.prompt}`,
-        },
+        { role: 'user', content: userHint },
       ],
       thinking: { type: 'disabled' },
     })
@@ -121,7 +133,7 @@ export async function POST(req: NextRequest) {
     } catch {
       return NextResponse.json(
         { error: 'AI returned malformed JSON', raw: cleaned },
-        { status: 502 }
+        { status: 502 },
       )
     }
 
@@ -129,7 +141,7 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     return NextResponse.json(
       { error: (e as Error).message },
-      { status: 500 }
+      { status: 500 },
     )
   }
 }

@@ -394,6 +394,4 @@ export const THEME_OPTIONS: { value: string; label: string }[] = [
   { value: 'dark', label: '深色' },
   { value: 'vintage', label: '复古' },
   { value: 'macarons', label: '马卡龙' },
-  { value: 'westeros', label: '维斯特洛' },
-  { value: 'wonderland', label: '仙境' },
 ]

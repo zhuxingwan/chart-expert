@@ -1,0 +1,1123 @@
+     1→'use client'
+     2→
+     3→import * as React from 'react'
+     4→import { Infographic as InfographicEngine } from '@antv/infographic'
+     5→import { toast } from 'sonner'
+     6→import {
+     7→  Download,
+     8→  Copy,
+     9→  Plus,
+    10→  Trash2,
+    11→  ChevronRight,
+    12→  ChevronDown,
+    13→  ZoomIn,
+    14→  ZoomOut,
+    15→  Maximize,
+    16→  Wand2,
+    17→  LayoutGrid,
+    18→  Rows3,
+    19→  Columns3,
+    20→  Triangle,
+    21→  PieChart,
+    22→  Waves,
+    23→  Spline,
+    24→  GitCommitHorizontal,
+    25→  ListOrdered,
+    26→  Map as MapIcon,
+    27→  CircleDot,
+    28→  Filter,
+    29→  ArrowRightLeft,
+    30→  TrendingUp,
+    31→  Database,
+    32→  Mountain,
+    33→  Grid3x3,
+    34→  RefreshCw,
+    35→  Circle,
+    36→  Columns2,
+    37→  Split,
+    38→  Grid2x2,
+    39→  Network,
+    40→  Share2,
+    41→  BarChart3,
+    42→  BarChartHorizontal,
+    43→  LineChart,
+    44→  Cloud,
+    45→  Square,
+    46→  Search,
+    47→} from 'lucide-react'
+    48→
+    49→import { cn } from '@/lib/utils'
+    50→import type {
+    51→  InfographicConfig,
+    52→  InfographicData,
+    53→  InfographicItem,
+    54→  InfographicRelationNode,
+    55→  InfographicRelationEdge,
+    56→} from '@/types/chart'
+    57→import {
+    58→  ResizablePanelGroup,
+    59→  ResizablePanel,
+    60→  ResizableHandle,
+    61→} from '@/components/ui/resizable'
+    62→import { Button } from '@/components/ui/button'
+    63→import { Input } from '@/components/ui/input'
+    64→import { Label } from '@/components/ui/label'
+    65→import { Textarea } from '@/components/ui/textarea'
+    66→import { Badge } from '@/components/ui/badge'
+    67→import {
+    68→  Select,
+    69→  SelectContent,
+    70→  SelectItem,
+    71→  SelectTrigger,
+    72→  SelectValue,
+    73→} from '@/components/ui/select'
+    74→import {
+    75→  ScrollArea,
+    76→} from '@/components/ui/scroll-area'
+    77→import {
+    78→  TEMPLATE_REGISTRY,
+    79→  CATEGORY_LABEL,
+    80→  CATEGORY_ORDER,
+    81→  groupTemplatesByCategory,
+    82→  defaultDataForShape,
+    83→  type TemplateMeta,
+    84→  type InfographicTemplateCategory,
+    85→} from './template-registry'
+    86→import { exportSvg, exportJson } from '@/lib/chart/export'
+    87→
+    88→// Icon registry — maps template icon names to lucide components
+    89→const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+    90→  Rows3, LayoutGrid, Columns3, Triangle, PieChart, Waves, Spline,
+    91→  'GitCommitHorizontal': GitCommitHorizontal, ListOrdered, 'Map': MapIcon,
+    92→  CircleDot, Filter, ArrowRightLeft, TrendingUp, Database, Mountain,
+    93→  Grid3x3, RefreshCw, Circle, Columns2, Split, 'Grid2x2': Grid2x2,
+    94→  Network, Share2, 'BarChart3': BarChart3, 'BarChartHorizontal': BarChartHorizontal,
+    95→  'LineChart': LineChart, Cloud, Square,
+    96→}
+    97→
+    98→function deepClone<T>(v: T): T {
+    99→  return JSON.parse(JSON.stringify(v)) as T
+   100→}
+   101→
+   102→function getIcon(name: string): React.ComponentType<{ className?: string }> {
+   103→  return ICON_MAP[name] ?? Square
+   104→}
+   105→
+   106→// ---------------------------------------------------------------------------
+   107→// Props
+   108→// ---------------------------------------------------------------------------
+   109→
+   110→export interface InfographicEditorProps {
+   111→  config: InfographicConfig | null
+   112→  onChange: (cfg: InfographicConfig) => void
+   113→  previewRef: React.RefObject<HTMLDivElement | null>
+   114→}
+   115→
+   116→// ===========================================================================
+   117→// Main component
+   118→// ===========================================================================
+   119→
+   120→export function InfographicEditor({ config, onChange, previewRef }: InfographicEditorProps) {
+   121→  const [local, setLocal] = React.useState<InfographicConfig>(() =>
+   122→    config
+   123→      ? deepClone(config)
+   124→      : {
+   125→          type: TEMPLATE_REGISTRY[0].id,
+   126→          template: TEMPLATE_REGISTRY[0].id,
+   127→          data: defaultDataForShape(TEMPLATE_REGISTRY[0].dataShape),
+   128→          theme: 'light',
+   129→          background: '#ffffff',
+   130→          width: 900,
+   131→          height: 600,
+   132→        },
+   133→  )
+   134→  const lastAppliedKey = React.useRef<string>('')
+   135→
+   136→  // Sync parent -> local
+   137→  React.useEffect(() => {
+   138→    if (!config) return
+   139→    const key = JSON.stringify(config)
+   140→    if (key !== lastAppliedKey.current) {
+   141→      lastAppliedKey.current = key
+   142→      setLocal(deepClone(config))
+   143→    }
+   144→  }, [config])
+   145→
+   146→  // Sync local -> parent (debounced 200ms)
+   147→  React.useEffect(() => {
+   148→    const t = setTimeout(() => {
+   149→      const key = JSON.stringify(local)
+   150→      if (key !== lastAppliedKey.current) {
+   151→        lastAppliedKey.current = key
+   152→        onChange(deepClone(local))
+   153→      }
+   154→    }, 200)
+   155→    return () => clearTimeout(t)
+   156→  }, [local, onChange])
+   157→
+   158→  const update = React.useCallback((patch: Partial<InfographicConfig>) => {
+   159→    setLocal((prev) => ({ ...prev, ...patch }))
+   160→  }, [])
+   161→
+   162→  const applyTemplate = React.useCallback((tpl: TemplateMeta) => {
+   163→    setLocal((prev) => ({
+   164→      ...prev,
+   165→      type: tpl.id,
+   166→      template: tpl.id,
+   167→      data: defaultDataForShape(tpl.dataShape),
+   168→    }))
+   169→    toast.success(`已应用模板：${tpl.name}`)
+   170→  }, [])
+   171→
+   172→  const currentTemplate = React.useMemo(
+   173→    () => TEMPLATE_REGISTRY.find((t) => t.id === local.template) ?? TEMPLATE_REGISTRY[0],
+   174→    [local.template],
+   175→  )
+   176→
+   177→  return (
+   178→    <ResizablePanelGroup direction="horizontal" className="h-full">
+   179→      {/* ---------------- Left: Template gallery ---------------- */}
+   180→      <ResizablePanel defaultSize={28} minSize={20} maxSize={40}>
+   181→        <TemplateGallery
+   182→          currentId={local.template}
+   183→          onPick={applyTemplate}
+   184→        />
+   185→      </ResizablePanel>
+   186→
+   187→      <ResizableHandle withHandle />
+   188→
+   189→      {/* ---------------- Middle: Preview ---------------- */}
+   190→      <ResizablePanel defaultSize={42} minSize={30}>
+   191→        <PreviewPanel
+   192→          config={local}
+   193→          previewRef={previewRef}
+   194→        />
+   195→      </ResizablePanel>
+   196→
+   197→      <ResizableHandle withHandle />
+   198→
+   199→      {/* ---------------- Right: Data & style ---------------- */}
+   200→      <ResizablePanel defaultSize={30} minSize={22}>
+   201→        <ConfigPanel
+   202→          config={local}
+   203→          template={currentTemplate}
+   204→          update={update}
+   205→        />
+   206→      </ResizablePanel>
+   207→    </ResizablePanelGroup>
+   208→  )
+   209→}
+   210→
+   211→// ===========================================================================
+   212→// Template gallery (left)
+   213→// ===========================================================================
+   214→
+   215→interface GalleryProps {
+   216→  currentId: string
+   217→  onPick: (tpl: TemplateMeta) => void
+   218→}
+   219→
+   220→function TemplateGallery({ currentId, onPick }: GalleryProps) {
+   221→  const [keyword, setKeyword] = React.useState('')
+   222→  const groups = React.useMemo(() => groupTemplatesByCategory(), [])
+   223→
+   224→  const filtered = React.useMemo(() => {
+   225→    if (!keyword.trim()) return null
+   226→    const kw = keyword.toLowerCase()
+   227→    return TEMPLATE_REGISTRY.filter(
+   228→      (t) =>
+   229→        t.name.toLowerCase().includes(kw) ||
+   230→        t.id.toLowerCase().includes(kw) ||
+   231→        t.tags.some((tag) => tag.toLowerCase().includes(kw)),
+   232→    )
+   233→  }, [keyword])
+   234→
+   235→  return (
+   236→    <div className="flex h-full flex-col">
+   237→      <div className="border-b p-3">
+   238→        <div className="mb-2 flex items-center gap-2">
+   239→          <Wand2 className="h-4 w-4 text-primary" />
+   240→          <h3 className="text-sm font-semibold">信息图模板</h3>
+   241→        </div>
+   242→        <div className="relative">
+   243→          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+   244→          <Input
+   245→            value={keyword}
+   246→            onChange={(e) => setKeyword(e.target.value)}
+   247→            placeholder="搜索模板…"
+   248→            className="h-8 pl-8 text-xs"
+   249→          />
+   250→        </div>
+   251→      </div>
+   252→      <ScrollArea className="flex-1">
+   253→        <div className="p-3">
+   254→          {filtered ? (
+   255→            <div className="grid grid-cols-2 gap-2">
+   256→              {filtered.map((t) => (
+   257→                <TemplateCard
+   258→                  key={t.id}
+   259→                  tpl={t}
+   260→                  active={t.id === currentId}
+   261→                  onClick={() => onPick(t)}
+   262→                />
+   263→              ))}
+   264→              {filtered.length === 0 && (
+   265→                <div className="col-span-2 py-8 text-center text-xs text-muted-foreground">
+   266→                  没有匹配的模板
+   267→                </div>
+   268→              )}
+   269→            </div>
+   270→          ) : (
+   271→            <div className="space-y-4">
+   272→              {CATEGORY_ORDER.map((cat) => {
+   273→                const list = groups[cat]
+   274→                if (!list || list.length === 0) return null
+   275→                return (
+   276→                  <section key={cat}>
+   277→                    <div className="mb-2 flex items-center justify-between">
+   278→                      <h4 className="text-xs font-semibold text-foreground">
+   279→                        {CATEGORY_LABEL[cat]}
+   280→                      </h4>
+   281→                      <Badge variant="secondary" className="text-[10px]">
+   282→                        {list.length}
+   283→                      </Badge>
+   284→                    </div>
+   285→                    <div className="grid grid-cols-2 gap-2">
+   286→                      {list.map((t) => (
+   287→                        <TemplateCard
+   288→                          key={t.id}
+   289→                          tpl={t}
+   290→                          active={t.id === currentId}
+   291→                          onClick={() => onPick(t)}
+   292→                        />
+   293→                      ))}
+   294→                    </div>
+   295→                  </section>
+   296→                )
+   297→              })}
+   298→            </div>
+   299→          )}
+   300→        </div>
+   301→      </ScrollArea>
+   302→    </div>
+   303→  )
+   304→}
+   305→
+   306→interface CardProps {
+   307→  tpl: TemplateMeta
+   308→  active: boolean
+   309→  onClick: () => void
+   310→}
+   311→
+   312→function TemplateCard({ tpl, active, onClick }: CardProps) {
+   313→  const iconKey = tpl.id.split('-').slice(0, 2).join('-')
+   314→  const IconComponent = (getIcon(iconKey) || getIcon(tpl.id.split('-')[0]) || Square) as React.FC<{ className?: string }>
+   315→  return (
+   316→    <button
+   317→      onClick={onClick}
+   318→      title={tpl.description}
+   319→      className={cn(
+   320→        'group flex flex-col gap-1.5 rounded-lg border p-2.5 text-left transition-all',
+   321→        active
+   322→          ? 'border-primary bg-primary/5 ring-1 ring-primary'
+   323→          : 'hover:border-foreground/30 hover:bg-muted/50',
+   324→      )}
+   325→    >
+   326→      <div
+   327→        className={cn(
+   328→          'flex h-7 w-7 items-center justify-center rounded-md',
+   329→          active ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground',
+   330→        )}
+   331→      >
+   332→        <IconComponent className="h-4 w-4" />
+   333→      </div>
+   334→      <div className="text-xs font-medium leading-tight">{tpl.name}</div>
+   335→    </button>
+   336→  )
+   337→}
+   338→
+   339→// ===========================================================================
+   340→// Preview (middle)
+   341→// ===========================================================================
+   342→
+   343→interface PreviewProps {
+   344→  config: InfographicConfig
+   345→  previewRef: React.RefObject<HTMLDivElement | null>
+   346→}
+   347→
+   348→function PreviewPanel({ config, previewRef }: PreviewProps) {
+   349→  const containerRef = React.useRef<HTMLDivElement>(null)
+   350→  const engineRef = React.useRef<InfographicEngine | null>(null)
+   351→  const [zoom, setZoom] = React.useState(1)
+   352→  const [error, setError] = React.useState<string | null>(null)
+   353→  const renderSeq = React.useRef(0)
+   354→
+   355→  // Create / destroy engine as container mounts
+   356→  React.useEffect(() => {
+   357→    if (!containerRef.current) return
+   358→    try {
+   359→      engineRef.current = new InfographicEngine({
+   360→        container: containerRef.current,
+   361→        width: '100%',
+   362→        height: '100%',
+   363→        editable: false,
+   364→      })
+   365→    } catch (e) {
+   366→      console.error('Infographic init error', e)
+   367→      setError((e as Error).message)
+   368→    }
+   369→    return () => {
+   370→      try {
+   371→        engineRef.current?.destroy()
+   372→      } catch {
+   373→        // ignore
+   374→      }
+   375→      engineRef.current = null
+   376→    }
+   377→  }, [])
+   378→
+   379→  // Render on config change (debounced 250ms)
+   380→  React.useEffect(() => {
+   381→    const seq = ++renderSeq.current
+   382→    const t = setTimeout(() => {
+   383→      if (!engineRef.current || renderSeq.current !== seq) return
+   384→      try {
+   385→        engineRef.current.render({
+   386→          template: config.template,
+   387→          data: config.data,
+   388→          theme: config.theme,
+   389→        })
+   390→        setError(null)
+   391→      } catch (e) {
+   392→        console.error('Infographic render error', e)
+   393→        setError((e as Error).message)
+   394→      }
+   395→    }, 250)
+   396→    return () => clearTimeout(t)
+   397→  }, [config.template, config.data, config.theme])
+   398→
+   399→  const handleZoomIn = () => setZoom((z) => Math.min(2.5, z + 0.2))
+   400→  const handleZoomOut = () => setZoom((z) => Math.max(0.4, z - 0.2))
+   401→  const handleReset = () => setZoom(1)
+   402→
+   403→  const handleDownloadSvg = async () => {
+   404→    const svg = containerRef.current?.querySelector('svg')
+   405→    if (!svg) {
+   406→      toast.error('暂无可导出的内容')
+   407→      return
+   408→    }
+   409→    // Add background rect if needed
+   410→    const clone = svg.cloneNode(true) as SVGSVGElement
+   411→    if (config.background && config.background !== 'transparent') {
+   412→      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+   413→      rect.setAttribute('width', '100%')
+   414→      rect.setAttribute('height', '100%')
+   415→      rect.setAttribute('fill', config.background)
+   416→      clone.insertBefore(rect, clone.firstChild)
+   417→    }
+   418→    exportSvg(clone, `infographic-${Date.now()}.svg`)
+   419→    toast.success('SVG 已下载')
+   420→  }
+   421→
+   422→  const handleDownloadPng = async () => {
+   423→    const svg = containerRef.current?.querySelector('svg')
+   424→    if (!svg) {
+   425→      toast.error('暂无可导出的内容')
+   426→      return
+   427→    }
+   428→    try {
+   429→      const clone = svg.cloneNode(true) as SVGSVGElement
+   430→      const bbox = svg.getBoundingClientRect()
+   431→      const w = Math.max(100, bbox.width)
+   432→      const h = Math.max(100, bbox.height)
+   433→      clone.setAttribute('width', String(w))
+   434→      clone.setAttribute('height', String(h))
+   435→      clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+   436→      if (config.background && config.background !== 'transparent') {
+   437→        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+   438→        rect.setAttribute('width', '100%')
+   439→        rect.setAttribute('height', '100%')
+   440→        rect.setAttribute('fill', config.background)
+   441→        clone.insertBefore(rect, clone.firstChild)
+   442→      }
+   443→      const str = new XMLSerializer().serializeToString(clone)
+   444→      const blob = new Blob([str], { type: 'image/svg+xml;charset=utf-8' })
+   445→      const url = URL.createObjectURL(blob)
+   446→      const img = new Image()
+   447→      img.crossOrigin = 'anonymous'
+   448→      img.onload = () => {
+   449→        const canvas = document.createElement('canvas')
+   450→        const scale = 2
+   451→        canvas.width = w * scale
+   452→        canvas.height = h * scale
+   453→        const ctx = canvas.getContext('2d')
+   454→        if (!ctx) return
+   455→        ctx.fillStyle = config.background
+   456→        ctx.fillRect(0, 0, canvas.width, canvas.height)
+   457→        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+   458→        URL.revokeObjectURL(url)
+   459→        canvas.toBlob((b) => {
+   460→          if (!b) return
+   461→          const a = document.createElement('a')
+   462→          a.href = URL.createObjectURL(b)
+   463→          a.download = `infographic-${Date.now()}.png`
+   464→          a.click()
+   465→          setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+   466→        }, 'image/png')
+   467→        toast.success('PNG 已下载')
+   468→      }
+   469→      img.onerror = () => {
+   470→        URL.revokeObjectURL(url)
+   471→        toast.error('PNG 导出失败')
+   472→      }
+   473→      img.src = url
+   474→    } catch (e) {
+   475→      toast.error('PNG 导出失败：' + (e as Error).message)
+   476→    }
+   477→  }
+   478→
+   479→  const handleExportJson = () => {
+   480→    exportJson(config, `infographic-config-${Date.now()}.json`)
+   481→    toast.success('配置已导出')
+   482→  }
+   483→
+   484→  return (
+   485→    <div className="flex h-full flex-col">
+   486→      {/* Toolbar */}
+   487→      <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
+   488→        <div className="flex items-center gap-1.5">
+   489→          <Button size="sm" variant="ghost" onClick={handleZoomOut} className="h-7 w-7 p-0">
+   490→            <ZoomOut className="h-4 w-4" />
+   491→          </Button>
+   492→          <span className="w-12 text-center text-xs tabular-nums text-muted-foreground">
+   493→            {Math.round(zoom * 100)}%
+   494→          </span>
+   495→          <Button size="sm" variant="ghost" onClick={handleZoomIn} className="h-7 w-7 p-0">
+   496→            <ZoomIn className="h-4 w-4" />
+   497→          </Button>
+   498→          <Button size="sm" variant="ghost" onClick={handleReset} className="h-7 w-7 p-0">
+   499→            <Maximize className="h-4 w-4" />
+   500→          </Button>
+   501→        </div>
+   502→        <div className="flex items-center gap-1">
+   503→          <Button size="sm" variant="ghost" onClick={handleDownloadSvg} className="h-7 gap-1 px-2 text-xs">
+   504→            <Download className="h-3 w-3" /> SVG
+   505→          </Button>
+   506→          <Button size="sm" variant="ghost" onClick={handleDownloadPng} className="h-7 gap-1 px-2 text-xs">
+   507→            <Download className="h-3 w-3" /> PNG
+   508→          </Button>
+   509→          <Button size="sm" variant="ghost" onClick={handleExportJson} className="h-7 gap-1 px-2 text-xs">
+   510→            <Copy className="h-3 w-3" /> JSON
+   511→          </Button>
+   512→        </div>
+   513→      </div>
+   514→
+   515→      {/* Canvas */}
+   516→      <div
+   517→        ref={previewRef}
+   518→        className="relative flex-1 overflow-auto p-4"
+   519→        style={{ background: config.background }}
+   520→      >
+   521→        <div
+   522→          className="mx-auto flex min-h-full w-full items-center justify-center"
+   523→          style={{
+   524→            transform: `scale(${zoom})`,
+   525→            transformOrigin: 'center center',
+   526→            transition: 'transform 0.15s ease',
+   527→          }}
+   528→        >
+   529→          <div
+   530→            ref={containerRef}
+   531→            className="h-full w-full"
+   532→            style={{ minHeight: 400 }}
+   533→          />
+   534→        </div>
+   535→        {error && (
+   536→          <div className="absolute inset-x-4 bottom-4 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-xs text-destructive">
+   537→            <div className="mb-1 font-semibold">渲染出错</div>
+   538→            <pre className="max-h-32 overflow-auto whitespace-pre-wrap">{error}</pre>
+   539→          </div>
+   540→        )}
+   541→      </div>
+   542→    </div>
+   543→  )
+   544→}
+   545→
+   546→// ===========================================================================
+   547→// Config panel (right)
+   548→// ===========================================================================
+   549→
+   550→interface ConfigProps {
+   551→  config: InfographicConfig
+   552→  template: TemplateMeta
+   553→  update: (patch: Partial<InfographicConfig>) => void
+   554→}
+   555→
+   556→function ConfigPanel({ config, template, update }: ConfigProps) {
+   557→  return (
+   558→    <ScrollArea className="h-full">
+   559→      <div className="space-y-5 p-4">
+   560→        {/* Template info */}
+   561→        <section className="rounded-lg border bg-muted/30 p-3">
+   562→          <div className="mb-1 flex items-center gap-2">
+   563→            <Badge variant="secondary" className="text-[10px]">
+   564→              {CATEGORY_LABEL[template.category]}
+   565→            </Badge>
+   566→            <h3 className="text-sm font-semibold">{template.name}</h3>
+   567→          </div>
+   568→          <p className="text-xs text-muted-foreground">{template.description}</p>
+   569→        </section>
+   570→
+   571→        {/* Title */}
+   572→        <section className="space-y-2">
+   573→          <h4 className="text-xs font-semibold text-muted-foreground">标题</h4>
+   574→          <div className="grid gap-2">
+   575→            <Input
+   576→              value={config.data.title?.text ?? ''}
+   577→              onChange={(e) =>
+   578→                update({
+   579→                  data: {
+   580→                    ...config.data,
+   581→                    title: {
+   582→                      ...(config.data.title ?? {}),
+   583→                      text: e.target.value,
+   584→                    },
+   585→                  },
+   586→                })
+   587→              }
+   588→              placeholder="主标题"
+   589→              className="h-8 text-xs"
+   590→            />
+   591→            <Input
+   592→              value={config.data.title?.subtext ?? ''}
+   593→              onChange={(e) =>
+   594→                update({
+   595→                  data: {
+   596→                    ...config.data,
+   597→                    title: {
+   598→                      ...(config.data.title ?? {}),
+   599→                      subtext: e.target.value,
+   600→                    },
+   601→                  },
+   602→                })
+   603→              }
+   604→              placeholder="副标题（可选）"
+   605→              className="h-8 text-xs"
+   606→            />
+   607→          </div>
+   608→        </section>
+   609→
+   610→        {/* Data editor — switch by data shape */}
+   611→        <section className="space-y-2">
+   612→          <h4 className="text-xs font-semibold text-muted-foreground">数据</h4>
+   613→          {template.dataShape === 'relation' ? (
+   614→            <RelationDataEditor config={config} update={update} />
+   615→          ) : template.dataShape === 'hierarchy' ? (
+   616→            <HierarchyDataEditor config={config} update={update} />
+   617→          ) : template.dataShape === 'compare' ? (
+   618→            <CompareDataEditor config={config} update={update} />
+   619→          ) : (
+   620→            <ListDataEditor config={config} update={update} />
+   621→          )}
+   622→        </section>
+   623→
+   624→        {/* Theme & background */}
+   625→        <section className="space-y-2">
+   626→          <h4 className="text-xs font-semibold text-muted-foreground">样式</h4>
+   627→          <div className="grid gap-2">
+   628→            <div className="grid grid-cols-3 gap-1.5">
+   629→              {(['light', 'dark', 'hand-drawn'] as const).map((th) => (
+   630→                <button
+   631→                  key={th}
+   632→                  onClick={() => update({ theme: th })}
+   633→                  className={cn(
+   634→                    'rounded-md border py-1.5 text-xs transition-all',
+   635→                    config.theme === th
+   636→                      ? 'border-primary bg-primary/5 text-primary ring-1 ring-primary'
+   637→                      : 'hover:bg-muted',
+   638→                  )}
+   639→                >
+   640→                  {th === 'light' ? '亮色' : th === 'dark' ? '暗色' : '手绘'}
+   641→                </button>
+   642→              ))}
+   643→            </div>
+   644→            <div className="flex items-center gap-1.5">
+   645→              <Label className="w-16 text-xs">背景色</Label>
+   646→              <Input
+   647→                type="color"
+   648→                value={config.background}
+   649→                onChange={(e) => update({ background: e.target.value })}
+   650→                className="h-8 w-10 cursor-pointer p-1"
+   651→              />
+   652→              <Input
+   653→                value={config.background}
+   654→                onChange={(e) => update({ background: e.target.value })}
+   655→                className="h-8 flex-1 font-mono text-xs"
+   656→              />
+   657→            </div>
+   658→          </div>
+   659→        </section>
+   660→      </div>
+   661→    </ScrollArea>
+   662→  )
+   663→}
+   664→
+   665→// ---------------------------------------------------------------------------
+   666→// List / sequence / chart data editor
+   667→// ---------------------------------------------------------------------------
+   668→
+   669→function ListDataEditor({
+   670→  config,
+   671→  update,
+   672→}: {
+   673→  config: InfographicConfig
+   674→  update: (patch: Partial<InfographicConfig>) => void
+   675→}) {
+   676→  const items = config.data.lists ?? []
+   677→
+   678→  const setItems = (next: InfographicItem[]) => {
+   679→    update({ data: { ...config.data, lists: next } })
+   680→  }
+   681→
+   682→  const add = () => {
+   683→    setItems([
+   684→      ...items,
+   685→      { label: `新条目 ${items.length + 1}`, desc: '', value: 50, icon: '📍' },
+   686→    ])
+   687→  }
+   688→
+   689→  const updateItem = (i: number, patch: Partial<InfographicItem>) => {
+   690→    setItems(items.map((it, idx) => (idx === i ? { ...it, ...patch } : it)))
+   691→  }
+   692→
+   693→  const remove = (i: number) => {
+   694→    setItems(items.filter((_, idx) => idx !== i))
+   695→  }
+   696→
+   697→  const move = (i: number, dir: -1 | 1) => {
+   698→    const j = i + dir
+   699→    if (j < 0 || j >= items.length) return
+   700→    const next = [...items]
+   701→    ;[next[i], next[j]] = [next[j], next[i]]
+   702→    setItems(next)
+   703→  }
+   704→
+   705→  return (
+   706→    <div className="space-y-2">
+   707→      {items.map((it, i) => (
+   708→        <div key={i} className="rounded-md border p-2 space-y-1.5">
+   709→          <div className="flex items-center gap-1.5">
+   710→            <Input
+   711→              value={it.icon ?? ''}
+   712→              onChange={(e) => updateItem(i, { icon: e.target.value })}
+   713→              placeholder="图标"
+   714→              className="h-7 w-12 text-center text-xs"
+   715→            />
+   716→            <Input
+   717→              value={it.label ?? ''}
+   718→              onChange={(e) => updateItem(i, { label: e.target.value })}
+   719→              placeholder="标题"
+   720→              className="h-7 flex-1 text-xs"
+   721→            />
+   722→            <Button size="sm" variant="ghost" onClick={() => move(i, -1)} className="h-7 w-6 p-0" disabled={i === 0}>
+   723→              ↑
+   724→            </Button>
+   725→            <Button size="sm" variant="ghost" onClick={() => move(i, 1)} className="h-7 w-6 p-0" disabled={i === items.length - 1}>
+   726→              ↓
+   727→            </Button>
+   728→            <Button size="sm" variant="ghost" onClick={() => remove(i)} className="h-7 w-6 p-0 text-destructive">
+   729→              <Trash2 className="h-3 w-3" />
+   730→            </Button>
+   731→          </div>
+   732→          <Input
+   733→            value={it.desc ?? ''}
+   734→            onChange={(e) => updateItem(i, { desc: e.target.value })}
+   735→            placeholder="描述（可选）"
+   736→            className="h-7 text-xs"
+   737→          />
+   738→          {(it.value !== undefined) && (
+   739→            <div className="flex items-center gap-1.5">
+   740→              <Label className="w-10 text-[10px] text-muted-foreground">数值</Label>
+   741→              <Input
+   742→                type="number"
+   743→                value={it.value ?? 0}
+   744→                onChange={(e) => updateItem(i, { value: Number(e.target.value) })}
+   745→                className="h-7 flex-1 text-xs"
+   746→              />
+   747→            </div>
+   748→          )}
+   749→        </div>
+   750→      ))}
+   751→      <Button size="sm" variant="outline" onClick={add} className="w-full gap-1 text-xs">
+   752→        <Plus className="h-3 w-3" /> 添加条目
+   753→      </Button>
+   754→    </div>
+   755→  )
+   756→}
+   757→
+   758→// ---------------------------------------------------------------------------
+   759→// Hierarchy data editor (tree)
+   760→// ---------------------------------------------------------------------------
+   761→
+   762→function HierarchyDataEditor({
+   763→  config,
+   764→  update,
+   765→}: {
+   766→  config: InfographicConfig
+   767→  update: (patch: Partial<InfographicConfig>) => void
+   768→}) {
+   769→  const root = config.data.lists?.[0]
+   770→
+   771→  const setRoot = (next: InfographicItem) => {
+   772→    update({ data: { ...config.data, lists: [next] } })
+   773→  }
+   774→
+   775→  if (!root) {
+   776→    return (
+   777→      <Button
+   778→        size="sm"
+   779→        variant="outline"
+   780→        className="w-full text-xs"
+   781→        onClick={() => setRoot({ label: '根节点', children: [] })}
+   782→      >
+   783→        初始化树
+   784→      </Button>
+   785→    )
+   786→  }
+   787→
+   788→  return (
+   789→    <div className="space-y-2">
+   790→      <div className="rounded-md border bg-muted/30 p-2">
+   791→        <NodeEditor
+   792→          node={root}
+   793→          onChange={setRoot}
+   794→          depth={0}
+   795→        />
+   796→      </div>
+   797→    </div>
+   798→  )
+   799→}
+   800→
+   801→function NodeEditor({
+   802→  node,
+   803→  onChange,
+   804→  depth,
+   805→}: {
+   806→  node: InfographicItem
+   807→  onChange: (n: InfographicItem) => void
+   808→  depth: number
+   809→}) {
+   810→  const [expanded, setExpanded] = React.useState(depth < 2)
+   811→
+   812→  const patch = (p: Partial<InfographicItem>) => onChange({ ...node, ...p })
+   813→
+   814→  const addChild = () => {
+   815→    const children = [...(node.children ?? []), { label: `新节点 ${(node.children?.length ?? 0) + 1}` }]
+   816→    patch({ children })
+   817→    if (!expanded) setExpanded(true)
+   818→  }
+   819→
+   820→  const removeChild = (i: number) => {
+   821→    const children = (node.children ?? []).filter((_, idx) => idx !== i)
+   822→    patch({ children })
+   823→  }
+   824→
+   825→  const updateChild = (i: number, child: InfographicItem) => {
+   826→    const children = (node.children ?? []).map((c, idx) => (idx === i ? child : c))
+   827→    patch({ children })
+   828→  }
+   829→
+   830→  return (
+   831→    <div className="space-y-1.5" style={{ paddingLeft: depth > 0 ? 12 : 0 }}>
+   832→      <div className="flex items-center gap-1.5">
+   833→        {(node.children?.length ?? 0) > 0 && (
+   834→          <button
+   835→            onClick={() => setExpanded(!expanded)}
+   836→            className="text-muted-foreground hover:text-foreground"
+   837→          >
+   838→            {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+   839→          </button>
+   840→        )}
+   841→        <Input
+   842→          value={node.label ?? ''}
+   843→          onChange={(e) => patch({ label: e.target.value })}
+   844→          placeholder="节点标题"
+   845→          className="h-7 flex-1 text-xs"
+   846→          style={{ fontWeight: depth === 0 ? 600 : 400 }}
+   847→        />
+   848→        {depth > 0 && (
+   849→          <Button size="sm" variant="ghost" onClick={() => onChange({})} className="h-7 w-6 p-0 text-destructive">
+   850→            <Trash2 className="h-3 w-3" />
+   851→          </Button>
+   852→        )}
+   853→      </div>
+   854→      {depth === 0 && (
+   855→        <Input
+   856→          value={node.desc ?? ''}
+   857→          onChange={(e) => patch({ desc: e.target.value })}
+   858→          placeholder="根节点描述（可选）"
+   859→          className="h-7 text-xs"
+   860→        />
+   861→      )}
+   862→      {expanded && (node.children?.length ?? 0) > 0 && (
+   863→        <div className="space-y-1.5 border-l pl-2">
+   864→          {node.children!.map((child, i) => (
+   865→            <NodeEditor
+   866→              key={i}
+   867→              node={child}
+   868→              onChange={(c) => updateChild(i, c)}
+   869→              depth={depth + 1}
+   870→            />
+   871→          ))}
+   872→        </div>
+   873→      )}
+   874→      <Button
+   875→        size="sm"
+   876→        variant="ghost"
+   877→        onClick={addChild}
+   878→        className="h-6 gap-1 text-[10px] text-muted-foreground"
+   879→      >
+   880→        <Plus className="h-2.5 w-2.5" /> 添加子节点
+   881→      </Button>
+   882→    </div>
+   883→  )
+   884→}
+   885→
+   886→// ---------------------------------------------------------------------------
+   887→// Compare data editor (2 or 4 groups)
+   888→// ---------------------------------------------------------------------------
+   889→
+   890→function CompareDataEditor({
+   891→  config,
+   892→  update,
+   893→}: {
+   894→  config: InfographicConfig
+   895→  update: (patch: Partial<InfographicConfig>) => void
+   896→}) {
+   897→  const groups = config.data.lists ?? []
+   898→
+   899→  const setGroups = (next: InfographicItem[]) => {
+   900→    update({ data: { ...config.data, lists: next } })
+   901→  }
+   902→
+   903→  const addGroup = () => {
+   904→    setGroups([...groups, { label: `类别 ${groups.length + 1}`, children: [] }])
+   905→  }
+   906→
+   907→  const updateGroup = (i: number, g: InfographicItem) => {
+   908→    setGroups(groups.map((gg, idx) => (idx === i ? g : gg)))
+   909→  }
+   910→
+   911→  const removeGroup = (i: number) => {
+   912→    setGroups(groups.filter((_, idx) => idx !== i))
+   913→  }
+   914→
+   915→  return (
+   916→    <div className="space-y-2">
+   917→      {groups.map((g, i) => (
+   918→        <div key={i} className="rounded-md border p-2 space-y-1.5">
+   919→          <div className="flex items-center gap-1.5">
+   920→            <Input
+   921→              value={g.label ?? ''}
+   922→              onChange={(e) => updateGroup(i, { ...g, label: e.target.value })}
+   923→              placeholder="组名"
+   924→              className="h-7 flex-1 text-xs font-medium"
+   925→            />
+   926→            <Button size="sm" variant="ghost" onClick={() => removeGroup(i)} className="h-7 w-6 p-0 text-destructive">
+   927→              <Trash2 className="h-3 w-3" />
+   928→            </Button>
+   929→          </div>
+   930→          <Input
+   931→            value={g.desc ?? ''}
+   932→            onChange={(e) => updateGroup(i, { ...g, desc: e.target.value })}
+   933→            placeholder="组描述（可选）"
+   934→            className="h-7 text-xs"
+   935→          />
+   936→          {/* children */}
+   937→          <div className="space-y-1 pl-2 border-l">
+   938→            {(g.children ?? []).map((c, j) => (
+   939→              <div key={j} className="flex items-center gap-1.5">
+   940→                <Input
+   941→                  value={c.label ?? ''}
+   942→                  onChange={(e) => {
+   943→                    const children = [...(g.children ?? [])]
+   944→                    children[j] = { ...c, label: e.target.value }
+   945→                    updateGroup(i, { ...g, children })
+   946→                  }}
+   947→                  placeholder="要点"
+   948→                  className="h-6 flex-1 text-[11px]"
+   949→                />
+   950→                <Button
+   951→                  size="sm"
+   952→                  variant="ghost"
+   953→                  onClick={() => {
+   954→                    const children = (g.children ?? []).filter((_, idx) => idx !== j)
+   955→                    updateGroup(i, { ...g, children })
+   956→                  }}
+   957→                  className="h-6 w-5 p-0 text-destructive"
+   958→                >
+   959→                  <Trash2 className="h-2.5 w-2.5" />
+   960→                </Button>
+   961→              </div>
+   962→            ))}
+   963→            <Button
+   964→              size="sm"
+   965→              variant="ghost"
+   966→              onClick={() => {
+   967→                const children = [...(g.children ?? []), { label: '新要点' }]
+   968→                updateGroup(i, { ...g, children })
+   969→              }}
+   970→              className="h-5 gap-1 text-[10px] text-muted-foreground"
+   971→            >
+   972→              <Plus className="h-2.5 w-2.5" /> 添加要点
+   973→            </Button>
+   974→          </div>
+   975→        </div>
+   976→      ))}
+   977→      <Button size="sm" variant="outline" onClick={addGroup} className="w-full gap-1 text-xs">
+   978→        <Plus className="h-3 w-3" /> 添加分组
+   979→      </Button>
+   980→    </div>
+   981→  )
+   982→}
+   983→
+   984→// ---------------------------------------------------------------------------
+   985→// Relation data editor (nodes + edges)
+   986→// ---------------------------------------------------------------------------
+   987→
+   988→function RelationDataEditor({
+   989→  config,
+   990→  update,
+   991→}: {
+   992→  config: InfographicConfig
+   993→  update: (patch: Partial<InfographicConfig>) => void
+   994→}) {
+   995→  const nodes = config.data.nodes ?? []
+   996→  const edges = config.data.edges ?? []
+   997→
+   998→  const setNodes = (next: InfographicRelationNode[]) => {
+   999→    update({ data: { ...config.data, nodes: next } })
+  1000→  }
+  1001→  const setEdges = (next: InfographicRelationEdge[]) => {
+  1002→    update({ data: { ...config.data, edges: next } })
+  1003→  }
+  1004→
+  1005→  return (
+  1006→    <div className="space-y-3">
+  1007→      {/* Nodes */}
+  1008→      <div className="space-y-1.5">
+  1009→        <div className="flex items-center justify-between">
+  1010→          <span className="text-[11px] font-medium text-muted-foreground">节点 ({nodes.length})</span>
+  1011→          <Button
+  1012→            size="sm"
+  1013→            variant="ghost"
+  1014→            onClick={() =>
+  1015→              setNodes([
+  1016→                ...nodes,
+  1017→                { id: `n${nodes.length + 1}`, label: `节点 ${nodes.length + 1}` },
+  1018→              ])
+  1019→            }
+  1020→            className="h-6 gap-1 px-1.5 text-[10px]"
+  1021→          >
+  1022→            <Plus className="h-2.5 w-2.5" /> 添加
+  1023→          </Button>
+  1024→        </div>
+  1025→        {nodes.map((n, i) => (
+  1026→          <div key={i} className="flex items-center gap-1.5">
+  1027→            <Input
+  1028→              value={n.id}
+  1029→              onChange={(e) => setNodes(nodes.map((nn, idx) => (idx === i ? { ...nn, id: e.target.value } : nn)))}
+  1030→              placeholder="id"
+  1031→              className="h-7 w-16 font-mono text-[10px]"
+  1032→            />
+  1033→            <Input
+  1034→              value={n.label}
+  1035→              onChange={(e) => setNodes(nodes.map((nn, idx) => (idx === i ? { ...nn, label: e.target.value } : nn)))}
+  1036→              placeholder="名称"
+  1037→              className="h-7 flex-1 text-xs"
+  1038→            />
+  1039→            <Input
+  1040→              value={n.group ?? ''}
+  1041→              onChange={(e) => setNodes(nodes.map((nn, idx) => (idx === i ? { ...nn, group: e.target.value } : nn)))}
+  1042→              placeholder="组"
+  1043→              className="h-7 w-12 text-[10px]"
+  1044→            />
+  1045→            <Button
+  1046→              size="sm"
+  1047→              variant="ghost"
+  1048→              onClick={() => setNodes(nodes.filter((_, idx) => idx !== i))}
+  1049→              className="h-7 w-6 p-0 text-destructive"
+  1050→            >
+  1051→              <Trash2 className="h-3 w-3" />
+  1052→            </Button>
+  1053→          </div>
+  1054→        ))}
+  1055→      </div>
+  1056→
+  1057→      {/* Edges */}
+  1058→      <div className="space-y-1.5">
+  1059→        <div className="flex items-center justify-between">
+  1060→          <span className="text-[11px] font-medium text-muted-foreground">连线 ({edges.length})</span>
+  1061→          <Button
+  1062→            size="sm"
+  1063→            variant="ghost"
+  1064→            onClick={() => setEdges([...edges, { from: nodes[0]?.id ?? '', to: nodes[1]?.id ?? '' }])}
+  1065→            className="h-6 gap-1 px-1.5 text-[10px]"
+  1066→          >
+  1067→            <Plus className="h-2.5 w-2.5" /> 添加
+  1068→          </Button>
+  1069→        </div>
+  1070→        {edges.map((e, i) => (
+  1071→          <div key={i} className="flex items-center gap-1.5">
+  1072→            <Select
+  1073→              value={e.from}
+  1074→              onValueChange={(v) => setEdges(edges.map((ee, idx) => (idx === i ? { ...ee, from: v } : ee)))}
+  1075→            >
+  1076→              <SelectTrigger className="h-7 w-16 text-[10px]">
+  1077→                <SelectValue placeholder="起点" />
+  1078→              </SelectTrigger>
+  1079→              <SelectContent>
+  1080→                {nodes.map((n) => (
+  1081→                  <SelectItem key={n.id} value={n.id} className="text-[10px]">
+  1082→                    {n.label}
+  1083→                  </SelectItem>
+  1084→                ))}
+  1085→              </SelectContent>
+  1086→            </Select>
+  1087→            <span className="text-muted-foreground">→</span>
+  1088→            <Select
+  1089→              value={e.to}
+  1090→              onValueChange={(v) => setEdges(edges.map((ee, idx) => (idx === i ? { ...ee, to: v } : ee)))}
+  1091→            >
+  1092→              <SelectTrigger className="h-7 w-16 text-[10px]">
+  1093→                <SelectValue placeholder="终点" />
+  1094→              </SelectTrigger>
+  1095→              <SelectContent>
+  1096→                {nodes.map((n) => (
+  1097→                  <SelectItem key={n.id} value={n.id} className="text-[10px]">
+  1098→                    {n.label}
+  1099→                  </SelectItem>
+  1100→                ))}
+  1101→              </SelectContent>
+  1102→            </Select>
+  1103→            <Input
+  1104→              value={e.label ?? ''}
+  1105→              onChange={(ev) => setEdges(edges.map((ee, idx) => (idx === i ? { ...ee, label: ev.target.value } : ee)))}
+  1106→              placeholder="标签"
+  1107→              className="h-7 flex-1 text-[10px]"
+  1108→            />
+  1109→            <Button
+  1110→              size="sm"
+  1111→              variant="ghost"
+  1112→              onClick={() => setEdges(edges.filter((_, idx) => idx !== i))}
+  1113→              className="h-7 w-6 p-0 text-destructive"
+  1114→            >
+  1115→              <Trash2 className="h-3 w-3" />
+  1116→            </Button>
+  1117→          </div>
+  1118→        ))}
+  1119→      </div>
+  1120→    </div>
+  1121→  )
+  1122→}
+  1123→

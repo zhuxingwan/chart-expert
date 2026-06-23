@@ -1,9 +1,17 @@
 // Convert a friendly EChartsConfig into a real echarts option object.
-// Tree-shakeable echarts is configured in echarts-editor.tsx — here we only
-// build the plain JS option that `chart.setOption(...)` accepts.
+// ECharts itself is loaded from CDN (see src/lib/viz-libs/cdn-loader.tsx) —
+// this module only builds the plain JS option that `chart.setOption(...)`
+// accepts. No echarts import is needed here.
 
 import type { EChartsConfig } from '@/types/chart'
-import type { EChartsCoreOption } from 'echarts/core'
+
+// Local type alias — the real EChartsCoreOption type lives in the `echarts`
+// package, but echarts is now externalized to a CDN global (see next.config.ts
+// and src/lib/viz-libs/cdn-loader.tsx). Type-only imports of `echarts/*` no
+// longer resolve at build time, so we use a permissive record type instead.
+// The runtime option object is what matters; setOption() accepts anything
+// structurally compatible.
+type EChartsOption = Record<string, unknown>
 
 interface ToolboxFeature extends Record<string, unknown> {
   saveAsImage?: Record<string, unknown>
@@ -24,7 +32,7 @@ function buildToolbox(): { feature: ToolboxFeature } {
   }
 }
 
-export function buildEChartsOption(config: EChartsConfig): EChartsCoreOption {
+export function buildEChartsOption(config: EChartsConfig): EChartsOption {
   const {
     title,
     legend,
@@ -40,7 +48,7 @@ export function buildEChartsOption(config: EChartsConfig): EChartsCoreOption {
     showToolbox,
   } = config
 
-  const base: EChartsCoreOption = {
+  const base: EChartsOption = {
     title: {
       text: title?.text ?? '',
       subtext: title?.subtext ?? '',

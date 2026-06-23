@@ -1,28 +1,8 @@
 'use client'
 
 import * as React from 'react'
-import * as echarts from 'echarts/core'
-import {
-  BarChart,
-  LineChart,
-  PieChart,
-  ScatterChart,
-  RadarChart,
-  FunnelChart,
-  GaugeChart,
-  HeatmapChart,
-} from 'echarts/charts'
-import {
-  TitleComponent,
-  TooltipComponent,
-  LegendComponent,
-  GridComponent,
-  ToolboxComponent,
-  RadarComponent,
-  VisualMapComponent,
-} from 'echarts/components'
-import { CanvasRenderer } from 'echarts/renderers'
 import { toast } from 'sonner'
+import { useVizLibs, getECharts } from '@/lib/viz-libs/cdn-loader'
 import {
   BarChart3,
   LineChart as LineChartIcon,
@@ -39,6 +19,7 @@ import {
   Copy,
   Code2,
   AlignLeft,
+  Loader2,
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -87,54 +68,11 @@ import {
 } from './echarts-templates'
 import { buildEChartsOption } from './echarts-option-builder'
 
-// Register only the parts we actually use — keeps the bundle lean.
-echarts.use([
-  BarChart,
-  LineChart,
-  PieChart,
-  ScatterChart,
-  RadarChart,
-  FunnelChart,
-  GaugeChart,
-  HeatmapChart,
-  TitleComponent,
-  TooltipComponent,
-  LegendComponent,
-  GridComponent,
-  ToolboxComponent,
-  RadarComponent,
-  VisualMapComponent,
-  CanvasRenderer,
-])
-
-// Theme side-effect imports. We statically enumerate the themes that actually
-// ship with echarts v6 so the bundler can code-split them; themes that are
-// listed in the dropdown but not present in this echarts build (e.g. westeros
-// / wonderland) are silently skipped — `ensureTheme` falls back to default.
-const THEME_LOADED = new Set<string>()
-
-const THEME_LOADERS: Record<string, () => Promise<unknown>> = {
-  dark: () => import('echarts/theme/dark'),
-  vintage: () => import('echarts/theme/vintage'),
-  macarons: () => import('echarts/theme/macarons'),
-}
-
-async function ensureTheme(theme: string) {
-  if (theme === 'default' || THEME_LOADED.has(theme)) return
-  const loader = THEME_LOADERS[theme]
-  if (!loader) {
-    // Theme is in the picker but no module ships with this echarts build —
-    // silently fall back to default. Wrapped in try/catch for safety per spec.
-    return
-  }
-  try {
-    await loader()
-    THEME_LOADED.add(theme)
-  } catch {
-    // Theme file failed to load — fall back silently to default.
-    console.warn(`[echarts-editor] 主题 ${theme} 加载失败，已回退到默认主题`)
-  }
-}
+// ECharts is loaded from CDN via <VizLibLoader>. getECharts() returns
+// window.echarts — the FULL bundle, with every chart type and component
+// already registered. No `echarts.use([...])` registration is needed here.
+// Themes shipped in the CDN build (dark / vintage / macarons) are passed
+// directly to echarts.init(dom, themeName); unknown names fall back silently.
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -203,6 +141,11 @@ export interface EChartsEditorProps {
 // ===========================================================================
 
 export function EChartsEditor({ config, onChange, previewRef }: EChartsEditorProps) {
+  // CDN-loaded echarts — status flips to 'loaded' once the <script> tag from
+  // VizLibLoader finishes. We render a loading placeholder until then.
+  const { status } = useVizLibs()
+  const echartsLoaded = status.echarts === 'loaded'
+
   // Local "live" config — the editor's source of truth between parent updates.
   const [local, setLocal] = React.useState<EChartsConfig>(() =>
     config ? deepClone(config) : deepClone(DEFAULT_TEMPLATE.defaultConfig),
@@ -254,22 +197,28 @@ export function EChartsEditor({ config, onChange, previewRef }: EChartsEditorPro
 
   // ----- ECharts instance -----
   const chartContainerRef = React.useRef<HTMLDivElement | null>(null)
-  const chartRef = React.useRef<echarts.ECharts | null>(null)
+  // `any` because echarts is externalized to a CDN global — the ECharts TS
+  // types aren't resolvable at build time. The CDN full build exposes all
+  // runtime methods we need (init / setOption / dispose / resize / getDataURL).
+  const chartRef = React.useRef<any>(null)
   const currentTheme = React.useRef<string>('default')
   const resizeObsRef = React.useRef<ResizeObserver | null>(null)
 
   // Build the option with useMemo so re-renders are cheap.
   const option = React.useMemo(() => buildEChartsOption(local), [local])
 
-  const renderChart = React.useCallback(async () => {
+  const renderChart = React.useCallback(() => {
     if (!chartContainerRef.current) return
+    const echartsLib = getECharts()
+    if (!echartsLib) return // CDN not ready yet — re-runs when status changes
     const theme = local.theme || 'default'
 
-    // Re-create the instance if the theme changed.
+    // Re-create the instance if the theme changed. The CDN build auto-
+    // registers every theme shipped in the bundle (dark / vintage / macarons).
+    // Unknown theme names silently fall back to the default theme.
     if (!chartRef.current || currentTheme.current !== theme) {
-      await ensureTheme(theme)
       chartRef.current?.dispose()
-      chartRef.current = echarts.init(
+      chartRef.current = echartsLib.init(
         chartContainerRef.current,
         theme === 'default' ? undefined : theme,
         { renderer: 'canvas' },
@@ -279,18 +228,20 @@ export function EChartsEditor({ config, onChange, previewRef }: EChartsEditorPro
     chartRef.current.setOption(option, true)
   }, [option, local.theme])
 
-  // Debounced re-render (150ms) when the option changes.
+  // Debounced re-render (150ms) when the option changes OR once the CDN
+  // finishes loading. Skipped entirely until echarts is ready.
   React.useEffect(() => {
+    if (!echartsLoaded) return
     const t = window.setTimeout(() => {
-      void renderChart()
+      renderChart()
     }, 150)
     return () => window.clearTimeout(t)
-  }, [renderChart])
+  }, [renderChart, echartsLoaded])
 
-  // Init on mount, dispose on unmount, observe container size.
+  // Init ResizeObserver + dispose on unmount. The actual first render is
+  // triggered by the debounced effect above once the CDN is ready.
   React.useEffect(() => {
     if (!chartContainerRef.current) return
-    void renderChart()
 
     const ro = new ResizeObserver(() => {
       chartRef.current?.resize()
@@ -505,12 +456,18 @@ export function EChartsEditor({ config, onChange, previewRef }: EChartsEditorPro
           <CardContent className="flex-1 p-2 sm:p-4">
             <div
               ref={previewRef}
-              className="h-full min-h-[320px] w-full overflow-hidden rounded-lg bg-background"
+              className="relative h-full min-h-[320px] w-full overflow-hidden rounded-lg bg-background"
             >
               <div
                 ref={chartContainerRef}
                 style={{ width: '100%', height: '100%' }}
               />
+              {!echartsLoaded && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/80 backdrop-blur-sm">
+                  <Loader2 className="size-6 animate-spin text-primary" />
+                  <span className="text-sm text-muted-foreground">正在加载图表库…</span>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

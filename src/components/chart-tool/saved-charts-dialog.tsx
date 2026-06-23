@@ -118,7 +118,6 @@ export function SavedChartsDialog({ open, onOpenChange, onLoad }: Props) {
                   >
                     <div className="flex aspect-[4/3] items-center justify-center bg-muted/40 p-2">
                       {c.thumbnail ? (
-                        // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={c.thumbnail}
                           alt={c.title}

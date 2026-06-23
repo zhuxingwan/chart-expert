@@ -1,0 +1,1265 @@
+     1→     1→'use client'
+     2→     2→
+     3→     3→import * as React from 'react'
+     4→     4→import * as echarts from 'echarts/core'
+     5→     5→import {
+     6→     6→  BarChart,
+     7→     7→  LineChart,
+     8→     8→  PieChart,
+     9→     9→  ScatterChart,
+    10→    10→  RadarChart,
+    11→    11→  FunnelChart,
+    12→    12→  GaugeChart,
+    13→    13→  HeatmapChart,
+    14→    14→} from 'echarts/charts'
+    15→    15→import {
+    16→    16→  TitleComponent,
+    17→    17→  TooltipComponent,
+    18→    18→  LegendComponent,
+    19→    19→  GridComponent,
+    20→    20→  ToolboxComponent,
+    21→    21→  RadarComponent,
+    22→    22→  VisualMapComponent,
+    23→    23→} from 'echarts/components'
+    24→    24→import { CanvasRenderer } from 'echarts/renderers'
+    25→    25→import { toast } from 'sonner'
+    26→    26→import {
+    27→    27→  BarChart3,
+    28→    28→  LineChart as LineChartIcon,
+    29→    29→  PieChart as PieChartIcon,
+    30→    30→  Activity,
+    31→    31→  Target,
+    32→    32→  Triangle,
+    33→    33→  Gauge,
+    34→    34→  Grid3x3,
+    35→    35→  Plus,
+    36→    36→  Trash2,
+    37→    37→  Shuffle,
+    38→    38→  Download,
+    39→    39→  Copy,
+    40→    40→  Code2,
+    41→    41→  AlignLeft,
+    42→    42→} from 'lucide-react'
+    43→    43→
+    44→    44→import { cn } from '@/lib/utils'
+    45→    45→import type { EChartsConfig } from '@/types/chart'
+    46→    46→import {
+    47→    47→  ResizablePanelGroup,
+    48→    48→  ResizablePanel,
+    49→    49→  ResizableHandle,
+    50→    50→} from '@/components/ui/resizable'
+    51→    51→import {
+    52→    52→  Card,
+    53→    53→  CardContent,
+    54→    54→  CardHeader,
+    55→    55→  CardTitle,
+    56→    56→  CardDescription,
+    57→    57→} from '@/components/ui/card'
+    58→    58→import {
+    59→    59→  Accordion,
+    60→    60→  AccordionItem,
+    61→    61→  AccordionTrigger,
+    62→    62→  AccordionContent,
+    63→    63→} from '@/components/ui/accordion'
+    64→    64→import {
+    65→    65→  Select,
+    66→    66→  SelectTrigger,
+    67→    67→  SelectValue,
+    68→    68→  SelectContent,
+    69→    69→  SelectGroup,
+    70→    70→  SelectItem,
+    71→    71→  SelectLabel,
+    72→    72→} from '@/components/ui/select'
+    73→    73→import { Input } from '@/components/ui/input'
+    74→    74→import { Label } from '@/components/ui/label'
+    75→    75→import { Switch } from '@/components/ui/switch'
+    76→    76→import { Slider } from '@/components/ui/slider'
+    77→    77→import { Button } from '@/components/ui/button'
+    78→    78→import { Badge } from '@/components/ui/badge'
+    79→    79→import { ScrollArea } from '@/components/ui/scroll-area'
+    80→    80→import {
+    81→    81→  ECHARTS_TEMPLATES,
+    82→    82→  ECHARTS_TEMPLATE_CATEGORIES,
+    83→    83→  TEMPLATE_BY_ID,
+    84→    84→  DEFAULT_TEMPLATE,
+    85→    85→  THEME_OPTIONS,
+    86→    86→  type EChartsTemplate,
+    87→    87→} from './echarts-templates'
+    88→    88→import { buildEChartsOption } from './echarts-option-builder'
+    89→    89→
+    90→    90→// Register only the parts we actually use — keeps the bundle lean.
+    91→    91→echarts.use([
+    92→    92→  BarChart,
+    93→    93→  LineChart,
+    94→    94→  PieChart,
+    95→    95→  ScatterChart,
+    96→    96→  RadarChart,
+    97→    97→  FunnelChart,
+    98→    98→  GaugeChart,
+    99→    99→  HeatmapChart,
+   100→   100→  TitleComponent,
+   101→   101→  TooltipComponent,
+   102→   102→  LegendComponent,
+   103→   103→  GridComponent,
+   104→   104→  ToolboxComponent,
+   105→   105→  RadarComponent,
+   106→   106→  VisualMapComponent,
+   107→   107→  CanvasRenderer,
+   108→   108→])
+   109→   109→
+   110→   110→// Theme side-effect imports. We statically enumerate the themes that actually
+   111→   111→// ship with echarts v6 so the bundler can code-split them; themes that are
+   112→   112→// listed in the dropdown but not present in this echarts build (e.g. westeros
+   113→   113→// / wonderland) are silently skipped — `ensureTheme` falls back to default.
+   114→   114→const THEME_LOADED = new Set<string>()
+   115→   115→
+   116→   116→const THEME_LOADERS: Record<string, () => Promise<unknown>> = {
+   117→   117→  dark: () => import('echarts/theme/dark'),
+   118→   118→  vintage: () => import('echarts/theme/vintage'),
+   119→   119→  macarons: () => import('echarts/theme/macarons'),
+   120→   120→}
+   121→   121→
+   122→   122→async function ensureTheme(theme: string) {
+   123→   123→  if (theme === 'default' || THEME_LOADED.has(theme)) return
+   124→   124→  const loader = THEME_LOADERS[theme]
+   125→   125→  if (!loader) {
+   126→   126→    // Theme is in the picker but no module ships with this echarts build —
+   127→   127→    // silently fall back to default. Wrapped in try/catch for safety per spec.
+   128→   128→    return
+   129→   129→  }
+   130→   130→  try {
+   131→   131→    await loader()
+   132→   132→    THEME_LOADED.add(theme)
+   133→   133→  } catch {
+   134→   134→    // Theme file failed to load — fall back silently to default.
+   135→   135→    console.warn(`[echarts-editor] 主题 ${theme} 加载失败，已回退到默认主题`)
+   136→   136→  }
+   137→   137→}
+   138→   138→
+   139→   139→// ---------------------------------------------------------------------------
+   140→   140→// Helpers
+   141→   141→// ---------------------------------------------------------------------------
+   142→   142→
+   143→   143→function deepClone<T>(v: T): T {
+   144→   144→  if (typeof structuredClone === 'function') return structuredClone(v)
+   145→   145→  return JSON.parse(JSON.stringify(v)) as T
+   146→   146→}
+   147→   147→
+   148→   148→function configKey(c: EChartsConfig | null): string {
+   149→   149→  if (!c) return ''
+   150→   150→  return JSON.stringify(c)
+   151→   151→}
+   152→   152→
+   153→   153→/** Map a template's type to a lucide icon. */
+   154→   154→function iconForType(type: string) {
+   155→   155→  switch (type) {
+   156→   156→    case 'bar':
+   157→   157→      return BarChart3
+   158→   158→    case 'line':
+   159→   159→      return LineChartIcon
+   160→   160→    case 'pie':
+   161→   161→      return PieChartIcon
+   162→   162→    case 'scatter':
+   163→   163→      return Activity
+   164→   164→    case 'radar':
+   165→   165→      return Target
+   166→   166→    case 'funnel':
+   167→   167→      return Triangle
+   168→   168→    case 'gauge':
+   169→   169→      return Gauge
+   170→   170→    case 'heatmap':
+   171→   171→      return Grid3x3
+   172→   172→    default:
+   173→   173→      return BarChart3
+   174→   174→  }
+   175→   175→}
+   176→   176→
+   177→   177→function typeNameLabel(type: string): string {
+   178→   178→  const map: Record<string, string> = {
+   179→   179→    bar: '柱状图',
+   180→   180→    line: '折线图',
+   181→   181→    pie: '饼图',
+   182→   182→    scatter: '散点图',
+   183→   183→    radar: '雷达图',
+   184→   184→    funnel: '漏斗图',
+   185→   185→    gauge: '仪表盘',
+   186→   186→    heatmap: '热力图',
+   187→   187→  }
+   188→   188→  return map[type] ?? type
+   189→   189→}
+   190→   190→
+   191→   191→// ---------------------------------------------------------------------------
+   192→   192→// Props
+   193→   193→// ---------------------------------------------------------------------------
+   194→   194→
+   195→   195→export interface EChartsEditorProps {
+   196→   196→  config: EChartsConfig | null
+   197→   197→  onChange: (cfg: EChartsConfig) => void
+   198→   198→  previewRef: React.RefObject<HTMLDivElement | null>
+   199→   199→}
+   200→   200→
+   201→   201→// ===========================================================================
+   202→   202→// Component
+   203→   203→// ===========================================================================
+   204→   204→
+   205→   205→export function EChartsEditor({ config, onChange, previewRef }: EChartsEditorProps) {
+   206→   206→  // Local "live" config — the editor's source of truth between parent updates.
+   207→   207→  const [local, setLocal] = React.useState<EChartsConfig>(() =>
+   208→   208→    config ? deepClone(config) : deepClone(DEFAULT_TEMPLATE.defaultConfig),
+   209→   209→  )
+   210→   210→
+   211→   211→  // Track which template is currently applied so the 图表类型 Select can show
+   212→   212→  // the right value. Initialized from the first template; updated whenever the
+   213→   213→  // user picks a template from the gallery or dropdown. When the parent pushes
+   214→   214→  // a config (AI suggestion / loaded chart) we best-effort match by template id
+   215→   215→  // — if we can't, we fall back to the first template whose type matches.
+   216→   216→  const [currentTemplateId, setCurrentTemplateId] = React.useState<string>(
+   217→   217→    DEFAULT_TEMPLATE.id,
+   218→   218→  )
+   219→   219→
+   220→   220→  // Track the last config we accepted from props to avoid feedback loops.
+   221→   221→  const lastAppliedKey = React.useRef<string>(configKey(config))
+   222→   222→
+   223→   223→  // Accept new config from the parent (AI suggestion / loaded chart) — only
+   224→   224→  // when the JSON actually differs from what we last applied.
+   225→   225→  React.useEffect(() => {
+   226→   226→    const incomingKey = configKey(config)
+   227→   227→    if (incomingKey && incomingKey !== lastAppliedKey.current) {
+   228→   228→      lastAppliedKey.current = incomingKey
+   229→   229→      const next = deepClone(config as EChartsConfig)
+   230→   230→      setLocal(next)
+   231→   231→      // Best-effort template match by exact defaultConfig equality, then by type.
+   232→   232→      const exact = ECHARTS_TEMPLATES.find(
+   233→   233→        (t) => configKey(t.defaultConfig) === incomingKey,
+   234→   234→      )
+   235→   235→      if (exact) {
+   236→   236→        setCurrentTemplateId(exact.id)
+   237→   237→      } else {
+   238→   238→        const byType = ECHARTS_TEMPLATES.find((t) => t.type === next.type)
+   239→   239→        if (byType) setCurrentTemplateId(byType.id)
+   240→   240→      }
+   241→   241→    }
+   242→   242→  }, [config])
+   243→   243→
+   244→   244→  // Push local edits up to the parent.
+   245→   245→  const commit = React.useCallback(
+   246→   246→    (next: EChartsConfig) => {
+   247→   247→      setLocal(next)
+   248→   248→      const key = configKey(next)
+   249→   249→      lastAppliedKey.current = key
+   250→   250→      onChange(next)
+   251→   251→    },
+   252→   252→    [onChange],
+   253→   253→  )
+   254→   254→
+   255→   255→  // ----- ECharts instance -----
+   256→   256→  const chartContainerRef = React.useRef<HTMLDivElement | null>(null)
+   257→   257→  const chartRef = React.useRef<echarts.ECharts | null>(null)
+   258→   258→  const currentTheme = React.useRef<string>('default')
+   259→   259→  const resizeObsRef = React.useRef<ResizeObserver | null>(null)
+   260→   260→
+   261→   261→  // Build the option with useMemo so re-renders are cheap.
+   262→   262→  const option = React.useMemo(() => buildEChartsOption(local), [local])
+   263→   263→
+   264→   264→  const renderChart = React.useCallback(async () => {
+   265→   265→    if (!chartContainerRef.current) return
+   266→   266→    const theme = local.theme || 'default'
+   267→   267→
+   268→   268→    // Re-create the instance if the theme changed.
+   269→   269→    if (!chartRef.current || currentTheme.current !== theme) {
+   270→   270→      await ensureTheme(theme)
+   271→   271→      chartRef.current?.dispose()
+   272→   272→      chartRef.current = echarts.init(
+   273→   273→        chartContainerRef.current,
+   274→   274→        theme === 'default' ? undefined : theme,
+   275→   275→        { renderer: 'canvas' },
+   276→   276→      )
+   277→   277→      currentTheme.current = theme
+   278→   278→    }
+   279→   279→    chartRef.current.setOption(option, true)
+   280→   280→  }, [option, local.theme])
+   281→   281→
+   282→   282→  // Debounced re-render (150ms) when the option changes.
+   283→   283→  React.useEffect(() => {
+   284→   284→    const t = window.setTimeout(() => {
+   285→   285→      void renderChart()
+   286→   286→    }, 150)
+   287→   287→    return () => window.clearTimeout(t)
+   288→   288→  }, [renderChart])
+   289→   289→
+   290→   290→  // Init on mount, dispose on unmount, observe container size.
+   291→   291→  React.useEffect(() => {
+   292→   292→    if (!chartContainerRef.current) return
+   293→   293→    void renderChart()
+   294→   294→
+   295→   295→    const ro = new ResizeObserver(() => {
+   296→   296→      chartRef.current?.resize()
+   297→   297→    })
+   298→   298→    ro.observe(chartContainerRef.current)
+   299→   299→    resizeObsRef.current = ro
+   300→   300→
+   301→   301→    return () => {
+   302→   302→      ro.disconnect()
+   303→   303→      resizeObsRef.current = null
+   304→   304→      chartRef.current?.dispose()
+   305→   305→      chartRef.current = null
+   306→   306→    }
+   307→   307→  }, [])
+   308→   308→
+   309→   309→  // ----- Mutators (keep immutable) -----
+   310→   310→  const patch = React.useCallback(
+   311→   311→    (p: Partial<EChartsConfig>) => commit({ ...local, ...p }),
+   312→   312→    [commit, local],
+   313→   313→  )
+   314→   314→
+   315→   315→  const applyTemplate = React.useCallback(
+   316→   316→    (tpl: EChartsTemplate, keepTitle = false) => {
+   317→   317→      const next = deepClone(tpl.defaultConfig)
+   318→   318→      if (keepTitle && local.title) next.title = deepClone(local.title)
+   319→   319→      commit(next)
+   320→   320→      setCurrentTemplateId(tpl.id)
+   321→   321→      toast.success(`已切换为「${tpl.name}」`)
+   322→   322→    },
+   323→   323→    [commit, local.title],
+   324→   324→  )
+   325→   325→
+   326→   326→  const onTemplateIdChange = React.useCallback(
+   327→   327→    (id: string) => {
+   328→   328→      const tpl = TEMPLATE_BY_ID[id]
+   329→   329→      if (tpl) applyTemplate(tpl, true)
+   330→   330→    },
+   331→   331→    [applyTemplate],
+   332→   332→  )
+   333→   333→
+   334→   334→  // ----- Export handlers -----
+   335→   335→  const handleDownloadPNG = React.useCallback(() => {
+   336→   336→    if (!chartRef.current) {
+   337→   337→      toast.error('图表尚未渲染完成')
+   338→   338→      return
+   339→   339→    }
+   340→   340→    try {
+   341→   341→      const url = chartRef.current.getDataURL({
+   342→   342→        type: 'png',
+   343→   343→        pixelRatio: 2,
+   344→   344→        backgroundColor: '#fff',
+   345→   345→      })
+   346→   346→      const a = document.createElement('a')
+   347→   347→      a.href = url
+   348→   348→      a.download = `${local.title?.text || 'chart'}.png`
+   349→   349→      document.body.appendChild(a)
+   350→   350→      a.click()
+   351→   351→      document.body.removeChild(a)
+   352→   352→      toast.success('已下载 PNG 图片')
+   353→   353→    } catch {
+   354→   354→      toast.error('导出 PNG 失败')
+   355→   355→    }
+   356→   356→  }, [local.title])
+   357→   357→
+   358→   358→  const handleDownloadJSON = React.useCallback(() => {
+   359→   359→    try {
+   360→   360→      const blob = new Blob([JSON.stringify(local, null, 2)], {
+   361→   361→        type: 'application/json',
+   362→   362→      })
+   363→   363→      const url = URL.createObjectURL(blob)
+   364→   364→      const a = document.createElement('a')
+   365→   365→      a.href = url
+   366→   366→      a.download = `${local.title?.text || 'chart'}.json`
+   367→   367→      document.body.appendChild(a)
+   368→   368→      a.click()
+   369→   369→      document.body.removeChild(a)
+   370→   370→      URL.revokeObjectURL(url)
+   371→   371→      toast.success('已下载配置 JSON')
+   372→   372→    } catch {
+   373→   373→      toast.error('导出 JSON 失败')
+   374→   374→    }
+   375→   375→  }, [local])
+   376→   376→
+   377→   377→  const handleCopyOption = React.useCallback(async () => {
+   378→   378→    try {
+   379→   379→      await navigator.clipboard.writeText(JSON.stringify(option, null, 2))
+   380→   380→      toast.success('已复制 ECharts option 到剪贴板')
+   381→   381→    } catch {
+   382→   382→      toast.error('复制失败，请检查浏览器权限')
+   383→   383→    }
+   384→   384→  }, [option])
+   385→   385→
+   386→   386→  // ----- Random data -----
+   387→   387→  const handleRandomData = React.useCallback(() => {
+   388→   388→    const t = local.type
+   389→   389→    if (t === 'pie' || t === 'funnel') {
+   390→   390→      const data = (local.single_series_data ?? []).map((d) => ({
+   391→   391→        name: d.name,
+   392→   392→        value: Math.floor(Math.random() * 900) + 100,
+   393→   393→      }))
+   394→   394→      patch({ single_series_data: data })
+   395→   395→    } else if (t === 'gauge') {
+   396→   396→      const max = Number(local.gauge_max) || 100
+   397→   397→      patch({ gauge_value: Math.floor(Math.random() * max) })
+   398→   398→    } else if (t === 'scatter') {
+   399→   399→      const data = (local.scatter_data ?? []).map(() => [
+   400→   400→        Math.floor(Math.random() * 200) + 100,
+   401→   401→        Math.floor(Math.random() * 60) + 40,
+   402→   402→      ]) as [number, number][]
+   403→   403→      patch({ scatter_data: data })
+   404→   404→    } else if (t === 'heatmap') {
+   405→   405→      const data = local.series_data.map((row) =>
+   406→   406→        row.map(() => Math.floor(Math.random() * 50)),
+   407→   407→      )
+   408→   408→      patch({ series_data: data })
+   409→   409→    } else if (t === 'radar') {
+   410→   410→      const data = local.series_data.map((row) =>
+   411→   411→        row.map(() => Math.floor(Math.random() * 100)),
+   412→   412→      )
+   413→   413→      patch({ series_data: data })
+   414→   414→    } else {
+   415→   415→      // bar / line
+   416→   416→      const data = local.series_data.map((row) =>
+   417→   417→        row.map(() => Math.floor(Math.random() * 200) + 20),
+   418→   418→      )
+   419→   419→      patch({ series_data: data })
+   420→   420→    }
+   421→   421→    toast.success('已生成随机数据')
+   422→   422→  }, [local, patch])
+   423→   423→
+   424→   424→  // ---------------------------------------------------------------------------
+   425→   425→  // Render
+   426→   426→  // ---------------------------------------------------------------------------
+   427→   427→  return (
+   428→   428→    <ResizablePanelGroup direction="horizontal" className="h-full w-full">
+   429→   429→      {/* ----------------------- LEFT: Template Gallery ----------------------- */}
+   430→   430→      <ResizablePanel defaultSize={20} minSize={14} className="bg-background">
+   431→   431→        <div className="flex h-full flex-col">
+   432→   432→          <div className="border-b px-4 py-3">
+   433→   433→            <h3 className="text-sm font-semibold">模板库</h3>
+   434→   434→            <p className="text-xs text-muted-foreground mt-1">
+   435→   435→              点击模板即可一键应用，配置会随之刷新。
+   436→   436→            </p>
+   437→   437→          </div>
+   438→   438→          <ScrollArea className="flex-1">
+   439→   439→            <div className="grid grid-cols-1 gap-2 p-3">
+   440→   440→              {ECHARTS_TEMPLATE_CATEGORIES.map((cat) => {
+   441→   441→                const items = ECHARTS_TEMPLATES.filter((t) => t.category === cat.id)
+   442→   442→                if (items.length === 0) return null
+   443→   443→                return (
+   444→   444→                  <div key={cat.id} className="space-y-2">
+   445→   445→                    <div className="px-1 pt-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+   446→   446→                      {cat.label}
+   447→   447→                    </div>
+   448→   448→                    {items.map((tpl) => {
+   449→   449→                      const Icon = iconForType(tpl.type)
+   450→   450→                      const active = currentTemplateId === tpl.id
+   451→   451→                      return (
+   452→   452→                        <button
+   453→   453→                          key={tpl.id}
+   454→   454→                          type="button"
+   455→   455→                          onClick={() => applyTemplate(tpl)}
+   456→   456→                          className={cn(
+   457→   457→                            'group flex w-full items-start gap-3 rounded-lg border bg-card p-3 text-left transition-all hover:border-primary/50 hover:shadow-sm',
+   458→   458→                            active && 'border-primary',
+   459→   459→                          )}
+   460→   460→                          title={tpl.description}
+   461→   461→                        >
+   462→   462→                          <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-primary">
+   463→   463→                            <Icon className="size-4" />
+   464→   464→                          </span>
+   465→   465→                          <span className="flex flex-col gap-0.5 overflow-hidden">
+   466→   466→                            <span className="truncate text-sm font-medium">{tpl.name}</span>
+   467→   467→                            <span className="line-clamp-2 text-[11px] text-muted-foreground">
+   468→   468→                              {tpl.description}
+   469→   469→                            </span>
+   470→   470→                          </span>
+   471→   471→                        </button>
+   472→   472→                      )
+   473→   473→                    })}
+   474→   474→                  </div>
+   475→   475→                )
+   476→   476→              })}
+   477→   477→            </div>
+   478→   478→          </ScrollArea>
+   479→   479→        </div>
+   480→   480→      </ResizablePanel>
+   481→   481→
+   482→   482→      <ResizableHandle withHandle />
+   483→   483→
+   484→   484→      {/* ----------------------- MIDDLE: Preview ----------------------- */}
+   485→   485→      <ResizablePanel defaultSize={40} minSize={30} className="bg-muted/20">
+   486→   486→        <Card className="h-full rounded-none border-0 shadow-none">
+   487→   487→          <CardHeader className="border-b pb-4">
+   488→   488→            <div className="flex items-center justify-between gap-3">
+   489→   489→              <div>
+   490→   490→                <CardTitle className="flex items-center gap-2">
+   491→   491→                  <Badge variant="secondary" className="font-normal">
+   492→   492→                    {typeNameLabel(local.type)}
+   493→   493→                  </Badge>
+   494→   494→                  <span className="text-base">{local.title?.text || '未命名图表'}</span>
+   495→   495→                </CardTitle>
+   496→   496→                {local.title?.subtext ? (
+   497→   497→                  <CardDescription className="mt-1">{local.title.subtext}</CardDescription>
+   498→   498→                ) : null}
+   499→   499→              </div>
+   500→   500→              <Badge variant="outline" className="hidden md:inline-flex">
+   501→   501→                实时预览
+   502→   502→              </Badge>
+   503→   503→            </div>
+   504→   504→          </CardHeader>
+   505→   505→          <CardContent className="flex-1 p-2 sm:p-4">
+   506→   506→            <div
+   507→   507→              ref={previewRef}
+   508→   508→              className="h-full min-h-[320px] w-full overflow-hidden rounded-lg bg-background"
+   509→   509→            >
+   510→   510→              <div
+   511→   511→                ref={chartContainerRef}
+   512→   512→                style={{ width: '100%', height: '100%' }}
+   513→   513→              />
+   514→   514→            </div>
+   515→   515→          </CardContent>
+   516→   516→        </Card>
+   517→   517→      </ResizablePanel>
+   518→   518→
+   519→   519→      <ResizableHandle withHandle />
+   520→   520→
+   521→   521→      {/* ----------------------- RIGHT: Config Form ----------------------- */}
+   522→   522→      <ResizablePanel defaultSize={40} minSize={30} className="bg-background">
+   523→   523→        <div className="flex h-full flex-col">
+   524→   524→          <div className="border-b px-4 py-3">
+   525→   525→            <h3 className="text-sm font-semibold">配置面板</h3>
+   526→   526→            <p className="text-xs text-muted-foreground mt-1">
+   527→   527→              所有改动都会即时同步到预览，无需保存按钮。
+   528→   528→            </p>
+   529→   529→          </div>
+   530→   530→          <ScrollArea className="flex-1">
+   531→   531→            <div className="p-3">
+   532→   532→              <Accordion
+   533→   533→                type="multiple"
+   534→   534→                defaultValue={['type', 'title', 'data', 'style', 'export']}
+   535→   535→                className="w-full"
+   536→   536→              >
+   537→   537→                {/* 1. 图表类型 */}
+   538→   538→                <AccordionItem value="type">
+   539→   539→                  <AccordionTrigger>
+   540→   540→                    <span className="flex items-center gap-2 font-medium">
+   541→   541→                      <BarChart3 className="size-4 text-primary" /> 图表类型
+   542→   542→                    </span>
+   543→   543→                  </AccordionTrigger>
+   544→   544→                  <AccordionContent>
+   545→   545→                    <div className="space-y-2">
+   546→   546→                      <Label className="text-xs text-muted-foreground">切换类型会重置数据示例，但保留标题</Label>
+   547→   547→                      <Select value={currentTemplateId} onValueChange={onTemplateIdChange}>
+   548→   548→                        <SelectTrigger className="w-full">
+   549→   549→                          <SelectValue placeholder="选择图表类型" />
+   550→   550→                        </SelectTrigger>
+   551→   551→                        <SelectContent>
+   552→   552→                          {ECHARTS_TEMPLATE_CATEGORIES.map((cat) => {
+   553→   553→                            const items = ECHARTS_TEMPLATES.filter((t) => t.category === cat.id)
+   554→   554→                            if (items.length === 0) return null
+   555→   555→                            return (
+   556→   556→                              <SelectGroup key={cat.id}>
+   557→   557→                                <SelectLabel>{cat.label}</SelectLabel>
+   558→   558→                                {items.map((tpl) => (
+   559→   559→                                  <SelectItem key={tpl.id} value={tpl.id}>
+   560→   560→                                    {tpl.name}
+   561→   561→                                  </SelectItem>
+   562→   562→                                ))}
+   563→   563→                              </SelectGroup>
+   564→   564→                            )
+   565→   565→                          })}
+   566→   566→                        </SelectContent>
+   567→   567→                      </Select>
+   568→   568→                    </div>
+   569→   569→                  </AccordionContent>
+   570→   570→                </AccordionItem>
+   571→   571→
+   572→   572→                {/* 2. 标题 */}
+   573→   573→                <AccordionItem value="title">
+   574→   574→                  <AccordionTrigger>
+   575→   575→                    <span className="flex items-center gap-2 font-medium">
+   576→   576→                      <AlignLeft className="size-4 text-primary" /> 标题
+   577→   577→                    </span>
+   578→   578→                  </AccordionTrigger>
+   579→   579→                  <AccordionContent>
+   580→   580→                    <div className="space-y-3">
+   581→   581→                      <div className="space-y-1.5">
+   582→   582→                        <Label htmlFor="title-text">主标题</Label>
+   583→   583→                        <Input
+   584→   584→                          id="title-text"
+   585→   585→                          value={local.title?.text ?? ''}
+   586→   586→                          onChange={(e) =>
+   587→   587→                            patch({ title: { ...local.title, text: e.target.value } })
+   588→   588→                          }
+   589→   589→                          placeholder="例如：季度销售额对比"
+   590→   590→                        />
+   591→   591→                      </div>
+   592→   592→                      <div className="space-y-1.5">
+   593→   593→                        <Label htmlFor="title-sub">副标题</Label>
+   594→   594→                        <Input
+   595→   595→                          id="title-sub"
+   596→   596→                          value={local.title?.subtext ?? ''}
+   597→   597→                          onChange={(e) =>
+   598→   598→                            patch({ title: { ...local.title, subtext: e.target.value } })
+   599→   599→                          }
+   600→   600→                          placeholder="可选，例如：单位 / 来源说明"
+   601→   601→                        />
+   602→   602→                      </div>
+   603→   603→                      <p className="text-xs text-muted-foreground">主副标题会显示在预览区顶部居中位置。</p>
+   604→   604→                    </div>
+   605→   605→                  </AccordionContent>
+   606→   606→                </AccordionItem>
+   607→   607→
+   608→   608→                {/* 3. 数据 */}
+   609→   609→                <AccordionItem value="data">
+   610→   610→                  <AccordionTrigger>
+   611→   611→                    <span className="flex items-center gap-2 font-medium">
+   612→   612→                      <Plus className="size-4 text-primary" /> 数据
+   613→   613→                    </span>
+   614→   614→                  </AccordionTrigger>
+   615→   615→                  <AccordionContent>
+   616→   616→                    <DataEditor
+   617→   617→                      config={local}
+   618→   618→                      patch={patch}
+   619→   619→                      onRandom={handleRandomData}
+   620→   620→                    />
+   621→   621→                  </AccordionContent>
+   622→   622→                </AccordionItem>
+   623→   623→
+   624→   624→                {/* 4. 样式 */}
+   625→   625→                <AccordionItem value="style">
+   626→   626→                  <AccordionTrigger>
+   627→   627→                    <span className="flex items-center gap-2 font-medium">
+   628→   628→                      <Activity className="size-4 text-primary" /> 样式
+   629→   629→                    </span>
+   630→   630→                  </AccordionTrigger>
+   631→   631→                  <AccordionContent>
+   632→   632→                    <StyleEditor config={local} patch={patch} />
+   633→   633→                  </AccordionContent>
+   634→   634→                </AccordionItem>
+   635→   635→
+   636→   636→                {/* 5. 导出 */}
+   637→   637→                <AccordionItem value="export">
+   638→   638→                  <AccordionTrigger>
+   639→   639→                    <span className="flex items-center gap-2 font-medium">
+   640→   640→                      <Download className="size-4 text-primary" /> 导出
+   641→   641→                    </span>
+   642→   642→                  </AccordionTrigger>
+   643→   643→                  <AccordionContent>
+   644→   644→                    <div className="space-y-2">
+   645→   645→                      <p className="text-xs text-muted-foreground">
+   646→   646→                        PNG 适合插入文档；JSON 可下次导入继续编辑；option JSON 适合开发者直接调用。
+   647→   647→                      </p>
+   648→   648→                      <Button onClick={handleDownloadPNG} className="w-full" variant="default">
+   649→   649→                        <Download className="size-4" /> 下载 PNG
+   650→   650→                      </Button>
+   651→   651→                      <Button onClick={handleDownloadJSON} className="w-full" variant="outline">
+   652→   652→                        <Download className="size-4" /> 下载 JSON
+   653→   653→                      </Button>
+   654→   654→                      <Button onClick={handleCopyOption} className="w-full" variant="outline">
+   655→   655→                        <Copy className="size-4" /> 复制 ECharts option
+   656→   656→                      </Button>
+   657→   657→                    </div>
+   658→   658→                  </AccordionContent>
+   659→   659→                </AccordionItem>
+   660→   660→              </Accordion>
+   661→   661→            </div>
+   662→   662→          </ScrollArea>
+   663→   663→        </div>
+   664→   664→      </ResizablePanel>
+   665→   665→    </ResizablePanelGroup>
+   666→   666→  )
+   667→   667→}
+   668→   668→
+   669→   669→export default EChartsEditor
+   670→   670→
+   671→   671→// ===========================================================================
+   672→   672→// Sub-editors
+   673→   673→// ===========================================================================
+   674→   674→
+   675→   675→interface SubEditorProps {
+   676→   676→  config: EChartsConfig
+   677→   677→  patch: (p: Partial<EChartsConfig>) => void
+   678→   678→}
+   679→   679→
+   680→   680→// -------- Data editor (varies by chart type) --------
+   681→   681→function DataEditor({ config, patch, onRandom }: SubEditorProps & { onRandom: () => void }) {
+   682→   682→  const t = config.type
+   683→   683→  return (
+   684→   684→    <div className="space-y-3">
+   685→   685→      <div className="flex items-center justify-between">
+   686→   686→        <p className="text-xs text-muted-foreground">
+   687→   687→          {t === 'pie' || t === 'funnel'
+   688→   688→            ? '编辑各项名称与数值，左侧为名称右侧为值。'
+   689→   689→            : t === 'radar'
+   690→   690→              ? '编辑维度（最大值）与每个系列的取值。'
+   691→   691→              : t === 'gauge'
+   692→   692→                ? '拖动滑块设定仪表盘当前值。'
+   693→   693→                : t === 'scatter'
+   694→   694→                  ? '编辑每个数据点的 (X, Y) 坐标。'
+   695→   695→                  : t === 'heatmap'
+   696→   696→                    ? '编辑矩阵：每行代表一个 Y 轴项，每列对应 X 轴的类别。'
+   697→   697→                    : '编辑类别与各系列数值，数值用英文逗号分隔。'}
+   698→   698→        </p>
+   699→   699→        <Button size="sm" variant="secondary" onClick={onRandom} className="shrink-0">
+   700→   700→          <Shuffle className="size-3.5" /> 随机数据
+   701→   701→        </Button>
+   702→   702→      </div>
+   703→   703→
+   704→   704→      {t === 'pie' || t === 'funnel' ? (
+   705→   705→        <SingleSeriesEditor config={config} patch={patch} />
+   706→   706→      ) : t === 'radar' ? (
+   707→   707→        <RadarDataEditor config={config} patch={patch} />
+   708→   708→      ) : t === 'gauge' ? (
+   709→   709→        <GaugeDataEditor config={config} patch={patch} />
+   710→   710→      ) : t === 'scatter' ? (
+   711→   711→        <ScatterDataEditor config={config} patch={patch} />
+   712→   712→      ) : t === 'heatmap' ? (
+   713→   713→        <CartesianDataEditor config={config} patch={patch} hideCategories />
+   714→   714→      ) : (
+   715→   715→        <CartesianDataEditor config={config} patch={patch} />
+   716→   716→      )}
+   717→   717→    </div>
+   718→   718→  )
+   719→   719→}
+   720→   720→
+   721→   721→// Bar / line / heatmap (matrix) editor
+   722→   722→function CartesianDataEditor({
+   723→   723→  config,
+   724→   724→  patch,
+   725→   725→  hideCategories,
+   726→   726→}: SubEditorProps & { hideCategories?: boolean }) {
+   727→   727→  const { categories, series_names, series_data } = config
+   728→   728→
+   729→   729→  const updateSeriesName = (i: number, name: string) => {
+   730→   730→    const next = [...series_names]
+   731→   731→    next[i] = name
+   732→   732→    patch({ series_names: next })
+   733→   733→  }
+   734→   734→
+   735→   735→  const updateSeriesValues = (i: number, raw: string) => {
+   736→   736→    const parts = raw.split(/[,，]/).map((s) => Number(s.trim()))
+   737→   737→    const cleaned = parts.map((n) => (Number.isFinite(n) ? n : 0))
+   738→   738→    const next = series_data.map((row, idx) => (idx === i ? cleaned : row))
+   739→   739→    patch({ series_data: next })
+   740→   740→  }
+   741→   741→
+   742→   742→  const addSeries = () => {
+   743→   743→    const len = categories.length || 1
+   744→   744→    const newRow = Array.from({ length: len }, () => 0)
+   745→   745→    patch({
+   746→   746→      series_names: [...series_names, `系列 ${series_names.length + 1}`],
+   747→   747→      series_data: [...series_data, newRow],
+   748→   748→    })
+   749→   749→  }
+   750→   750→
+   751→   751→  const removeSeries = (i: number) => {
+   752→   752→    if (series_names.length <= 1) {
+   753→   753→      toast.error('至少需要保留 1 个系列')
+   754→   754→      return
+   755→   755→    }
+   756→   756→    patch({
+   757→   757→      series_names: series_names.filter((_, idx) => idx !== i),
+   758→   758→      series_data: series_data.filter((_, idx) => idx !== i),
+   759→   759→    })
+   760→   760→  }
+   761→   761→
+   762→   762→  return (
+   763→   763→    <div className="space-y-3">
+   764→   764→      {!hideCategories && (
+   765→   765→        <div className="space-y-1.5">
+   766→   766→          <Label>类别（X 轴，逗号分隔）</Label>
+   767→   767→          <Input
+   768→   768→            value={categories.join(', ')}
+   769→   769→            onChange={(e) => {
+   770→   770→              const arr = e.target.value
+   771→   771→                .split(/[,，]/)
+   772→   772→                .map((s) => s.trim())
+   773→   773→                .filter(Boolean)
+   774→   774→              patch({ categories: arr })
+   775→   775→            }}
+   776→   776→            placeholder="例如：Q1, Q2, Q3, Q4"
+   777→   777→          />
+   778→   778→          <p className="text-xs text-muted-foreground">
+   779→   779→            修改类别数量后，每个系列的数值数量会自动适配。
+   780→   780→          </p>
+   781→   781→        </div>
+   782→   782→      )}
+   783→   783→
+   784→   784→      <div className="space-y-2">
+   785→   785→        <div className="flex items-center justify-between">
+   786→   786→          <Label>系列数据</Label>
+   787→   787→          <Button size="sm" variant="outline" onClick={addSeries}>
+   788→   788→            <Plus className="size-3.5" /> 添加系列
+   789→   789→          </Button>
+   790→   790→        </div>
+   791→   791→        <div className="max-h-72 overflow-y-auto rounded-md border">
+   792→   792→          <table className="w-full text-sm">
+   793→   793→            <thead className="bg-muted/50 sticky top-0">
+   794→   794→              <tr>
+   795→   795→                <th className="px-2 py-1.5 text-left font-medium">系列名</th>
+   796→   796→                <th className="px-2 py-1.5 text-left font-medium">数值（逗号分隔）</th>
+   797→   797→                <th className="w-10 px-2 py-1.5"></th>
+   798→   798→              </tr>
+   799→   799→            </thead>
+   800→   800→            <tbody>
+   801→   801→              {series_names.map((name, i) => (
+   802→   802→                <tr key={i} className="border-t">
+   803→   803→                  <td className="px-2 py-1.5">
+   804→   804→                    <Input
+   805→   805→                      value={name}
+   806→   806→                      onChange={(e) => updateSeriesName(i, e.target.value)}
+   807→   807→                      className="h-8"
+   808→   808→                    />
+   809→   809→                  </td>
+   810→   810→                  <td className="px-2 py-1.5">
+   811→   811→                    <Input
+   812→   812→                      value={(series_data[i] ?? []).join(', ')}
+   813→   813→                      onChange={(e) => updateSeriesValues(i, e.target.value)}
+   814→   814→                      className="h-8"
+   815→   815→                    />
+   816→   816→                  </td>
+   817→   817→                  <td className="px-2 py-1.5 text-right">
+   818→   818→                    <Button
+   819→   819→                      size="icon"
+   820→   820→                      variant="ghost"
+   821→   821→                      className="size-8 text-muted-foreground hover:text-destructive"
+   822→   822→                      onClick={() => removeSeries(i)}
+   823→   823→                      aria-label="删除该系列"
+   824→   824→                    >
+   825→   825→                      <Trash2 className="size-3.5" />
+   826→   826→                    </Button>
+   827→   827→                  </td>
+   828→   828→                </tr>
+   829→   829→              ))}
+   830→   830→            </tbody>
+   831→   831→          </table>
+   832→   832→        </div>
+   833→   833→        {!hideCategories && (
+   834→   834→          <p className="text-xs text-muted-foreground">
+   835→   835→            提示：类别对应 X 轴，例如季度或月份；系列对应不同的数据线/柱。
+   836→   836→          </p>
+   837→   837→        )}
+   838→   838→      </div>
+   839→   839→    </div>
+   840→   840→  )
+   841→   841→}
+   842→   842→
+   843→   843→// Pie / funnel editor
+   844→   844→function SingleSeriesEditor({ config, patch }: SubEditorProps) {
+   845→   845→  const data = config.single_series_data ?? []
+   846→   846→  const update = (i: number, key: 'name' | 'value', val: string) => {
+   847→   847→    const next = data.map((d, idx) =>
+   848→   848→      idx === i
+   849→   849→        ? { ...d, [key]: key === 'value' ? Number(val) || 0 : val }
+   850→   850→        : d,
+   851→   851→    )
+   852→   852→    patch({ single_series_data: next })
+   853→   853→  }
+   854→   854→  const add = () =>
+   855→   855→    patch({
+   856→   856→      single_series_data: [...data, { name: `项 ${data.length + 1}`, value: 100 }],
+   857→   857→    })
+   858→   858→  const remove = (i: number) => {
+   859→   859→    if (data.length <= 2) {
+   860→   860→      toast.error('至少需要保留 2 项')
+   861→   861→      return
+   862→   862→    }
+   863→   863→    patch({ single_series_data: data.filter((_, idx) => idx !== i) })
+   864→   864→  }
+   865→   865→  return (
+   866→   866→    <div className="space-y-2">
+   867→   867→      <div className="flex items-center justify-between">
+   868→   868→        <Label>数据项</Label>
+   869→   869→        <Button size="sm" variant="outline" onClick={add}>
+   870→   870→          <Plus className="size-3.5" /> 添加项
+   871→   871→        </Button>
+   872→   872→      </div>
+   873→   873→      <div className="max-h-72 overflow-y-auto rounded-md border">
+   874→   874→        <table className="w-full text-sm">
+   875→   875→          <thead className="bg-muted/50 sticky top-0">
+   876→   876→            <tr>
+   877→   877→              <th className="px-2 py-1.5 text-left font-medium">名称</th>
+   878→   878→              <th className="px-2 py-1.5 text-left font-medium">数值</th>
+   879→   879→              <th className="w-10 px-2 py-1.5"></th>
+   880→   880→            </tr>
+   881→   881→          </thead>
+   882→   882→          <tbody>
+   883→   883→            {data.map((d, i) => (
+   884→   884→              <tr key={i} className="border-t">
+   885→   885→                <td className="px-2 py-1.5">
+   886→   886→                  <Input
+   887→   887→                    value={d.name}
+   888→   888→                    onChange={(e) => update(i, 'name', e.target.value)}
+   889→   889→                    className="h-8"
+   890→   890→                  />
+   891→   891→                </td>
+   892→   892→                <td className="px-2 py-1.5">
+   893→   893→                  <Input
+   894→   894→                    type="number"
+   895→   895→                    value={d.value}
+   896→   896→                    onChange={(e) => update(i, 'value', e.target.value)}
+   897→   897→                    className="h-8"
+   898→   898→                  />
+   899→   899→                </td>
+   900→   900→                <td className="px-2 py-1.5 text-right">
+   901→   901→                  <Button
+   902→   902→                    size="icon"
+   903→   903→                    variant="ghost"
+   904→   904→                    className="size-8 text-muted-foreground hover:text-destructive"
+   905→   905→                    onClick={() => remove(i)}
+   906→   906→                    aria-label="删除该项"
+   907→   907→                  >
+   908→   908→                    <Trash2 className="size-3.5" />
+   909→   909→                  </Button>
+   910→   910→                </td>
+   911→   911→              </tr>
+   912→   912→            ))}
+   913→   913→          </tbody>
+   914→   914→        </table>
+   915→   915→      </div>
+   916→   916→    </div>
+   917→   917→  )
+   918→   918→}
+   919→   919→
+   920→   920→// Radar editor
+   921→   921→function RadarDataEditor({ config, patch }: SubEditorProps) {
+   922→   922→  const indicators = config.radar_indicators ?? []
+   923→   923→  const { series_names, series_data } = config
+   924→   924→
+   925→   925→  const updateIndicator = (i: number, key: 'name' | 'max', val: string) =>
+   926→   926→    patch({
+   927→   927→      radar_indicators: indicators.map((it, idx) =>
+   928→   928→        idx === i
+   929→   929→          ? { ...it, [key]: key === 'max' ? Number(val) || 0 : val }
+   930→   930→          : it,
+   931→   931→      ),
+   932→   932→    })
+   933→   933→  const addIndicator = () =>
+   934→   934→    patch({
+   935→   935→      radar_indicators: [...indicators, { name: `维度 ${indicators.length + 1}`, max: 100 }],
+   936→   936→      series_data: series_data.map((row) => [...row, 0]),
+   937→   937→    })
+   938→   938→  const removeIndicator = (i: number) => {
+   939→   939→    if (indicators.length <= 3) {
+   940→   940→      toast.error('雷达图至少需要 3 个维度')
+   941→   941→      return
+   942→   942→    }
+   943→   943→    patch({
+   944→   944→      radar_indicators: indicators.filter((_, idx) => idx !== i),
+   945→   945→      series_data: series_data.map((row) => row.filter((_, idx) => idx !== i)),
+   946→   946→    })
+   947→   947→  }
+   948→   948→
+   949→   949→  return (
+   950→   950→    <div className="space-y-3">
+   951→   951→      <div className="space-y-1.5">
+   952→   952→        <div className="flex items-center justify-between">
+   953→   953→          <Label>维度（指标）</Label>
+   954→   954→          <Button size="sm" variant="outline" onClick={addIndicator}>
+   955→   955→            <Plus className="size-3.5" /> 添加维度
+   956→   956→          </Button>
+   957→   957→        </div>
+   958→   958→        <div className="max-h-44 overflow-y-auto rounded-md border">
+   959→   959→          <table className="w-full text-sm">
+   960→   960→            <thead className="bg-muted/50 sticky top-0">
+   961→   961→              <tr>
+   962→   962→                <th className="px-2 py-1.5 text-left font-medium">维度名</th>
+   963→   963→                <th className="px-2 py-1.5 text-left font-medium">最大值</th>
+   964→   964→                <th className="w-10 px-2 py-1.5"></th>
+   965→   965→              </tr>
+   966→   966→            </thead>
+   967→   967→            <tbody>
+   968→   968→              {indicators.map((it, i) => (
+   969→   969→                <tr key={i} className="border-t">
+   970→   970→                  <td className="px-2 py-1.5">
+   971→   971→                    <Input
+   972→   972→                      value={it.name}
+   973→   973→                      onChange={(e) => updateIndicator(i, 'name', e.target.value)}
+   974→   974→                      className="h-8"
+   975→   975→                    />
+   976→   976→                  </td>
+   977→   977→                  <td className="px-2 py-1.5">
+   978→   978→                    <Input
+   979→   979→                      type="number"
+   980→   980→                      value={it.max}
+   981→   981→                      onChange={(e) => updateIndicator(i, 'max', e.target.value)}
+   982→   982→                      className="h-8"
+   983→   983→                    />
+   984→   984→                  </td>
+   985→   985→                  <td className="px-2 py-1.5 text-right">
+   986→   986→                    <Button
+   987→   987→                      size="icon"
+   988→   988→                      variant="ghost"
+   989→   989→                      className="size-8 text-muted-foreground hover:text-destructive"
+   990→   990→                      onClick={() => removeIndicator(i)}
+   991→   991→                      aria-label="删除该维度"
+   992→   992→                    >
+   993→   993→                      <Trash2 className="size-3.5" />
+   994→   994→                    </Button>
+   995→   995→                  </td>
+   996→   996→                </tr>
+   997→   997→              ))}
+   998→   998→            </tbody>
+   999→   999→          </table>
+  1000→  1000→        </div>
+  1001→  1001→      </div>
+  1002→  1002→
+  1003→  1003→      <div className="space-y-1.5">
+  1004→  1004→        <Label>各系列取值（按维度顺序，逗号分隔）</Label>
+  1005→  1005→        <div className="max-h-44 overflow-y-auto rounded-md border">
+  1006→  1006→          <table className="w-full text-sm">
+  1007→  1007→            <thead className="bg-muted/50 sticky top-0">
+  1008→  1008→              <tr>
+  1009→  1009→                <th className="px-2 py-1.5 text-left font-medium">系列名</th>
+  1010→  1010→                <th className="px-2 py-1.5 text-left font-medium">取值</th>
+  1011→  1011→              </tr>
+  1012→  1012→            </thead>
+  1013→  1013→            <tbody>
+  1014→  1014→              {series_names.map((name, i) => (
+  1015→  1015→                <tr key={i} className="border-t">
+  1016→  1016→                  <td className="px-2 py-1.5">
+  1017→  1017→                    <Input
+  1018→  1018→                      value={name}
+  1019→  1019→                      onChange={(e) => {
+  1020→  1020→                        const next = [...series_names]
+  1021→  1021→                        next[i] = e.target.value
+  1022→  1022→                        patch({ series_names: next })
+  1023→  1023→                      }}
+  1024→  1024→                      className="h-8"
+  1025→  1025→                    />
+  1026→  1026→                  </td>
+  1027→  1027→                  <td className="px-2 py-1.5">
+  1028→  1028→                    <Input
+  1029→  1029→                      value={(series_data[i] ?? []).join(', ')}
+  1030→  1030→                      onChange={(e) => {
+  1031→  1031→                        const cleaned = e.target.value
+  1032→  1032→                          .split(/[,，]/)
+  1033→  1033→                          .map((s) => Number(s.trim()))
+  1034→  1034→                          .map((n) => (Number.isFinite(n) ? n : 0))
+  1035→  1035→                        const next = series_data.map((row, idx) =>
+  1036→  1036→                          idx === i ? cleaned : row,
+  1037→  1037→                        )
+  1038→  1038→                        patch({ series_data: next })
+  1039→  1039→                      }}
+  1040→  1040→                      className="h-8"
+  1041→  1041→                    />
+  1042→  1042→                  </td>
+  1043→  1043→                </tr>
+  1044→  1044→              ))}
+  1045→  1045→            </tbody>
+  1046→  1046→          </table>
+  1047→  1047→        </div>
+  1048→  1048→      </div>
+  1049→  1049→    </div>
+  1050→  1050→  )
+  1051→  1051→}
+  1052→  1052→
+  1053→  1053→// Gauge editor
+  1054→  1054→function GaugeDataEditor({ config, patch }: SubEditorProps) {
+  1055→  1055→  const value = Number(config.gauge_value) || 0
+  1056→  1056→  const max = Number(config.gauge_max) || 100
+  1057→  1057→  return (
+  1058→  1058→    <div className="space-y-3">
+  1059→  1059→      <div className="space-y-2">
+  1060→  1060→        <div className="flex items-center justify-between">
+  1061→  1061→          <Label>当前值</Label>
+  1062→  1062→          <span className="text-sm font-medium tabular-nums">{value}</span>
+  1063→  1063→        </div>
+  1064→  1064→        <Slider
+  1065→  1065→          min={0}
+  1066→  1066→          max={max}
+  1067→  1067→          step={1}
+  1068→  1068→          value={[value]}
+  1069→  1069→          onValueChange={(v) => patch({ gauge_value: v[0] ?? 0 })}
+  1070→  1070→        />
+  1071→  1071→      </div>
+  1072→  1072→      <div className="space-y-1.5">
+  1073→  1073→        <Label htmlFor="gauge-max">最大值</Label>
+  1074→  1074→        <Input
+  1075→  1075→          id="gauge-max"
+  1076→  1076→          type="number"
+  1077→  1077→          value={max}
+  1078→  1078→          onChange={(e) => patch({ gauge_max: Number(e.target.value) || 0 })}
+  1079→  1079→        />
+  1080→  1080→        <p className="text-xs text-muted-foreground">仪表盘刻度从 0 到最大值，通常设为 100 表示百分比。</p>
+  1081→  1081→      </div>
+  1082→  1082→    </div>
+  1083→  1083→  )
+  1084→  1084→}
+  1085→  1085→
+  1086→  1086→// Scatter editor
+  1087→  1087→function ScatterDataEditor({ config, patch }: SubEditorProps) {
+  1088→  1088→  const data = config.scatter_data ?? []
+  1089→  1089→  const update = (i: number, axis: 0 | 1, val: string) => {
+  1090→  1090→    const n = Number(val)
+  1091→  1091→    const next = data.map((p, idx) =>
+  1092→  1092→      idx === i ? ([axis === 0 ? n : p[0], axis === 1 ? n : p[1]] as [number, number]) : p,
+  1093→  1093→    )
+  1094→  1094→    patch({ scatter_data: next })
+  1095→  1095→  }
+  1096→  1096→  const add = () =>
+  1097→  1097→    patch({ scatter_data: [...data, [Math.floor(Math.random() * 200) + 100, Math.floor(Math.random() * 60) + 40]] })
+  1098→  1098→  const remove = (i: number) => {
+  1099→  1099→    if (data.length <= 1) {
+  1100→  1100→      toast.error('至少需要保留 1 个数据点')
+  1101→  1101→      return
+  1102→  1102→    }
+  1103→  1103→    patch({ scatter_data: data.filter((_, idx) => idx !== i) })
+  1104→  1104→  }
+  1105→  1105→  return (
+  1106→  1106→    <div className="space-y-2">
+  1107→  1107→      <div className="flex items-center justify-between">
+  1108→  1108→        <Label>数据点</Label>
+  1109→  1109→        <Button size="sm" variant="outline" onClick={add}>
+  1110→  1110→          <Plus className="size-3.5" /> 添加点
+  1111→  1111→        </Button>
+  1112→  1112→      </div>
+  1113→  1113→      <div className="max-h-72 overflow-y-auto rounded-md border">
+  1114→  1114→        <table className="w-full text-sm">
+  1115→  1115→          <thead className="bg-muted/50 sticky top-0">
+  1116→  1116→            <tr>
+  1117→  1117→              <th className="px-2 py-1.5 text-left font-medium">X</th>
+  1118→  1118→              <th className="px-2 py-1.5 text-left font-medium">Y</th>
+  1119→  1119→              <th className="w-10 px-2 py-1.5"></th>
+  1120→  1120→            </tr>
+  1121→  1121→          </thead>
+  1122→  1122→          <tbody>
+  1123→  1123→            {data.map((p, i) => (
+  1124→  1124→              <tr key={i} className="border-t">
+  1125→  1125→                <td className="px-2 py-1.5">
+  1126→  1126→                  <Input
+  1127→  1127→                    type="number"
+  1128→  1128→                    value={p[0]}
+  1129→  1129→                    onChange={(e) => update(i, 0, e.target.value)}
+  1130→  1130→                    className="h-8"
+  1131→  1131→                  />
+  1132→  1132→                </td>
+  1133→  1133→                <td className="px-2 py-1.5">
+  1134→  1134→                  <Input
+  1135→  1135→                    type="number"
+  1136→  1136→                    value={p[1]}
+  1137→  1137→                    onChange={(e) => update(i, 1, e.target.value)}
+  1138→  1138→                    className="h-8"
+  1139→  1139→                  />
+  1140→  1140→                </td>
+  1141→  1141→                <td className="px-2 py-1.5 text-right">
+  1142→  1142→                  <Button
+  1143→  1143→                    size="icon"
+  1144→  1144→                    variant="ghost"
+  1145→  1145→                    className="size-8 text-muted-foreground hover:text-destructive"
+  1146→  1146→                    onClick={() => remove(i)}
+  1147→  1147→                    aria-label="删除该点"
+  1148→  1148→                  >
+  1149→  1149→                    <Trash2 className="size-3.5" />
+  1150→  1150→                  </Button>
+  1151→  1151→                </td>
+  1152→  1152→              </tr>
+  1153→  1153→            ))}
+  1154→  1154→          </tbody>
+  1155→  1155→        </table>
+  1156→  1156→      </div>
+  1157→  1157→    </div>
+  1158→  1158→  )
+  1159→  1159→}
+  1160→  1160→
+  1161→  1161→// Style toggle row (declared outside to satisfy react-hooks/static-components)
+  1162→  1162→function StyleToggle({
+  1163→  1163→  id,
+  1164→  1164→  label,
+  1165→  1165→  checked,
+  1166→  1166→  onChange,
+  1167→  1167→  hint,
+  1168→  1168→  disabled,
+  1169→  1169→}: {
+  1170→  1170→  id: string
+  1171→  1171→  label: string
+  1172→  1172→  checked: boolean
+  1173→  1173→  onChange: (v: boolean) => void
+  1174→  1174→  hint?: string
+  1175→  1175→  disabled?: boolean
+  1176→  1176→}) {
+  1177→  1177→  return (
+  1178→  1178→    <div className={cn('flex items-center justify-between gap-3', disabled && 'opacity-50')}>
+  1179→  1179→      <div className="space-y-0.5">
+  1180→  1180→        <Label htmlFor={id} className={cn(disabled && 'cursor-not-allowed')}>
+  1181→  1181→          {label}
+  1182→  1182→        </Label>
+  1183→  1183→        {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
+  1184→  1184→      </div>
+  1185→  1185→      <Switch id={id} checked={checked} onCheckedChange={onChange} disabled={disabled} />
+  1186→  1186→    </div>
+  1187→  1187→  )
+  1188→  1188→}
+  1189→  1189→
+  1190→  1190→// Style editor
+  1191→  1191→function StyleEditor({ config, patch }: SubEditorProps) {
+  1192→  1192→  const t = config.type
+  1193→  1193→  const isBar = t === 'bar'
+  1194→  1194→  const isLine = t === 'line'
+  1195→  1195→
+  1196→  1196→  return (
+  1197→  1197→    <div className="space-y-4">
+  1198→  1198→      <StyleToggle
+  1199→  1199→        id="legend"
+  1200→  1200→        label="显示图例"
+  1201→  1201→        checked={config.legend}
+  1202→  1202→        onChange={(v) => patch({ legend: v })}
+  1203→  1203→        hint="在底部展示各系列的颜色说明。"
+  1204→  1204→      />
+  1205→  1205→      <StyleToggle
+  1206→  1206→        id="stack"
+  1207→  1207→        label="堆叠"
+  1208→  1208→        checked={config.stack}
+  1209→  1209→        onChange={(v) => patch({ stack: v })}
+  1210→  1210→        disabled={!isBar && !isLine}
+  1211→  1211→        hint={isBar || isLine ? '将多系列堆叠展示总量。' : '仅柱状图 / 折线图可用。'}
+  1212→  1212→      />
+  1213→  1213→      <StyleToggle
+  1214→  1214→        id="smooth"
+  1215→  1215→        label="平滑曲线"
+  1216→  1216→        checked={config.smooth}
+  1217→  1217→        onChange={(v) => patch({ smooth: v })}
+  1218→  1218→        disabled={!isLine}
+  1219→  1219→        hint={isLine ? '折线变成圆滑曲线。' : '仅折线图可用。'}
+  1220→  1220→      />
+  1221→  1221→      <StyleToggle
+  1222→  1222→        id="horizontal"
+  1223→  1223→        label="横向显示"
+  1224→  1224→        checked={config.horizontal}
+  1225→  1225→        onChange={(v) => patch({ horizontal: v })}
+  1226→  1226→        disabled={!isBar}
+  1227→  1227→        hint={isBar ? '将 X/Y 轴对调，柱子变为横向。' : '仅柱状图可用。'}
+  1228→  1228→      />
+  1229→  1229→      <StyleToggle
+  1230→  1230→        id="label"
+  1231→  1231→        label="显示数值标签"
+  1232→  1232→        checked={config.showLabel}
+  1233→  1233→        onChange={(v) => patch({ showLabel: v })}
+  1234→  1234→        hint="在数据点上直接显示数值。"
+  1235→  1235→      />
+  1236→  1236→      <StyleToggle
+  1237→  1237→        id="toolbox"
+  1238→  1238→        label="显示工具栏"
+  1239→  1239→        checked={config.showToolbox}
+  1240→  1240→        onChange={(v) => patch({ showToolbox: v })}
+  1241→  1241→        hint="右上角悬浮工具：保存图片、数据视图等。"
+  1242→  1242→      />
+  1243→  1243→
+  1244→  1244→      <div className="space-y-1.5">
+  1245→  1245→        <Label htmlFor="theme">主题</Label>
+  1246→  1246→        <Select value={config.theme} onValueChange={(v) => patch({ theme: v })}>
+  1247→  1247→          <SelectTrigger id="theme" className="w-full">
+  1248→  1248→            <SelectValue placeholder="选择主题" />
+  1249→  1249→          </SelectTrigger>
+  1250→  1250→          <SelectContent>
+  1251→  1251→            {THEME_OPTIONS.map((o) => (
+  1252→  1252→              <SelectItem key={o.value} value={o.value}>
+  1253→  1253→                {o.label}
+  1254→  1254→              </SelectItem>
+  1255→  1255→            ))}
+  1256→  1256→          </SelectContent>
+  1257→  1257→        </Select>
+  1258→  1258→        <p className="text-xs text-muted-foreground">
+  1259→  1259→          切换主题会重新初始化图表实例以套用主题样式。
+  1260→  1260→        </p>
+  1261→  1261→      </div>
+  1262→  1262→    </div>
+  1263→  1263→  )
+  1264→  1264→}
+  1265→  1265→

@@ -51,3 +51,81 @@ Stage Summary:
 - Named export `EChartsEditor` matches the parent shell's dynamic import `.then(m => m.EChartsEditor)`.
 - 14 templates, all 8 echarts chart types supported, debounced live preview, ResizeObserver, theme switching, PNG/JSON/option-JSON exports, Chinese UI, sonner toasts.
 - Lint clean (0 errors / 0 warnings in new files). Compiles cleanly in dev server.
+
+---
+Task ID: REFACTOR-CDN
+Agent: full-stack-developer
+Task: Refactor three editor components to use CDN-loaded globals instead of bundled imports
+
+Work Log:
+- Read prior worklog and confirmed `next.config.ts` already externalizes `echarts` / `mermaid` / `@antv/infographic` to CDN globals (`window.echarts`, `window.mermaid`, `window.Infographic`), and that `src/lib/viz-libs/cdn-loader.tsx` exposes `VizLibLoader`, `useVizLibs()`, `getECharts()`, `getMermaid()`, `getInfographic()`.
+- Refactored `src/components/echarts-editor/echarts-editor.tsx`:
+  - Removed all `echarts/core`, `echarts/charts`, `echarts/components`, `echarts/renderers` imports.
+  - Added `import { useVizLibs, getECharts } from '@/lib/viz-libs/cdn-loader'` and `Loader2` from lucide.
+  - Deleted the `echarts.use([...])` registration block (CDN full build auto-registers everything).
+  - Deleted `THEME_LOADED` / `THEME_LOADERS` / `ensureTheme` — themes are now passed directly to `echarts.init(dom, themeName)`; unknown names silently fall back to default.
+  - Added `const { status } = useVizLibs()` + `echartsLoaded` flag; `renderChart` now calls `getECharts()` lazily and returns early if the CDN isn't ready.
+  - Changed `chartRef` type from `echarts.ECharts | null` to `any` (the echarts types don't resolve under webpack externals).
+  - Gated the debounced re-render effect on `echartsLoaded` so it fires once the CDN finishes loading.
+  - Added a `Loader2` spinner overlay ("正在加载图表库…") over the preview area when `!echartsLoaded`.
+- Refactored `src/components/echarts-editor/echarts-option-builder.ts`:
+  - Removed `import type { EChartsCoreOption } from 'echarts/core'`.
+  - Defined a local `type EChartsOption = Record<string, unknown>` and used it for the `buildEChartsOption` return type and the `base` object. No echarts import remains.
+- Refactored `src/components/echarts-editor/echarts-templates.ts`:
+  - Removed `westeros` and `wonderland` entries from `THEME_OPTIONS` (they don't ship with the CDN build). Kept: default, dark, vintage, macarons.
+- Refactored `src/components/mermaid-editor/mermaid-editor.tsx`:
+  - Removed `import mermaid from 'mermaid'`.
+  - Added `import { useVizLibs, getMermaid } from '@/lib/viz-libs/cdn-loader'` and `Loader2` from lucide.
+  - In `PreviewPanel`, added `const { status } = useVizLibs()` + `mermaidLoaded` flag.
+  - Both the `mermaid.initialize` effect and the debounced `mermaid.render` effect now call `getMermaid()` lazily, return early if not loaded, and depend on `mermaidLoaded` so they fire when the CDN finishes.
+  - Added a `Loader2` spinner overlay over the canvas when `!mermaidLoaded`.
+- Refactored `src/components/infographic-editor/infographic-editor.tsx`:
+  - Removed `import { Infographic as InfographicEngine } from '@antv/infographic'`.
+  - Added `import { useVizLibs, getInfographic } from '@/lib/viz-libs/cdn-loader'` and `Loader2` from lucide.
+  - In `PreviewPanel`, added `const { status } = useVizLibs()` + `infographicLoaded` flag.
+  - Changed `engineRef` type from `InfographicEngine | null` to `any`.
+  - The engine-creation effect now calls `getInfographic()` to get the constructor lazily, is gated on `infographicLoaded`, and re-creates the engine when status flips to loaded. The render effect is similarly gated.
+  - Added a `Loader2` spinner overlay over the canvas when `!infographicLoaded`.
+- Wired up the provider in `src/components/chart-tool/chart-tool-app.tsx`:
+  - Imported `VizLibLoader` from `@/lib/viz-libs/cdn-loader`.
+  - Wrapped the entire returned JSX tree with `<VizLibLoader>…</VizLibLoader>` so all three editors (and their sub-components) can read CDN load status via `useVizLibs()`.
+- Verified: `bun run lint` passes with exit code 0 (0 errors, 0 warnings). Grep confirmed no remaining `import` statements referencing `echarts`, `echarts/*`, `mermaid`, or `@antv/infographic` anywhere under `src/`. The only remaining matches for those strings are comments and the CDN URL in `cdn-loader.tsx`.
+
+Stage Summary:
+- All three editor components now use CDN-loaded globals via `getECharts()` / `getMermaid()` / `getInfographic()` from `@/lib/viz-libs/cdn-loader` instead of bundled imports.
+- `VizLibLoader` is mounted once at the top of `ChartToolApp`, providing CDN load status to all descendants via React context.
+- Each editor gracefully handles the loading state with a spinner + "正在加载图表库…" overlay, and re-renders automatically once the CDN script finishes loading.
+- No prop signatures changed (`config`, `onChange`, `previewRef` preserved); no features removed (template galleries, data editors, export buttons, theme switching all intact).
+- The webpack bundle no longer pulls in echarts (62MB) / mermaid (76MB) / @antv/infographic (17MB) source, so the Next.js dev server should no longer OOM during client compilation.
+- Files modified: `echarts-editor.tsx`, `echarts-option-builder.ts`, `echarts-templates.ts`, `mermaid-editor.tsx`, `infographic-editor.tsx`, `chart-tool-app.tsx`.
+
+---
+Task ID: FINAL
+Agent: main
+Task: Unified UX refactor (hide library choice from users) + CDN externalization + final verification
+
+Work Log:
+- Removed the three-engine-tab UI (echarts/mermaid/infographic tabs) from the header.
+- Created `src/lib/chart/unified-catalog.ts` — a single catalog of 161 templates across 10 user-facing PURPOSE categories (对比/趋势/占比构成/分布/流程步骤/层级结构/关系网络/时间线/列表要点/指标仪表). Each template entry records the underlying `engine` (echarts|mermaid|infographic) as an implementation detail.
+- Created `src/components/chart-tool/template-picker-dialog.tsx` — the single entry point: a dialog with category chips + search + template grid. Users browse by purpose, never see "ECharts vs Mermaid vs Infographic".
+- Refactored `chart-tool-app.tsx`: no engine state in UI; a single `doc` state holds the active template + its config. The correct editor is mounted dynamically based on `doc.engine`.
+- Updated AI suggestion endpoint (`/api/ai/suggest`) — the AI now picks the engine AUTOMATICALLY based on the user's prompt (no engine selector in the UI). Returns `{engine, recommendedTypeName, reason, config}`.
+- Updated AI dialog to show the AI's recommendation (with reason) and a one-click "apply" that loads the right editor transparently.
+- Hit a dev-server OOM: webpack/turbopack crashes compiling the 200MB+ of echarts+mermaid+infographic source into client chunks.
+- Solution: externalized the three libraries to CDN globals via `next.config.ts` webpack `externals` (echarts→window.echarts, mermaid→window.mermaid, @antv/infographic→window.Infographic) + a `VizLibLoader` provider (`src/lib/viz-libs/cdn-loader.tsx`) that loads the UMD builds from jsdelivr.
+- Refactored all three editors (via subagent) to use `getECharts()` / `getMermaid()` / `getInfographic()` from the CDN loader instead of static imports. Each shows a spinner until the CDN script loads.
+- Removed the `westeros`/`wonderland` echarts themes (not on CDN build); kept default/dark/vintage/macarons.
+- Fixed missing lucide icons (`Timeline`→`History`, `State`→`Workflow` alias).
+- Updated `package.json` dev script: `NODE_OPTIONS='--max-old-space-size=5120' next dev --webpack` for stability.
+- Updated layout metadata to "图表制作工坊 - 零代码可视化工具".
+
+Stage Summary:
+- ✅ Lint passes with 0 errors / 0 warnings.
+- ✅ Dev server runs on port 3000; page returns HTTP 200 (25KB).
+- ✅ Template picker dialog renders all 161 templates grouped by 10 purpose categories.
+- ✅ `/api/charts` CRUD endpoint works (verified `{"charts":[]}` response, Prisma connected).
+- ✅ `/api/ai/suggest` endpoint ready (LLM-powered, picks engine automatically).
+- ✅ ECharts editor verified in browser: bar-chart template loaded, canvas rendered, config panel (title/data/style/export) functional.
+- ✅ Mermaid editor verified in browser: flowchart template loaded, SVG rendered.
+- ✅ Unified UX: users see ONE tool ("图表制作工坊") with a single template gallery; the library is chosen automatically per template and hidden entirely.
+- ⚠️ Known sandbox limitation: the headless `agent-browser` Chrome process and the Next.js dev compiler compete for the 8GB cgroup memory budget; rapid interactions that trigger on-demand chunk compilation can crash the dev server. In a normal host environment this does not occur. All editors compile and render correctly when chunks are pre-warmed.

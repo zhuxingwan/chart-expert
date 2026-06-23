@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import * as React from 'react'
 import {
   Dialog,
   DialogContent,
@@ -13,50 +13,39 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Loader2, Sparkles, Lightbulb } from 'lucide-react'
-import type { ChartEngine, AISuggestion } from '@/types/chart'
+import type { ChartEngine } from '@/types/chart'
 import { toast } from 'sonner'
 
 interface Props {
   open: boolean
   onOpenChange: (v: boolean) => void
-  engine: ChartEngine
+  /** Optional engine hint — if undefined, AI picks the library automatically. */
+  engine?: ChartEngine
   onApply: (engine: ChartEngine, config: unknown) => void
 }
 
-const PLACEHOLDERS: Record<ChartEngine, string> = {
-  echarts:
-    '例如：展示 2024 年四个季度各产品线的销售额对比，产品线包括手机、电脑、平板。',
-  mermaid:
-    '例如：画一个用户下单的流程图，从加入购物车到支付成功，包括库存检查与支付校验。',
-  infographic:
-    '例如：做一个产品发布路线图，包含设计、开发、测试、上线四个阶段，每个阶段有简短说明。',
+interface AISuggestion {
+  engine: ChartEngine
+  recommendedTypeName: string
+  reason: string
+  config: unknown
 }
 
-const PROMPT_TIPS: Record<ChartEngine, string[]> = {
-  echarts: [
-    '想看趋势 → 折线图',
-    '想看对比 → 柱状图',
-    '想看占比 → 饼图',
-    '想看分布 → 散点图',
-  ],
-  mermaid: [
-    '业务流程 → 流程图',
-    '步骤顺序 → 时序图',
-    '思维发散 → 思维导图',
-    '项目排期 → 甘特图',
-  ],
-  infographic: [
-    '步骤列表 → 流程时间线',
-    '并列要点 → 网格卡片',
-    '层级结构 → 树形图',
-    '关系网络 → 力导向',
-  ],
-}
+const PROMPT_IDEAS = [
+  '展示 2024 年四个季度各产品线的销售额对比',
+  '画一个用户下单流程图，从加购到支付成功',
+  '做一个产品发布路线图，包含设计、开发、测试、上线',
+  '对比 React 和 Vue 的优缺点',
+  '展示公司组织架构，CEO 下设 CTO/CFO/COO',
+  '展示一周内每天不同时段的访问热度',
+  '画一个购买转化漏斗',
+  '展示项目里程碑时间线，从立项到上线',
+]
 
 export function AISuggestDialog({ open, onOpenChange, engine, onApply }: Props) {
-  const [prompt, setPrompt] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [suggestion, setSuggestion] = useState<AISuggestion | null>(null)
+  const [prompt, setPrompt] = React.useState('')
+  const [loading, setLoading] = React.useState(false)
+  const [suggestion, setSuggestion] = React.useState<AISuggestion | null>(null)
 
   const handleSuggest = async () => {
     if (!prompt.trim()) {
@@ -69,7 +58,7 @@ export function AISuggestDialog({ open, onOpenChange, engine, onApply }: Props) 
       const res = await fetch('/api/ai/suggest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ engine, prompt }),
+        body: JSON.stringify({ prompt, engine }),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -87,8 +76,7 @@ export function AISuggestDialog({ open, onOpenChange, engine, onApply }: Props) 
 
   const handleApply = () => {
     if (!suggestion) return
-    onApply(engine, suggestion.config)
-    onOpenChange(false)
+    onApply(suggestion.engine, suggestion.config)
     setPrompt('')
     setSuggestion(null)
   }
@@ -106,11 +94,11 @@ export function AISuggestDialog({ open, onOpenChange, engine, onApply }: Props) 
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-primary" />
+            <Sparkles className="h-5 w-5 text-amber-500" />
             AI 智能推荐
           </DialogTitle>
           <DialogDescription>
-            用一句话描述你想呈现的内容，AI 帮你挑选合适的图表类型并生成示例数据。
+            用一句话描述你想呈现的内容，AI 帮你挑选最合适的图表类型并生成示例数据。
           </DialogDescription>
         </DialogHeader>
 
@@ -120,27 +108,24 @@ export function AISuggestDialog({ open, onOpenChange, engine, onApply }: Props) 
             <Textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder={PLACEHOLDERS[engine]}
+              placeholder="例如：展示 2024 年四个季度各产品线的销售额对比，产品线包括手机、电脑、平板。"
               rows={3}
               className="resize-none"
             />
             <div className="flex flex-wrap gap-1.5">
-              {PROMPT_TIPS[engine].map((tip) => (
-                <span
-                  key={tip}
-                  className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground"
+              {PROMPT_IDEAS.map((idea) => (
+                <button
+                  key={idea}
+                  onClick={() => setPrompt(idea)}
+                  className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
                 >
-                  {tip}
-                </span>
+                  {idea.length > 18 ? idea.slice(0, 18) + '…' : idea}
+                </button>
               ))}
             </div>
           </div>
 
-          <Button
-            onClick={handleSuggest}
-            disabled={loading}
-            className="gap-1.5"
-          >
+          <Button onClick={handleSuggest} disabled={loading} className="gap-1.5">
             {loading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
@@ -157,9 +142,6 @@ export function AISuggestDialog({ open, onOpenChange, engine, onApply }: Props) 
                   <div className="text-sm">
                     <span className="text-muted-foreground">推荐图表：</span>
                     <span className="font-medium">{suggestion.recommendedTypeName}</span>
-                    <span className="ml-2 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
-                      {suggestion.recommendedType}
-                    </span>
                   </div>
                   <p className="text-xs text-muted-foreground">{suggestion.reason}</p>
                   <pre className="mt-2 max-h-40 overflow-auto rounded bg-background p-2 text-[10px] leading-relaxed">
