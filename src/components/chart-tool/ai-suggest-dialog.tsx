@@ -32,16 +32,153 @@ interface AISuggestion {
   config: unknown
 }
 
-const PROMPT_IDEAS = [
-  'Compare 2024 quarterly sales across product lines',
-  'Draw a user checkout flowchart from add-to-cart to payment success',
-  'Make a product launch roadmap covering design, dev, test, release',
-  'Compare the pros and cons of React and Vue',
-  'Show the company org chart with CEO over CTO/CFO/COO',
-  'Show weekly visit intensity across different times of day',
-  'Draw a purchase conversion funnel',
-  'Show project milestones timeline from kickoff to launch',
-]
+const PROMPT_IDEAS: Record<string, string[]> = {
+  en: [
+    'Compare 2024 quarterly sales across product lines',
+    'Draw a user checkout flowchart from add-to-cart to payment success',
+    'Make a product launch roadmap covering design, dev, test, release',
+    'Compare the pros and cons of React and Vue',
+    'Show the company org chart with CEO over CTO/CFO/COO',
+    'Show weekly visit intensity across different times of day',
+    'Draw a purchase conversion funnel',
+    'Show project milestones timeline from kickoff to launch',
+  ],
+  zh: [
+    '对比 2024 年各产品线季度销售额',
+    '画一个用户下单流程图，从加入购物车到支付成功',
+    '做一个产品发布路线图，包含设计、开发、测试、上线',
+    '对比 React 和 Vue 的优缺点',
+    '展示公司组织架构，CEO 下设 CTO/CFO/COO',
+    '展示一周内不同时段的访问热度',
+    '画一个购买转化漏斗',
+    '展示项目里程碑时间线，从启动到上线',
+  ],
+  'zh-CN': [
+    '对比 2024 年各产品线季度销售额',
+    '画一个用户下单流程图，从加入购物车到支付成功',
+    '做一个产品发布路线图，包含设计、开发、测试、上线',
+    '对比 React 和 Vue 的优缺点',
+    '展示公司组织架构，CEO 下设 CTO/CFO/COO',
+    '展示一周内不同时段的访问热度',
+    '画一个购买转化漏斗',
+    '展示项目里程碑时间线，从启动到上线',
+  ],
+  'zh-TW': [
+    '對比 2024 年各產品線季度銷售額',
+    '畫一個用戶下單流程圖，從加入購物車到支付成功',
+    '做一個產品發佈路線圖，包含設計、開發、測試、上線',
+    '對比 React 和 Vue 的優缺點',
+    '展示公司組織架構，CEO 下設 CTO/CFO/COO',
+    '展示一週內不同時段的訪問熱度',
+    '畫一個購買轉化漏斗',
+    '展示項目里程碑時間線，從啟動到上線',
+  ],
+  ja: [
+    '2024年四半期別の製品ライン売上を比較',
+    'ユーザーの注文フロー図を描く（カート追加から支払い完了まで）',
+    '製品リリースロードマップを作成（設計・開発・テスト・リリース）',
+    'React と Vue の長所と短所を比較',
+    '会社の組織図を表示（CEO配下にCTO/CFO/COO）',
+    '曜日別・時間帯別のアクセス熱量を表示',
+    '購入コンバージョンファネルを描く',
+    'プロジェクトマイルストーンのタイムラインを表示',
+  ],
+  ko: [
+    '2024년 분기별 제품 라인 매출 비교',
+    '사용자 주문 흐름도 그리기 (장바구니부터 결제 완료까지)',
+    '제품 출시 로드맵 만들기 (디자인, 개발, 테스트, 출시)',
+    'React와 Vue의 장단점 비교',
+    '회사 조직도 표시 (CEO 아래 CTO/CFO/COO)',
+    '요일별 시간대별 방문 강도 표시',
+    '구매 전환 깔때기 그리기',
+    '프로젝트 마일스톤 타임라인 표시',
+  ],
+  es: [
+    'Comparar las ventas trimestrales de 2024 por línea de producto',
+    'Dibujar un diagrama de flujo de pedido de usuario, del carrito al pago',
+    'Hacer una hoja de ruta de lanzamiento de producto: diseño, desarrollo, prueba, release',
+    'Comparar los pros y contras de React y Vue',
+    'Mostrar el organigrama de la empresa con CEO sobre CTO/CFO/COO',
+    'Mostrar la intensidad de visitas semanales por franja horaria',
+    'Dibujar un embudo de conversión de compra',
+    'Mostrar la línea de tiempo de hitos del proyecto, del inicio al lanzamiento',
+  ],
+  fr: [
+    'Comparer les ventes trimestrielles 2024 par ligne de produit',
+    'Dessiner un diagramme de flux de commande utilisateur, du panier au paiement',
+    'Créer une feuille de route de lancement de produit : conception, dev, test, release',
+    'Comparer les avantages et inconvénients de React et Vue',
+    'Afficher l\'organigramme de l\'entreprise avec CEO au-dessus de CTO/CFO/COO',
+    'Afficher l\'intensité des visites hebdomadaires par tranche horaire',
+    'Dessiner un entonnoir de conversion d\'achat',
+    'Afficher la chronologie des jalons du projet, du lancement à la mise en production',
+  ],
+  de: [
+    'Vergleiche die Quartalsumsätze 2024 nach Produktlinien',
+    'Zeichne ein Bestellflussdiagramm vom Warenkorb bis zur Zahlung',
+    'Erstelle eine Produkt-Roadmap: Design, Entwicklung, Test, Release',
+    'Vergleiche die Vor- und Nachteile von React und Vue',
+    'Zeige das Organigramm mit CEO über CTO/CFO/COO',
+    'Zeige die wöchentliche Besuchsintensität nach Tageszeiten',
+    'Zeichne einen Kaufkonvertierungstrichter',
+    'Zeige die Meilenstein-Zeitachse des Projekts, von Kickoff bis Launch',
+  ],
+  pt: [
+    'Comparar as vendas trimestrais de 2024 por linha de produto',
+    'Desenhar um fluxograma de pedido do usuário, do carrinho ao pagamento',
+    'Fazer um roteiro de lançamento de produto: design, dev, teste, release',
+    'Comparar os prós e contras de React e Vue',
+    'Mostrar o organograma da empresa com CEO sobre CTO/CFO/COO',
+    'Mostrar a intensidade de visitas semanais por faixa horária',
+    'Desenhar um funil de conversão de compra',
+    'Mostrar a linha do tempo de marcos do projeto, do início ao lançamento',
+  ],
+  ru: [
+    'Сравнить квартальные продажи 2024 года по продуктовым линиям',
+    'Нарисовать блок-схему заказа пользователя, от корзины до оплаты',
+    'Создать дорожную карту запуска продукта: дизайн, разработка, тест, релиз',
+    'Сравнить плюсы и минусы React и Vue',
+    'Показать организационную структуру компании: CEO над CTO/CFO/COO',
+    'Показать интенсивность посещений по дням недели и часам',
+    'Нарисовать воронку конверсии покупок',
+    'Показать временную шкалу этапов проекта, от старта до запуска',
+  ],
+  ar: [
+    'مقارنة مبيعات الربع سنوي 2024 حسب خطوط المنتجات',
+    'ارسم مخطط تدفق طلب المستخدم من السلة إلى الدفع',
+    'اصنع خارطة طريق لإطلاق المنتج: التصميم، التطوير، الاختبار، الإصدار',
+    'قارن مزايا وعيوب React و Vue',
+    'اعرض الهيكل التنظيمي للشركة مع الرئيس التنفيذي فوق CTO/CFO/COO',
+    'اعرض شدة الزيارات الأسبوعية حسب الفترة الزمنية',
+    'ارسم قمع تحويل الشراء',
+    'اعرض الجدول الزمني لمعالم المشروع من البداية حتى الإطلاق',
+  ],
+  hi: [
+    '2024 तिमाही बिक्री को उत्पाद लाइनों के अनुसार तुलना करें',
+    'उपयोगकर्ता ऑर्डर प्रवाह चित्र बनाएं, कार्ट से भुगतान तक',
+    'उत्पाद लॉन्च रोडमैप बनाएं: डिज़ाइन, विकास, परीक्षण, रिलीज़',
+    'React और Vue के फायदे और नुकसान की तुलना करें',
+    'कंपनी का संगठन चार्ट दिखाएं, CEO के अधीन CTO/CFO/COO',
+    'सप्ताह के दिनों और समय के अनुसार विज़िट तीव्रता दिखाएं',
+    'खरीद रूपांतरण फ़नल बनाएं',
+    'परियोजना की मील के पत्थर की समयरेखा दिखाएं, शुरू से लॉन्च तक',
+  ],
+  vi: [
+    'So sánh doanh số quý 2024 theo dòng sản phẩm',
+    'Vẽ sơ đồ luồng đặt hàng người dùng, từ giỏ hàng đến thanh toán',
+    'Làm lộ trình ra mắt sản phẩm: thiết kế, phát triển, kiểm thử, phát hành',
+    'So sánh ưu nhược điểm của React và Vue',
+    'Hiển thị sơ đồ tổ chức công ty, CEO trên CTO/CFO/COO',
+    'Hiển thị cường độ truy cập theo ngày và giờ trong tuần',
+    'Vẽ phễu chuyển đổi mua hàng',
+    'Hiển thị dòng thời gian các mốc dự án, từ khởi động đến ra mắt',
+  ],
+}
+
+function getPromptIdeas(locale: string): string[] {
+  // Try exact match first (e.g. 'zh-CN'), then base language (e.g. 'zh'), then English
+  return PROMPT_IDEAS[locale] ?? PROMPT_IDEAS[locale.split('-')[0]] ?? PROMPT_IDEAS.en
+}
 
 export function AISuggestDialog({ open, onOpenChange, engine, onApply }: Props) {
   const t = useT()
@@ -141,7 +278,7 @@ export function AISuggestDialog({ open, onOpenChange, engine, onApply }: Props) 
               className="resize-none"
             />
             <div className="flex flex-wrap gap-1.5">
-              {PROMPT_IDEAS.map((idea) => (
+              {getPromptIdeas(locale).map((idea) => (
                 <button
                   key={idea}
                   onClick={() => setPrompt(idea)}
