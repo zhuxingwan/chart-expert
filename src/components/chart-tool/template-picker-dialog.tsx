@@ -133,7 +133,7 @@ export function TemplatePickerDialog({ open, onOpenChange, onPick }: Props) {
 
         {/* Category filter (hidden when searching) */}
         {!filtered && (
-          <div className="flex max-h-[80px] flex-wrap gap-1.5 overflow-y-auto border-b px-6 py-2.5">
+          <div className="flex flex-wrap gap-1.5 border-b px-6 py-2.5">
             <CategoryChip
               active={activeCat === 'all'}
               onClick={() => setActiveCat('all')}

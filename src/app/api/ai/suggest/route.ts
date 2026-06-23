@@ -7,12 +7,17 @@ export const maxDuration = 60
 interface SuggestBody {
   /** Optional hint about which engine to use. If omitted, AI picks freely. */
   engine?: 'echarts' | 'mermaid' | 'infographic'
+  /** The user's natural-language prompt. */
   prompt: string
+  /** BCP-47 locale code (e.g. 'en', 'zh', 'ja'). Defaults to 'en'. */
+  locale?: string
+  /** Optional uploaded image as a data URL (base64). The AI will analyze it. */
+  imageDataUrl?: string
 }
 
-const SYSTEM_PROMPT = `You are a senior data visualization consultant working inside a NON-technical chart-making tool. The tool supports three rendering libraries but the user never sees them — you must pick the right one automatically based on what the user wants to express.
+const SYSTEM_PROMPT = `You are a senior data visualization consultant working inside a NON-technical, multilingual chart-making tool. The tool supports three rendering libraries but the user never sees them — you must pick the right one automatically based on what the user wants to express.
 
-Based on the user's natural-language description, you will:
+Based on the user's natural-language description (and optionally an uploaded reference image), you will:
 1. Decide which underlying library is the best fit
 2. Pick the most suitable template within that library
 3. Generate a ready-to-use configuration object with concrete sample data
@@ -22,32 +27,57 @@ You MUST respond with valid JSON only — no markdown fences, no extra prose.
 Output schema:
 {
   "engine": "echarts" | "mermaid" | "infographic",
-  "recommendedTypeName": "<human-readable Chinese name>",
-  "reason": "<one short Chinese sentence explaining why>",
+  "recommendedTypeName": "<human-readable name in the user's language>",
+  "reason": "<one short sentence in the user's language explaining why>",
   "config": { ...engine-specific configuration, see below... }
 }
 
+IMPORTANT — Language: The user specifies a locale (BCP-47 code). You MUST generate ALL text content (recommendedTypeName, reason, chart titles, labels, descriptions, mermaid node text, etc.) in the SAME language as the user's locale. For example:
+- locale "en" → all text in English
+- locale "zh" or "zh-CN" → all text in Simplified Chinese
+- locale "ja" → all text in Japanese
+- locale "es" → all text in Spanish
+If the user's prompt is in a different language than the locale, follow the LOCALE for the output language.
+
 === How to pick the engine ===
-- Use "echarts" for: numerical data trends, comparisons between quantitative categories,占比 of measurable parts, distributions of values, single-metric gauges, heatmaps. Think: numbers + axes.
-- Use "mermaid" for: code-like diagrams with logical flow — flowcharts, sequence diagrams between actors, state machines, ER diagrams, class diagrams, git branches. Think: structured logic with text labels.
+- Use "echarts" for: numerical data trends, comparisons between quantitative categories, proportions of measurable parts, distributions of values, single-metric gauges, heatmaps, candlestick/financial charts, box plots, treemaps, sunburst, sankey, graph networks, parallel coordinates. Think: numbers + axes.
+- Use "mermaid" for: code-like diagrams with logical flow — flowcharts, sequence diagrams between actors, state machines, ER diagrams, class diagrams, git branches, gantt charts, user journeys, mindmaps, timelines. Think: structured logic with text labels.
 - Use "infographic" for: visually rich presentations of qualitative content — step lists, roadmaps, mind maps, comparison cards, org trees, relationship circles, decorative timelines. Think: presentation-ready visuals with cards/illustrations.
 
+=== If an image is provided ===
+Analyze the uploaded image carefully. It may be:
+- An existing chart/diagram you should recreate in the best-fitting engine
+- A sketch/mockup of what the user wants
+- A data table or screenshot containing data to visualize
+- A reference/inspiration image
+Extract as much information as possible (chart type, data values, labels, structure, colors) and use it to generate the most accurate configuration. Describe what you observed in the "reason" field.
+
 === ECharts config schema (engine: "echarts") ===
-Pick a "type" from: bar, line, pie, scatter, radar, funnel, gauge, heatmap
+Pick a "type" from: bar, line, pie, scatter, radar, funnel, gauge, heatmap, candlestick, boxplot, graph, sankey, treemap, sunburst, parallel, themeRiver
 {
   "title": { "text": "string", "subtext": "string" },
-  "type": "<bar|line|pie|scatter|radar|funnel|gauge|heatmap>",
+  "type": "<bar|line|pie|scatter|radar|funnel|gauge|heatmap|candlestick|boxplot|graph|sankey|treemap|sunburst|parallel|themeRiver>",
   "theme": "default" | "dark" | "vintage" | "macarons",
   "legend": true,
-  "categories": ["string", ...],            // x-axis labels (bar/line/heatmap)
+  "categories": ["string", ...],
   "series_names": ["string", ...],
-  "series_data": [[number,...], ...],       // multi-series values
+  "series_data": [[number,...], ...],
   "stack": false, "smooth": false, "horizontal": false,
   "showLabel": true, "showToolbox": true,
-  "single_series_data": [{"name":"string","value":0}], // for pie/funnel
-  "radar_indicators": [{"name":"string","max":100}],  // for radar
-  "gauge_value": 0, "gauge_max": 100,                // for gauge
-  "scatter_data": [[x,y], ...]                       // for scatter
+  "single_series_data": [{"name":"string","value":0}],
+  "radar_indicators": [{"name":"string","max":100}],
+  "gauge_value": 0, "gauge_max": 100,
+  "scatter_data": [[x,y], ...],
+  "candlestick_data": [[open,close,low,high], ...],
+  "boxplot_data": [[min,Q1,median,Q3,max], ...],
+  "graph_nodes": [{"id":"string","name":"string","category":0}],
+  "graph_links": [{"source":"string","target":"string"}],
+  "sankey_nodes": [{"name":"string"}],
+  "sankey_links": [{"source":"string","target":"string","value":0}],
+  "sunburst_data": [{"name":"string","value":0,"children":[...]}],
+  "parallel_data": [[number,...], ...],
+  "parallel_dims": ["string", ...],
+  "themeriver_data": [["date","name",value], ...]
 }
 
 === Mermaid config schema (engine: "mermaid") ===
@@ -90,28 +120,55 @@ Infographic data shape rules:
 - "icon" can be a single emoji or short keyword.
 
 === Universal rules ===
-- Always fill in CONCRETE sample data based on the user's description (no "Lorem ipsum").
-- Use Chinese labels for sample data unless the user writes in English.
+- Always fill in CONCRETE sample data based on the user's description (no placeholders).
+- Generate ALL text content in the user's locale language.
 - Keep sample data small (4-12 entries) and realistic.
 - For mermaid, write complete, syntactically-valid code.
-- Always include a Chinese title.
+- Always include a title in the user's language.
 - Output STRICT JSON only.`
 
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as SuggestBody
-    if (!body.prompt) {
+    if (!body.prompt && !body.imageDataUrl) {
       return NextResponse.json(
-        { error: 'prompt is required' },
+        { error: 'prompt or imageDataUrl is required' },
         { status: 400 },
       )
     }
 
+    const locale = body.locale ?? 'en'
     const zai = await ZAI.create()
-    const userHint = body.engine
-      ? `User hinted engine: ${body.engine} (you may still override if a different library is clearly better).\nUser request: ${body.prompt}`
-      : `User request: ${body.prompt}`
 
+    // Build the user message content
+    const promptText = body.prompt?.trim() || 'Please analyze the uploaded image and create the most appropriate chart/diagram based on what you observe.'
+    const userHint = body.engine
+      ? `Locale: ${locale}\nUser hinted engine: ${body.engine} (you may still override if a different library is clearly better).\nUser request: ${promptText}`
+      : `Locale: ${locale}\nUser request: ${promptText}`
+
+    // If an image is provided, use the vision API; otherwise use regular chat
+    if (body.imageDataUrl) {
+      const response = await zai.chat.completions.createVision({
+        messages: [
+          { role: 'assistant', content: SYSTEM_PROMPT },
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: userHint },
+              {
+                type: 'image_url',
+                image_url: { url: body.imageDataUrl },
+              },
+            ],
+          },
+        ],
+        thinking: { type: 'disabled' },
+      })
+      const raw = response.choices[0]?.message?.content ?? ''
+      return parseAndReturn(raw)
+    }
+
+    // Text-only request
     const completion = await zai.chat.completions.create({
       messages: [
         { role: 'assistant', content: SYSTEM_PROMPT },
@@ -119,29 +176,29 @@ export async function POST(req: NextRequest) {
       ],
       thinking: { type: 'disabled' },
     })
-
     const raw = completion.choices[0]?.message?.content ?? ''
-    // Strip code fences if present
-    const cleaned = raw
-      .replace(/^```(?:json)?/i, '')
-      .replace(/```$/i, '')
-      .trim()
-
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(cleaned)
-    } catch {
-      return NextResponse.json(
-        { error: 'AI returned malformed JSON', raw: cleaned },
-        { status: 502 },
-      )
-    }
-
-    return NextResponse.json({ result: parsed })
+    return parseAndReturn(raw)
   } catch (e) {
     return NextResponse.json(
       { error: (e as Error).message },
       { status: 500 },
+    )
+  }
+}
+
+function parseAndReturn(raw: string) {
+  const cleaned = raw
+    .replace(/^```(?:json)?/i, '')
+    .replace(/```$/i, '')
+    .trim()
+
+  try {
+    const parsed = JSON.parse(cleaned)
+    return NextResponse.json({ result: parsed })
+  } catch {
+    return NextResponse.json(
+      { error: 'AI returned malformed JSON', raw: cleaned },
+      { status: 502 },
     )
   }
 }

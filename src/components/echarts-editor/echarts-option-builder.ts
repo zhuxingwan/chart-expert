@@ -25,9 +25,7 @@ const PALETTE = [
 function buildToolbox(): { feature: ToolboxFeature } {
   return {
     feature: {
-      saveAsImage: { title: '保存为图片', pixelRatio: 2 },
-      dataView: { title: '数据视图', readOnly: true, lang: ['数据视图', '关闭', '刷新'] },
-      restore: { title: '还原' },
+      dataView: { title: 'Data View', readOnly: true, lang: ['Data View', 'Close', 'Refresh'] },
     },
   }
 }
@@ -287,7 +285,7 @@ export function buildEChartsOption(config: EChartsConfig): EChartsOption {
         tooltip: {
           trigger: 'item',
           formatter: (p: { value: [number, number, number] }) =>
-            `${yData[p.value[1]]} · ${xData[p.value[0]]}<br/>值：${p.value[2]}`,
+            `${yData[p.value[1]]} · ${xData[p.value[0]]}<br/>Value: ${p.value[2]}`,
         },
         legend: undefined,
         grid: { left: '3%', right: '4%', bottom: '8%', top: '15%', containLabel: true },
@@ -304,11 +302,199 @@ export function buildEChartsOption(config: EChartsConfig): EChartsOption {
         },
         series: [
           {
-            name: '热力',
+            name: 'Heatmap',
             type: 'heatmap',
             data,
             label: { show: showLabel },
             emphasis: { itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.4)' } },
+          },
+        ],
+      }
+    }
+
+    case 'candlestick': {
+      const data = config.candlestick_data ?? []
+      return {
+        ...base,
+        tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+        legend: legend ? { bottom: 0, type: 'scroll' } : undefined,
+        grid: { left: '3%', right: '4%', bottom: legend ? '12%' : '6%', top: '15%', containLabel: true },
+        xAxis: { type: 'category', data: categories, boundaryGap: true, axisTick: { alignWithLabel: true } },
+        yAxis: { type: 'value', scale: true },
+        series: [
+          {
+            type: 'candlestick',
+            name: 'OHLC',
+            data,
+            itemStyle: {
+              color: '#ef5350',
+              color0: '#26a69a',
+              borderColor: '#ef5350',
+              borderColor0: '#26a69a',
+            },
+          },
+        ],
+      }
+    }
+
+    case 'boxplot': {
+      const data = config.boxplot_data ?? []
+      return {
+        ...base,
+        tooltip: { trigger: 'item' },
+        legend: undefined,
+        grid: { left: '3%', right: '4%', bottom: '8%', top: '15%', containLabel: true },
+        xAxis: { type: 'category', data: categories, boundaryGap: true },
+        yAxis: { type: 'value', scale: true },
+        series: [
+          {
+            type: 'boxplot',
+            data,
+            label: { show: showLabel },
+          },
+        ],
+      }
+    }
+
+    case 'graph': {
+      const nodes = config.graph_nodes ?? []
+      const links = config.graph_links ?? []
+      const categories = Array.from(
+        new Set(nodes.map((n) => n.category).filter((c) => Number.isFinite(c))),
+      ).map((c) => ({ name: `Group ${Number(c) + 1}` }))
+      return {
+        ...base,
+        tooltip: { trigger: 'item' },
+        legend: legend && categories.length > 0 ? { bottom: 0, type: 'scroll', data: categories.map((c) => c.name) } : undefined,
+        series: [
+          {
+            type: 'graph',
+            layout: 'force',
+            data: nodes.map((n) => ({
+              id: n.id,
+              name: n.name,
+              category: Number.isFinite(n.category) ? n.category : 0,
+              label: { show: true },
+            })),
+            links: links.map((l) => ({ source: l.source, target: l.target })),
+            categories,
+            roam: true,
+            label: { show: true, position: 'right' },
+            force: { repulsion: 120, edgeLength: 80, gravity: 0.1 },
+            emphasis: { focus: 'adjacency', lineStyle: { width: 3 } },
+          },
+        ],
+      }
+    }
+
+    case 'sankey': {
+      const nodes = config.sankey_nodes ?? []
+      const links = config.sankey_links ?? []
+      return {
+        ...base,
+        tooltip: { trigger: 'item', formatter: '{b}: {c}' },
+        legend: undefined,
+        series: [
+          {
+            type: 'sankey',
+            data: nodes,
+            links,
+            emphasis: { focus: 'adjacency' },
+            label: { show: true, position: 'right', fontSize: 12 },
+            lineStyle: { color: 'gradient', curveness: 0.5 },
+            left: '3%', right: '12%', top: '15%', bottom: '8%',
+          },
+        ],
+      }
+    }
+
+    case 'treemap': {
+      const data = (config.single_series_data ?? []).map((d) => ({ name: d.name, value: d.value }))
+      return {
+        ...base,
+        tooltip: { trigger: 'item', formatter: '{b}: {c}' },
+        legend: undefined,
+        series: [
+          {
+            type: 'treemap',
+            data,
+            roam: false,
+            label: { show: true, formatter: '{b}\n{c}' },
+            upperLabel: { show: true, height: 22 },
+            breadcrumb: { show: false },
+            levels: [
+              {
+                itemStyle: { borderColor: '#fff', borderWidth: 2, gapWidth: 2 },
+              },
+            ],
+          },
+        ],
+      }
+    }
+
+    case 'sunburst': {
+      const data = config.sunburst_data ?? []
+      return {
+        ...base,
+        tooltip: { trigger: 'item', formatter: '{b}: {c}' },
+        legend: undefined,
+        series: [
+          {
+            type: 'sunburst',
+            data,
+            radius: ['10%', '90%'],
+            center: ['50%', '52%'],
+            label: { show: showLabel, minAngle: 8 },
+            emphasis: { focus: 'ancestor' },
+            itemStyle: { borderColor: '#fff', borderWidth: 1 },
+            levels: [
+              {},
+              { r0: '15%', r: '50%' },
+              { r0: '50%', r: '90%' },
+            ],
+          },
+        ],
+      }
+    }
+
+    case 'parallel': {
+      const dims = config.parallel_dims ?? []
+      const data = config.parallel_data ?? []
+      return {
+        ...base,
+        tooltip: { trigger: 'item' },
+        legend: undefined,
+        parallelAxis: dims.map((dim, i) => ({ dim: i, name: dim })),
+        parallel: { left: '6%', right: '6%', bottom: '12%', top: '15%', parallelAxisDefault: { axisLabel: { fontSize: 11 } } },
+        series: [
+          {
+            type: 'parallel',
+            data,
+            lineStyle: { width: 1, opacity: 0.65 },
+            emphasis: { lineStyle: { width: 3, opacity: 1 } },
+          },
+        ],
+      }
+    }
+
+    case 'themeRiver': {
+      const data = config.themeriver_data ?? []
+      return {
+        ...base,
+        tooltip: { trigger: 'item' },
+        legend: legend ? { bottom: 0, type: 'scroll', data: Array.from(new Set(data.map((d) => d[2]))) } : undefined,
+        singleAxis: {
+          top: '15%',
+          bottom: legend ? '12%' : '6%',
+          type: 'time',
+          axisLabel: {},
+        },
+        series: [
+          {
+            type: 'themeRiver',
+            data,
+            emphasis: { focus: 'series' as const },
+            label: { show: showLabel, fontSize: 11 },
           },
         ],
       }

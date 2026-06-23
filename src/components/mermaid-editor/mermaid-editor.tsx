@@ -17,6 +17,8 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize,
+  Maximize2,
+  Minimize2,
   Download,
   Copy,
   Code2,
@@ -370,8 +372,19 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
   const containerRef = React.useRef<HTMLDivElement>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [zoom, setZoom] = React.useState(1)
+  const [fullscreen, setFullscreen] = React.useState(false)
   const renderSeq = React.useRef(0)
   const initialized = React.useRef(false)
+
+  // Listen for Escape key to exit fullscreen
+  React.useEffect(() => {
+    if (!fullscreen) return
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFullscreen(false)
+    }
+    window.addEventListener('keydown', handleEsc)
+    return () => window.removeEventListener('keydown', handleEsc)
+  }, [fullscreen])
 
   // Mermaid is loaded from CDN via <VizLibLoader>. We must wait for the
   // `loaded` status before calling mermaid.initialize / mermaid.render.
@@ -429,7 +442,7 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
       }
     }, 300)
     return () => clearTimeout(timer)
-  }, [config.code, config.theme, config.background, mermaidLoaded])
+  }, [config.code, config.theme, config.background, mermaidLoaded, fullscreen])
 
   const handleZoomIn = () => setZoom((z) => Math.min(3, z + 0.2))
   const handleZoomOut = () => setZoom((z) => Math.max(0.3, z - 0.2))
@@ -512,66 +525,90 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
     }
   }
 
-  return (
-    <div className="flex h-full flex-col">
-      {/* Toolbar */}
-      <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
-        <div className="flex items-center gap-1.5">
-          <Button size="sm" variant="ghost" onClick={handleZoomOut} className="h-7 w-7 p-0">
-            <ZoomOut className="h-4 w-4" />
-          </Button>
-          <span className="w-12 text-center text-xs tabular-nums text-muted-foreground">
-            {Math.round(zoom * 100)}%
-          </span>
-          <Button size="sm" variant="ghost" onClick={handleZoomIn} className="h-7 w-7 p-0">
-            <ZoomIn className="h-4 w-4" />
-          </Button>
-          <Button size="sm" variant="ghost" onClick={handleReset} className="h-7 w-7 p-0">
-            <Maximize className="h-4 w-4" />
-          </Button>
-        </div>
-        <div className="flex items-center gap-1">
-          <Button size="sm" variant="ghost" onClick={handleDownloadSvg} className="h-7 gap-1 px-2 text-xs">
-            <Download className="h-3 w-3" /> SVG
-          </Button>
-          <Button size="sm" variant="ghost" onClick={handleDownloadPng} className="h-7 gap-1 px-2 text-xs">
-            <Download className="h-3 w-3" /> PNG
-          </Button>
-          <Button size="sm" variant="ghost" onClick={handleCopyAsMarkdown} className="h-7 gap-1 px-2 text-xs">
-            <FileText className="h-3 w-3" /> Markdown
-          </Button>
-        </div>
+  const toolbar = (
+    <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
+      <div className="flex items-center gap-1.5">
+        <Button size="sm" variant="ghost" onClick={handleZoomOut} className="h-7 w-7 p-0">
+          <ZoomOut className="h-4 w-4" />
+        </Button>
+        <span className="w-12 text-center text-xs tabular-nums text-muted-foreground">
+          {Math.round(zoom * 100)}%
+        </span>
+        <Button size="sm" variant="ghost" onClick={handleZoomIn} className="h-7 w-7 p-0">
+          <ZoomIn className="h-4 w-4" />
+        </Button>
+        <Button size="sm" variant="ghost" onClick={handleReset} className="h-7 w-7 p-0">
+          <Maximize className="h-4 w-4" />
+        </Button>
       </div>
+      <div className="flex items-center gap-1">
+        <Button size="sm" variant="ghost" onClick={handleDownloadSvg} className="h-7 gap-1 px-2 text-xs">
+          <Download className="h-3 w-3" /> SVG
+        </Button>
+        <Button size="sm" variant="ghost" onClick={handleDownloadPng} className="h-7 gap-1 px-2 text-xs">
+          <Download className="h-3 w-3" /> PNG
+        </Button>
+        <Button size="sm" variant="ghost" onClick={handleCopyAsMarkdown} className="h-7 gap-1 px-2 text-xs">
+          <FileText className="h-3 w-3" /> Markdown
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => setFullscreen((f) => !f)}
+          className="h-7 gap-1 px-2 text-xs"
+          aria-label={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+        >
+          {fullscreen ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
+          {fullscreen ? 'Exit' : 'Fullscreen'}
+        </Button>
+      </div>
+    </div>
+  )
 
-      {/* Canvas */}
+  const canvas = (
+    <div
+      ref={previewRef}
+      className="relative min-h-0 flex-1 overflow-auto bg-muted/30 p-4"
+      style={{ background: config.background }}
+    >
       <div
-        ref={previewRef}
-        className="relative min-h-0 flex-1 overflow-auto bg-muted/30 p-4"
-        style={{ background: config.background }}
+        className="mx-auto flex min-h-full w-full items-center justify-center"
+        style={{ transform: `scale(${zoom})`, transformOrigin: 'center center', transition: 'transform 0.15s ease' }}
       >
         <div
-          className="mx-auto flex min-h-full w-full items-center justify-center"
-          style={{ transform: `scale(${zoom})`, transformOrigin: 'center center', transition: 'transform 0.15s ease' }}
-        >
-          <div
-            ref={containerRef}
-            className="mermaid-preview max-w-full"
-            style={{ background: config.background }}
-          />
-        </div>
-        {!mermaidLoaded && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/80 backdrop-blur-sm">
-            <Loader2 className="size-6 animate-spin text-primary" />
-            <span className="text-sm text-muted-foreground">{t('app.loadingLib')}</span>
-          </div>
-        )}
-        {error && (
-          <div className="absolute inset-x-4 bottom-4 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-xs text-destructive">
-            <div className="mb-1 font-semibold">{t('mermaid.renderError')}</div>
-            <pre className="max-h-32 overflow-auto whitespace-pre-wrap">{error}</pre>
-          </div>
-        )}
+          ref={containerRef}
+          className="mermaid-preview max-w-full"
+          style={{ background: config.background }}
+        />
       </div>
+      {!mermaidLoaded && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/80 backdrop-blur-sm">
+          <Loader2 className="size-6 animate-spin text-primary" />
+          <span className="text-sm text-muted-foreground">{t('app.loadingLib')}</span>
+        </div>
+      )}
+      {error && (
+        <div className="absolute inset-x-4 bottom-4 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-xs text-destructive">
+          <div className="mb-1 font-semibold">{t('mermaid.renderError')}</div>
+          <pre className="max-h-32 overflow-auto whitespace-pre-wrap">{error}</pre>
+        </div>
+      )}
+    </div>
+  )
+
+  if (fullscreen) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col bg-background">
+        {toolbar}
+        {canvas}
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      {toolbar}
+      {canvas}
     </div>
   )
 }

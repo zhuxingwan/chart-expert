@@ -106,6 +106,15 @@ const ECHARTS_CATEGORY_MAP: Record<string, UnifiedCategory> = {
   funnel: 'composition',
   gauge: 'metric',
   heatmap: 'distribution',
+  // NEW chart types
+  candlestick: 'trend',
+  boxplot: 'distribution',
+  graph: 'relationship',
+  sankey: 'composition',
+  treemap: 'composition',
+  sunburst: 'composition',
+  parallel: 'distribution',
+  themeRiver: 'trend',
 }
 
 const ECHARTS_ICON_MAP: Record<string, string> = {
@@ -116,12 +125,21 @@ const ECHARTS_ICON_MAP: Record<string, string> = {
   'line-smooth': 'LineChart',
   area: 'AreaChart',
   pie: 'PieChart',
-  'pie-donut': 'ChartDonut',
+  'pie-donut': 'Donut',
   scatter: 'ScatterChart',
   radar: 'Radar',
   funnel: 'Filter',
   gauge: 'Gauge',
   heatmap: 'Grid3x3',
+  // NEW chart types
+  candlestick: 'BarChart3',
+  boxplot: 'BarChart3',
+  graph: 'Share2',
+  sankey: 'Workflow',
+  treemap: 'Grid3x3',
+  sunburst: 'Sun',
+  parallel: 'AlignVerticalDistributeCenter',
+  themeRiver: 'Waves',
 }
 
 export const ECHARTS_UNIFIED: UnifiedTemplate[] = ECHARTS_TEMPLATES.map((t) => ({

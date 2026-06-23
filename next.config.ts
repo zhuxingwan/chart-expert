@@ -31,6 +31,8 @@ const nextConfig: NextConfig = {
     "http://localhost:3000",
     "http://21.0.12.71:81",
     "http://21.0.12.71:3000",
+    "https://*.space-z.ai",
+    "http://*.space-z.ai",
   ],
 };
 

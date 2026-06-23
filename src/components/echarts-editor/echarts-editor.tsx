@@ -12,6 +12,12 @@ import {
   Triangle,
   Gauge,
   Grid3x3,
+  Share2,
+  Workflow,
+  Sun,
+  Waves,
+  AlignVerticalDistributeCenter,
+  ChartCandlestick,
   Plus,
   Trash2,
   Shuffle,
@@ -22,6 +28,8 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -104,6 +112,22 @@ function iconForType(type: string) {
       return Gauge
     case 'heatmap':
       return Grid3x3
+    case 'candlestick':
+      return ChartCandlestick
+    case 'boxplot':
+      return BarChart3
+    case 'graph':
+      return Share2
+    case 'sankey':
+      return Workflow
+    case 'treemap':
+      return Grid3x3
+    case 'sunburst':
+      return Sun
+    case 'parallel':
+      return AlignVerticalDistributeCenter
+    case 'themeRiver':
+      return Waves
     default:
       return BarChart3
   }
@@ -191,6 +215,9 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
   const currentTheme = React.useRef<string>('default')
   const resizeObsRef = React.useRef<ResizeObserver | null>(null)
 
+  // ----- Fullscreen preview state (must be declared before effects that use it) -----
+  const [fullscreen, setFullscreen] = React.useState(false)
+
   // Build the option with useMemo so re-renders are cheap.
   const option = React.useMemo(() => buildEChartsOption(local), [local])
 
@@ -229,6 +256,8 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
   // triggered by the debounced effect above once the CDN is ready.
   // Re-runs on `isMobile` change so the observer (and chart instance) rebinds
   // to the new container that mounts when the layout switches.
+  // Also re-runs on `fullscreen` toggle so the chart rebinds to the new
+  // container inside the fullscreen overlay.
   React.useEffect(() => {
     if (!chartContainerRef.current) return
 
@@ -244,7 +273,7 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
       chartRef.current?.dispose()
       chartRef.current = null
     }
-  }, [isMobile])
+  }, [isMobile, fullscreen])
 
   // Force a re-render after the layout switches so the freshly mounted
   // chart container gets the option applied.
@@ -252,7 +281,7 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
     if (!echartsLoaded) return
     const id = window.setTimeout(() => renderChart(), 50)
     return () => window.clearTimeout(id)
-  }, [isMobile, renderChart, echartsLoaded])
+  }, [isMobile, fullscreen, renderChart, echartsLoaded])
 
   // ----- Mutators (keep immutable) -----
   const patch = React.useCallback(
@@ -285,6 +314,16 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
   const handleZoomIn = () => setZoom((z) => Math.min(2.5, z + 0.2))
   const handleZoomOut = () => setZoom((z) => Math.max(0.4, z - 0.2))
   const handleReset = () => setZoom(1)
+
+  // Listen for Escape key to exit fullscreen
+  React.useEffect(() => {
+    if (!fullscreen) return
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFullscreen(false)
+    }
+    window.addEventListener('keydown', handleEsc)
+    return () => window.removeEventListener('keydown', handleEsc)
+  }, [fullscreen])
 
   // ----- Export handlers -----
   const handleDownloadPNG = React.useCallback(() => {
@@ -469,101 +508,127 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
     </div>
   )
 
-  const previewEl = (
-    <div className="flex h-full flex-col">
-      {/* Toolbar — unified across all editors (zoom left, export right) */}
-      <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
-        <div className="flex items-center gap-1.5">
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={handleZoomOut}
-            aria-label="Zoom out"
-            className="h-7 w-7 p-0"
-          >
-            <ZoomOut className="h-4 w-4" />
-          </Button>
-          <span className="w-12 text-center text-xs tabular-nums text-muted-foreground">
-            {Math.round(zoom * 100)}%
-          </span>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={handleZoomIn}
-            aria-label="Zoom in"
-            className="h-7 w-7 p-0"
-          >
-            <ZoomIn className="h-4 w-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={handleReset}
-            aria-label="Reset zoom"
-            className="h-7 w-7 p-0"
-          >
-            <Maximize className="h-4 w-4" />
-          </Button>
-        </div>
-        <div className="flex items-center gap-1">
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={handleDownloadSvg}
-            className="h-7 gap-1 px-2 text-xs"
-          >
-            <Download className="h-3 w-3" /> SVG
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={handleDownloadPNG}
-            className="h-7 gap-1 px-2 text-xs"
-          >
-            <Download className="h-3 w-3" /> PNG
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={handleCopyAsMarkdown}
-            className="h-7 gap-1 px-2 text-xs"
-          >
-            <Copy className="h-3 w-3" /> Markdown
-          </Button>
-        </div>
-      </div>
-
-      {/* Canvas */}
-      <div
-        ref={previewRef}
-        className="relative min-h-0 flex-1 overflow-auto"
-        style={{ background: '#fff' }}
-      >
-        <div
-          style={{
-            transform: `scale(${zoom})`,
-            transformOrigin: 'center center',
-            transition: 'transform 0.15s ease',
-            width: '100%',
-            height: '100%',
-          }}
+  const previewToolbar = (
+    <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
+      <div className="flex items-center gap-1.5">
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={handleZoomOut}
+          aria-label="Zoom out"
+          className="h-7 w-7 p-0"
         >
-          <div
-            ref={chartContainerRef}
-            style={{ width: '100%', height: '100%', minHeight: 400 }}
-          />
-        </div>
-        {!echartsLoaded && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/80 backdrop-blur-sm">
-            <Loader2 className="size-6 animate-spin text-primary" />
-            <span className="text-sm text-muted-foreground">
-              {t('app.loadingLib')}
-            </span>
-          </div>
-        )}
+          <ZoomOut className="h-4 w-4" />
+        </Button>
+        <span className="w-12 text-center text-xs tabular-nums text-muted-foreground">
+          {Math.round(zoom * 100)}%
+        </span>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={handleZoomIn}
+          aria-label="Zoom in"
+          className="h-7 w-7 p-0"
+        >
+          <ZoomIn className="h-4 w-4" />
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={handleReset}
+          aria-label="Reset zoom"
+          className="h-7 w-7 p-0"
+        >
+          <Maximize className="h-4 w-4" />
+        </Button>
+      </div>
+      <div className="flex items-center gap-1">
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={handleDownloadSvg}
+          className="h-7 gap-1 px-2 text-xs"
+        >
+          <Download className="h-3 w-3" /> SVG
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={handleDownloadPNG}
+          className="h-7 gap-1 px-2 text-xs"
+        >
+          <Download className="h-3 w-3" /> PNG
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={handleCopyAsMarkdown}
+          className="h-7 gap-1 px-2 text-xs"
+        >
+          <Copy className="h-3 w-3" /> Markdown
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => setFullscreen((f) => !f)}
+          className="h-7 gap-1 px-2 text-xs"
+          aria-label={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+        >
+          {fullscreen ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
+          {fullscreen ? 'Exit' : 'Fullscreen'}
+        </Button>
       </div>
     </div>
   )
+
+  const previewCanvas = (
+    <div
+      ref={previewRef}
+      className="relative min-h-0 flex-1 overflow-auto"
+      style={{ background: '#fff' }}
+    >
+      <div
+        style={{
+          transform: `scale(${zoom})`,
+          transformOrigin: 'center center',
+          transition: 'transform 0.15s ease',
+          width: '100%',
+          height: '100%',
+        }}
+      >
+        <div
+          ref={chartContainerRef}
+          style={{ width: '100%', height: '100%', minHeight: 400 }}
+        />
+      </div>
+      {!echartsLoaded && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/80 backdrop-blur-sm">
+          <Loader2 className="size-6 animate-spin text-primary" />
+          <span className="text-sm text-muted-foreground">
+            {t('app.loadingLib')}
+          </span>
+        </div>
+      )}
+    </div>
+  )
+
+  const previewEl = (
+    <div className="flex h-full flex-col">
+      {!fullscreen && previewToolbar}
+      {!fullscreen && previewCanvas}
+    </div>
+  )
+
+  // Fullscreen overlay — when active, takes over the entire viewport.
+  // The toolbar + canvas JSX are the SAME elements (refs to previewRef /
+  // chartContainerRef point here), so the ECharts instance rebinds via the
+  // ResizeObserver effect keyed on `fullscreen`.
+  const fullscreenOverlay = fullscreen ? (
+    <div className="fixed inset-0 z-50 flex flex-col bg-background">
+      {previewToolbar}
+      {previewCanvas}
+    </div>
+  ) : null
 
   const configEl = (
     <div className="flex h-full flex-col">
@@ -687,53 +752,59 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
   if (isMobile) {
     // Mobile: vertical tab layout — Template | Preview | Config
     return (
-      <Tabs defaultValue="preview" className="flex h-full w-full flex-col gap-0">
-        <TabsList className="grid h-10 w-full shrink-0 grid-cols-3 rounded-none border-b">
-          <TabsTrigger value="templates" className="text-xs">
-            {t('echarts.templateGallery')}
-          </TabsTrigger>
-          <TabsTrigger value="preview" className="text-xs">
-            Preview
-          </TabsTrigger>
-          <TabsTrigger value="config" className="text-xs">
-            {t('echarts.configPanel')}
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="templates" className="min-h-0 flex-1 overflow-hidden">
-          {templateGalleryEl}
-        </TabsContent>
-        <TabsContent value="preview" className="min-h-0 flex-1 overflow-hidden">
-          {previewEl}
-        </TabsContent>
-        <TabsContent value="config" className="min-h-0 flex-1 overflow-hidden">
-          {configEl}
-        </TabsContent>
-      </Tabs>
+      <>
+        <Tabs defaultValue="preview" className="flex h-full w-full flex-col gap-0">
+          <TabsList className="grid h-10 w-full shrink-0 grid-cols-3 rounded-none border-b">
+            <TabsTrigger value="templates" className="text-xs">
+              {t('echarts.templateGallery')}
+            </TabsTrigger>
+            <TabsTrigger value="preview" className="text-xs">
+              Preview
+            </TabsTrigger>
+            <TabsTrigger value="config" className="text-xs">
+              {t('echarts.configPanel')}
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="templates" className="min-h-0 flex-1 overflow-hidden">
+            {templateGalleryEl}
+          </TabsContent>
+          <TabsContent value="preview" className="min-h-0 flex-1 overflow-hidden">
+            {previewEl}
+          </TabsContent>
+          <TabsContent value="config" className="min-h-0 flex-1 overflow-hidden">
+            {configEl}
+          </TabsContent>
+        </Tabs>
+        {fullscreenOverlay}
+      </>
     )
   }
 
   // Desktop: horizontal resizable panels
   return (
-    <ResizablePanelGroup direction="horizontal" className="h-full w-full">
-      {/* ----------------------- LEFT: Template Gallery ----------------------- */}
-      <ResizablePanel defaultSize={20} minSize={14} className="bg-background">
-        {templateGalleryEl}
-      </ResizablePanel>
+    <>
+      <ResizablePanelGroup direction="horizontal" className="h-full w-full">
+        {/* ----------------------- LEFT: Template Gallery ----------------------- */}
+        <ResizablePanel defaultSize={20} minSize={14} className="bg-background">
+          {templateGalleryEl}
+        </ResizablePanel>
 
-      <ResizableHandle withHandle />
+        <ResizableHandle withHandle />
 
-      {/* ----------------------- MIDDLE: Preview ----------------------- */}
-      <ResizablePanel defaultSize={40} minSize={30} className="bg-muted/20">
-        {previewEl}
-      </ResizablePanel>
+        {/* ----------------------- MIDDLE: Preview ----------------------- */}
+        <ResizablePanel defaultSize={40} minSize={30} className="bg-muted/20">
+          {previewEl}
+        </ResizablePanel>
 
-      <ResizableHandle withHandle />
+        <ResizableHandle withHandle />
 
-      {/* ----------------------- RIGHT: Config Form ----------------------- */}
-      <ResizablePanel defaultSize={40} minSize={30} className="bg-background">
-        {configEl}
-      </ResizablePanel>
-    </ResizablePanelGroup>
+        {/* ----------------------- RIGHT: Config Form ----------------------- */}
+        <ResizablePanel defaultSize={40} minSize={30} className="bg-background">
+          {configEl}
+        </ResizablePanel>
+      </ResizablePanelGroup>
+      {fullscreenOverlay}
+    </>
   )
 }
 
@@ -1315,7 +1386,7 @@ function StyleEditor({ config, patch }: SubEditorProps) {
         label={t('echarts.showToolbox')}
         checked={config.showToolbox}
         onChange={(v) => patch({ showToolbox: v })}
-        hint="Floating toolbar (top-right): save image, data view, etc."
+        hint="Floating toolbar (top-right): view the underlying chart data."
       />
 
       <div className="space-y-1.5">

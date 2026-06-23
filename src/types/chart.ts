@@ -18,7 +18,8 @@ export interface EChartsConfig {
   title: { text: string; subtext?: string }
   legend: boolean
   theme: string
-  type: string // bar | line | pie | ...
+  type: string // bar | line | pie | scatter | radar | funnel | gauge | heatmap |
+  // candlestick | boxplot | graph | sankey | treemap | sunburst | parallel | themeRiver
   categories: string[]
   series_names: string[]
   series_data: number[][]
@@ -27,7 +28,7 @@ export interface EChartsConfig {
   horizontal: boolean
   showLabel: boolean
   showToolbox: boolean
-  // for pie / funnel / gauge
+  // for pie / funnel / gauge / treemap
   single_series_data?: { name: string; value: number }[]
   // for radar
   radar_indicators?: { name: string; max: number }[]
@@ -36,6 +37,29 @@ export interface EChartsConfig {
   gauge_max?: number
   // for scatter
   scatter_data?: [number, number][]
+  // for candlestick — each tuple is [open, close, low, high]
+  candlestick_data?: [number, number, number, number][]
+  // for boxplot — each tuple is [min, Q1, median, Q3, max]
+  boxplot_data?: [number, number, number, number, number][]
+  // for graph — force-directed relationship graph
+  graph_nodes?: { id: string; name: string; category: number }[]
+  graph_links?: { source: string; target: string }[]
+  // for sankey — flow composition
+  sankey_nodes?: { name: string }[]
+  sankey_links?: { source: string; target: string; value: number }[]
+  // for sunburst — nested hierarchical rings
+  sunburst_data?: SunburstNode[]
+  // for parallel — parallel-coordinates plot
+  parallel_data?: number[][]
+  parallel_dims?: string[]
+  // for themeRiver — time-series river; each tuple is [date, value, name]
+  themeriver_data?: [string, number, string][]
+}
+
+export interface SunburstNode {
+  name: string
+  value?: number
+  children?: SunburstNode[]
 }
 
 // ---- Mermaid ----

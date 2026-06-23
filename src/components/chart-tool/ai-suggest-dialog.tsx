@@ -12,10 +12,10 @@ import {
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { Loader2, Sparkles, Lightbulb } from 'lucide-react'
+import { Loader2, Sparkles, Lightbulb, Upload, X, ImageIcon } from 'lucide-react'
 import type { ChartEngine } from '@/types/chart'
 import { toast } from 'sonner'
-import { useT } from '@/lib/i18n'
+import { useT, useI18n } from '@/lib/i18n'
 
 interface Props {
   open: boolean
@@ -45,12 +45,15 @@ const PROMPT_IDEAS = [
 
 export function AISuggestDialog({ open, onOpenChange, engine, onApply }: Props) {
   const t = useT()
+  const { locale } = useI18n()
   const [prompt, setPrompt] = React.useState('')
   const [loading, setLoading] = React.useState(false)
   const [suggestion, setSuggestion] = React.useState<AISuggestion | null>(null)
+  const [imageDataUrl, setImageDataUrl] = React.useState<string | null>(null)
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
 
   const handleSuggest = async () => {
-    if (!prompt.trim()) {
+    if (!prompt.trim() && !imageDataUrl) {
       toast.error(t('aiDialog.enterPrompt'))
       return
     }
@@ -60,7 +63,7 @@ export function AISuggestDialog({ open, onOpenChange, engine, onApply }: Props) 
       const res = await fetch('/api/ai/suggest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, engine }),
+        body: JSON.stringify({ prompt, engine, locale, imageDataUrl }),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -81,6 +84,27 @@ export function AISuggestDialog({ open, onOpenChange, engine, onApply }: Props) 
     onApply(suggestion.engine, suggestion.config)
     setPrompt('')
     setSuggestion(null)
+    setImageDataUrl(null)
+  }
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image too large (max 5MB)')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      setImageDataUrl(reader.result as string)
+    }
+    reader.onerror = () => toast.error('Failed to read image')
+    reader.readAsDataURL(file)
+  }
+
+  const handleRemoveImage = () => {
+    setImageDataUrl(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   return (
@@ -90,6 +114,7 @@ export function AISuggestDialog({ open, onOpenChange, engine, onApply }: Props) 
         onOpenChange(v)
         if (!v) {
           setSuggestion(null)
+          setImageDataUrl(null)
         }
       }}
     >
@@ -105,6 +130,7 @@ export function AISuggestDialog({ open, onOpenChange, engine, onApply }: Props) 
         </DialogHeader>
 
         <div className="grid gap-4 py-2">
+          {/* Prompt input */}
           <div className="grid gap-2">
             <Label>{t('aiDialog.promptLabel')}</Label>
             <Textarea
@@ -125,6 +151,59 @@ export function AISuggestDialog({ open, onOpenChange, engine, onApply }: Props) 
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Image upload */}
+          <div className="grid gap-2">
+            <Label className="flex items-center gap-1.5">
+              <ImageIcon className="h-3.5 w-3.5" />
+              {locale.startsWith('zh') ? '参考图片（可选）' :
+               locale.startsWith('ja') ? '参照画像（任意）' :
+               locale.startsWith('ko') ? '참조 이미지 (선택)' :
+               locale.startsWith('es') ? 'Imagen de referencia (opcional)' :
+               locale.startsWith('fr') ? 'Image de référence (optionnel)' :
+               locale.startsWith('de') ? 'Referenzbild (optional)' :
+               'Reference image (optional)'}
+            </Label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleImageUpload}
+              className="hidden"
+            />
+            {imageDataUrl ? (
+              <div className="relative inline-block">
+                <img
+                  src={imageDataUrl}
+                  alt="Reference"
+                  className="max-h-32 rounded-lg border object-contain"
+                />
+                <button
+                  onClick={handleRemoveImage}
+                  className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-md hover:bg-destructive/90"
+                  aria-label="Remove image"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-muted-foreground/40 px-4 py-3 text-sm text-muted-foreground transition-colors hover:border-foreground/40 hover:bg-muted/50"
+              >
+                <Upload className="h-4 w-4" />
+                <span>
+                  {locale.startsWith('zh') ? '上传图片（图表截图、草图、数据表等）' :
+                   locale.startsWith('ja') ? '画像をアップロード' :
+                   locale.startsWith('ko') ? '이미지 업로드' :
+                   locale.startsWith('es') ? 'Subir imagen' :
+                   locale.startsWith('fr') ? 'Téléverser une image' :
+                   locale.startsWith('de') ? 'Bild hochladen' :
+                   'Upload image (chart screenshot, sketch, data table, etc.)'}
+                </span>
+              </button>
+            )}
           </div>
 
           <Button onClick={handleSuggest} disabled={loading} className="gap-1.5">
