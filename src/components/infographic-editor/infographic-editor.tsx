@@ -176,6 +176,100 @@ function deepClone<T>(v: T): T {
   return JSON.parse(JSON.stringify(v)) as T
 }
 
+// ─── Parse infographic syntax back to data ──────────────────────────────
+function parseInfographicSyntax(text: string, currentConfig: InfographicConfig): InfographicData | null {
+  try {
+    const lines = text.split('\n')
+    const data: InfographicData = { title: currentConfig.data.title }
+    let section: string | null = null
+    let currentList: any = null
+    let inChildren = false
+
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith('#')) continue
+
+      // Check for top-level keywords
+      if (trimmed === 'data') { section = 'data'; continue }
+      if (trimmed === 'lists') { section = 'lists'; data.lists = []; continue }
+      if (trimmed === 'nodes') { section = 'nodes'; data.nodes = []; continue }
+      if (trimmed === 'edges') { section = 'edges'; data.edges = []; continue }
+
+      // Parse key-value pairs
+      const kvMatch = trimmed.match(/^(\w+)\s+(.+)$/)
+      if (!kvMatch) continue
+      const [, key, value] = kvMatch
+
+      if (section === 'data' && key === 'title') {
+        // Next lines will have text/subtext
+        continue
+      }
+      if (key === 'text') {
+        data.title = { ...data.title, text: value }
+        continue
+      }
+      if (key === 'subtext') {
+        data.title = { ...data.title, subtext: value }
+        continue
+      }
+
+      // List items
+      if (section === 'lists') {
+        if (trimmed.startsWith('- ')) {
+          // New list item
+          const itemMatch = trimmed.match(/^- label\s+(.+)$/)
+          if (itemMatch) {
+            currentList = { label: itemMatch[1] }
+            data.lists!.push(currentList)
+            inChildren = false
+          }
+        } else if (currentList) {
+          // Properties of current item
+          if (key === 'desc') currentList.desc = value
+          else if (key === 'value') currentList.value = Number(value) || 0
+          else if (key === 'icon') currentList.icon = value
+          else if (key === 'children') {
+            currentList.children = []
+            inChildren = true
+          } else if (inChildren && key === 'label') {
+            currentList.children!.push({ label: value })
+          } else if (inChildren && key === 'desc' && currentList.children!.length > 0) {
+            currentList.children![currentList.children!.length - 1].desc = value
+          }
+        }
+      }
+
+      // Nodes
+      if (section === 'nodes' && trimmed.startsWith('- ')) {
+        const idMatch = trimmed.match(/^- id\s+(.+)$/)
+        if (idMatch && data.nodes) {
+          data.nodes.push({ id: idMatch[1], label: '' })
+        }
+      } else if (section === 'nodes' && data.nodes && data.nodes.length > 0) {
+        const lastNode = data.nodes[data.nodes.length - 1]
+        if (key === 'label') lastNode.label = value
+        else if (key === 'group') lastNode.group = value
+      }
+
+      // Edges
+      if (section === 'edges' && trimmed.startsWith('- ')) {
+        const fromMatch = trimmed.match(/^- from\s+(.+)$/)
+        if (fromMatch && data.edges) {
+          data.edges.push({ from: fromMatch[1], to: '' })
+        }
+      } else if (section === 'edges' && data.edges && data.edges.length > 0) {
+        const lastEdge = data.edges[data.edges.length - 1]
+        if (key === 'to') lastEdge.to = value
+        else if (key === 'label') lastEdge.label = value
+      }
+    }
+
+    return data
+  } catch {
+    return null
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Infographic syntax generator — produces a text-based representation of the
 // current config so users can copy it as a ```infographic``` markdown block.
@@ -291,16 +385,24 @@ export function InfographicEditor({ config, onChange, onTemplateChange, previewR
       const prevShape = currentTemplate?.dataShape
       const newShape = tpl.dataShape
 
-      // Try to preserve user data across template switches.
-      // Same shape → always keep data.
-      // Different shape → try to adapt:
-      //   - list/sequence/chart are all flat-list based → compatible
-      //   - hierarchy has tree structure → extract labels into flat list when going to flat shapes
-      //   - compare has groups → extract all children into flat list when going to flat shapes
-      //   - relation has nodes/edges → extract node labels into flat list when going to flat shapes
-      //   - flat → hierarchy: put all items under a single root
-      //   - flat → compare: split items into 2 groups
-      //   - flat → relation: create linear chain from items
+      // Check if the current data is "default" (untouched by user).
+      // We compare against the default data for the current shape.
+      // If it matches, the user hasn't entered data → use new template's default.
+      // If it doesn't match, the user has data → preserve/adapt it.
+      const prevDefault = defaultDataForShape(prevShape ?? 'list')
+      const isDataDefault = JSON.stringify(prev.data) === JSON.stringify(prevDefault)
+
+      // If data is still default, just switch to new template's default
+      if (isDataDefault) {
+        return {
+          ...prev,
+          type: tpl.id,
+          template: tpl.id,
+          data: defaultDataForShape(newShape),
+        }
+      }
+
+      // User has data — try to preserve it
       let data = prev.data
 
       if (prevShape !== newShape) {
@@ -308,7 +410,7 @@ export function InfographicEditor({ config, onChange, onTemplateChange, previewR
         const isFlatToFlat = flatShapes.includes(prevShape ?? '') && flatShapes.includes(newShape)
 
         if (!isFlatToFlat) {
-          // Need to adapt data structure
+          // Adapt data structure when shapes differ
           const prevData = prev.data
           const adapted: { title?: { text?: string; subtext?: string }; lists?: any[]; nodes?: any[]; edges?: any[] } = {
             title: prevData.title,
@@ -317,22 +419,24 @@ export function InfographicEditor({ config, onChange, onTemplateChange, previewR
           // Extract flat items from any shape
           let flatItems: any[] = []
           if (prevData.lists) {
-            flatItems = prevData.lists.map((item: any) => ({
-              label: item.label,
-              desc: item.desc,
-              value: item.value,
-              icon: item.icon,
-            }))
+            // For hierarchy/compare, flatten the tree
+            const flatten = (items: any[]): any[] => {
+              const result: any[] = []
+              for (const item of items) {
+                result.push({ label: item.label, desc: item.desc, value: item.value, icon: item.icon })
+                if (item.children) result.push(...flatten(item.children))
+              }
+              return result
+            }
+            flatItems = flatten(prevData.lists)
           } else if (prevData.nodes) {
             flatItems = prevData.nodes.map((node: any) => ({
               label: node.label,
               desc: node.group,
-              icon: undefined,
             }))
           }
 
           if (newShape === 'hierarchy') {
-            // Flat → hierarchy: single root with all items as children
             adapted.lists = [{
               label: flatItems[0]?.label || 'Root',
               desc: flatItems[0]?.desc,
@@ -342,25 +446,22 @@ export function InfographicEditor({ config, onChange, onTemplateChange, previewR
               })),
             }]
           } else if (newShape === 'compare') {
-            // Flat → compare: split into 2 groups
             const mid = Math.ceil(flatItems.length / 2)
             adapted.lists = [
               { label: 'Group A', children: flatItems.slice(0, mid).map(i => ({ label: i.label, desc: i.desc })) },
               { label: 'Group B', children: flatItems.slice(mid).map(i => ({ label: i.label, desc: i.desc })) },
             ]
           } else if (newShape === 'relation') {
-            // Flat → relation: create linear chain
             adapted.nodes = flatItems.map((item, i) => ({
               id: `n${i + 1}`,
               label: item.label || `Node ${i + 1}`,
               group: i === 0 ? 'A' : 'B',
             }))
-            adapted.edges = flatItems.slice(1).map((item, i) => ({
+            adapted.edges = flatItems.slice(1).map((_, i) => ({
               from: `n${i + 1}`,
               to: `n${i + 2}`,
             }))
           } else if (flatShapes.includes(newShape)) {
-            // hierarchy/compare/relation → flat: use extracted items
             adapted.lists = flatItems
           }
 
@@ -872,8 +973,61 @@ interface ConfigProps {
 function ConfigPanel({ config, template, update }: ConfigProps) {
   const t = useT()
   const { locale } = useI18n()
+  const [codeMode, setCodeMode] = React.useState(false)
+  const [codeText, setCodeText] = React.useState('')
+
+  // Sync code text when entering code mode or when config changes
+  React.useEffect(() => {
+    if (codeMode) {
+      setCodeText(generateInfographicSyntax(config))
+    }
+  }, [codeMode, config])
+
+  const handleCodeChange = (text: string) => {
+    setCodeText(text)
+    // Parse the syntax back to data
+    try {
+      const parsed = parseInfographicSyntax(text, config)
+      if (parsed) {
+        update({ data: parsed })
+      }
+    } catch {
+      // Ignore parse errors while typing
+    }
+  }
+
   return (
     <div className="flex h-full flex-col">
+      {/* Mode toggle */}
+      <div className="flex shrink-0 border-b px-2 py-1.5 gap-1">
+        <button
+          onClick={() => setCodeMode(false)}
+          className={cn('rounded-md px-2.5 py-1 text-xs font-medium transition-colors', !codeMode ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground')}
+        >
+          {locale.startsWith('zh') ? '表单' : 'Form'}
+        </button>
+        <button
+          onClick={() => setCodeMode(true)}
+          className={cn('rounded-md px-2.5 py-1 text-xs font-medium transition-colors', codeMode ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground')}
+        >
+          {locale.startsWith('zh') ? '代码' : 'Code'}
+        </button>
+      </div>
+
+      {codeMode ? (
+        <div className="flex min-h-0 flex-1 flex-col p-2">
+          <Textarea
+            value={codeText}
+            onChange={(e) => handleCodeChange(e.target.value)}
+            className="min-h-0 flex-1 resize-none font-mono text-xs leading-relaxed"
+            spellCheck={false}
+            placeholder="infographic template-name&#10;data&#10;  title&#10;    text Title&#10;  lists&#10;    - label Item&#10;      desc Description"
+          />
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            {locale.startsWith('zh') ? '编辑代码实时同步到预览' : 'Edits sync to preview in real-time'}
+          </p>
+        </div>
+      ) : (
     <ScrollArea className="min-h-0 flex-1">
       <div className="space-y-5 p-4">
         {/* Template info */}
@@ -1019,6 +1173,7 @@ function ConfigPanel({ config, template, update }: ConfigProps) {
         </section>
       </div>
     </ScrollArea>
+      )}
     </div>
   )
 }

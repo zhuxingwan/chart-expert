@@ -77,8 +77,10 @@ export interface UnifiedTemplate {
   name: string
   /** Short description (Chinese) */
   description: string
-  /** Purpose category */
+  /** Primary purpose category */
   category: UnifiedCategory
+  /** Additional categories this template belongs to (multi-category support) */
+  categories: UnifiedCategory[]
   /** Which library powers this template (hidden from user) */
   engine: ChartEngine
   /** The library-specific template id (ECharts type, Mermaid type, or Infographic template name) */
@@ -142,16 +144,20 @@ const ECHARTS_ICON_MAP: Record<string, string> = {
   themeRiver: 'Waves',
 }
 
-export const ECHARTS_UNIFIED: UnifiedTemplate[] = ECHARTS_TEMPLATES.map((t) => ({
-  id: `echarts:${t.id}`,
-  name: t.name,
-  description: t.description,
-  category: ECHARTS_CATEGORY_MAP[t.type] ?? 'comparison',
-  engine: 'echarts',
-  libraryType: t.id,
-  icon: ECHARTS_ICON_MAP[t.type] ?? 'BarChart3',
-  tags: t.tags ?? [],
-}))
+export const ECHARTS_UNIFIED: UnifiedTemplate[] = ECHARTS_TEMPLATES.map((t) => {
+  const cat = ECHARTS_CATEGORY_MAP[t.type] ?? 'comparison'
+  return {
+    id: `echarts:${t.id}`,
+    name: t.name,
+    description: t.description,
+    category: cat,
+    categories: [cat],
+    engine: 'echarts',
+    libraryType: t.id,
+    icon: ECHARTS_ICON_MAP[t.type] ?? 'BarChart3',
+    tags: t.tags ?? [],
+  }
+})
 
 // Mermaid: map each diagram type to a unified category
 const MERMAID_CATEGORY_MAP: Record<string, UnifiedCategory> = {
@@ -168,16 +174,30 @@ const MERMAID_CATEGORY_MAP: Record<string, UnifiedCategory> = {
   timeline: 'timeline',
 }
 
-export const MERMAID_UNIFIED: UnifiedTemplate[] = MERMAID_TEMPLATES.map((t: MermaidTemplateMeta) => ({
-  id: `mermaid:${t.id}`,
-  name: t.name,
-  description: t.description,
-  category: MERMAID_CATEGORY_MAP[t.type] ?? 'flow',
-  engine: 'mermaid',
-  libraryType: t.id,
-  icon: t.icon,
-  tags: [t.category, t.type],
-}))
+// Multi-category map for mermaid templates
+const MERMAID_EXTRA_CATEGORIES: Record<string, UnifiedCategory[]> = {
+  timeline: ['timeline', 'flow'],
+  gantt: ['timeline', 'flow'],
+  state: ['flow', 'structure'],
+  journey: ['flow', 'timeline'],
+}
+
+export const MERMAID_UNIFIED: UnifiedTemplate[] = MERMAID_TEMPLATES.map((t: MermaidTemplateMeta) => {
+  const cat = MERMAID_CATEGORY_MAP[t.type] ?? 'flow'
+  const extra = MERMAID_EXTRA_CATEGORIES[t.type] ?? []
+  const cats = [cat, ...extra.filter(c => c !== cat)]
+  return {
+    id: `mermaid:${t.id}`,
+    name: t.name,
+    description: t.description,
+    category: cat,
+    categories: cats,
+    engine: 'mermaid',
+    libraryType: t.id,
+    icon: t.icon,
+    tags: [t.category, t.type],
+  }
+})
 
 // Infographic: map each category to a unified category
 const INFOGRAPHIC_CATEGORY_MAP: Record<InfographicTemplateCategory, UnifiedCategory> = {
@@ -239,16 +259,47 @@ function infographicIcon(t: InfographicTemplateMeta): string {
   return 'Square'
 }
 
-export const INFOGRAPHIC_UNIFIED: UnifiedTemplate[] = TEMPLATE_REGISTRY.map((t) => ({
-  id: `infographic:${t.id}`,
-  name: t.name,
-  description: t.description,
-  category: INFOGRAPHIC_CATEGORY_MAP[t.category] ?? 'list',
-  engine: 'infographic',
-  libraryType: t.id,
-  icon: infographicIcon(t),
-  tags: [INFOGRAPHIC_CATEGORY_LABEL[t.category], ...t.tags],
-}))
+// Multi-category map for infographic templates by prefix
+const INFOGRAPHIC_EXTRA_CATEGORIES: { prefix: string; cats: UnifiedCategory[] }[] = [
+  { prefix: 'list-column', cats: ['timeline'] }, // vertical column lists are timeline-like
+  { prefix: 'sequence-timeline', cats: ['timeline', 'flow'] },
+  { prefix: 'sequence-roadmap', cats: ['timeline', 'flow'] },
+  { prefix: 'sequence-steps', cats: ['flow', 'list'] },
+  { prefix: 'sequence-snake', cats: ['flow'] },
+  { prefix: 'sequence-funnel', cats: ['composition'] },
+  { prefix: 'sequence-pyramid', cats: ['composition'] },
+  { prefix: 'sequence-interaction', cats: ['flow', 'relationship'] },
+  { prefix: 'compare-swot', cats: ['comparison', 'structure'] },
+  { prefix: 'compare-quadrant', cats: ['comparison'] },
+  { prefix: 'chart-pie', cats: ['composition'] },
+  { prefix: 'chart-wordcloud', cats: ['composition', 'list'] },
+  { prefix: 'relation-dagre', cats: ['flow', 'relationship'] },
+  { prefix: 'relation-network', cats: ['relationship'] },
+]
+
+function getInfographicExtraCategories(templateId: string): UnifiedCategory[] {
+  for (const { prefix, cats } of INFOGRAPHIC_EXTRA_CATEGORIES) {
+    if (templateId.startsWith(prefix)) return cats
+  }
+  return []
+}
+
+export const INFOGRAPHIC_UNIFIED: UnifiedTemplate[] = TEMPLATE_REGISTRY.map((t) => {
+  const cat = INFOGRAPHIC_CATEGORY_MAP[t.category] ?? 'list'
+  const extra = getInfographicExtraCategories(t.id)
+  const cats = [cat, ...extra.filter(c => c !== cat)]
+  return {
+    id: `infographic:${t.id}`,
+    name: t.name,
+    description: t.description,
+    category: cat,
+    categories: cats,
+    engine: 'infographic',
+    libraryType: t.id,
+    icon: infographicIcon(t),
+    tags: [INFOGRAPHIC_CATEGORY_LABEL[t.category], ...t.tags],
+  }
+})
 
 // ---- Master catalog ----
 export const UNIFIED_TEMPLATES: UnifiedTemplate[] = [
@@ -270,7 +321,12 @@ export function groupUnifiedByCategory(): Record<UnifiedCategory, UnifiedTemplat
     list: [],
     metric: [],
   }
-  for (const t of UNIFIED_TEMPLATES) groups[t.category].push(t)
+  // Use categories[] for multi-category support
+  for (const t of UNIFIED_TEMPLATES) {
+    for (const cat of t.categories) {
+      groups[cat].push(t)
+    }
+  }
   return groups
 }
 
