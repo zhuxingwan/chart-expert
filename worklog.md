@@ -781,3 +781,33 @@ Stage Summary:
 - ✅ Free-user PNG downloads have NoteRich watermark (30% opacity, bottom-right)
 - ✅ License code obfuscated in production builds
 - ✅ Lint passes, all features verified in browser
+
+---
+Task ID: FRONTEND-LICENSE-VERIFY
+Agent: main
+Task: Make license verification purely frontend (no server/API calls)
+
+Work Log:
+- Rewrote `src/lib/license/index.ts` to be 100% frontend — no network requests.
+- Uses HMAC-SHA256 cryptographic signing (via Web Crypto API `crypto.subtle`):
+  - License key format: `NR.{signature}.{payload}` (using `.` as delimiter since base64url uses `-` and `_`)
+  - `signature = base64url(HMAC-SHA256(payload, LICENSE_SECRET))`
+  - `payload = base64url("{email}|{expiryTimestamp}|{type}")`
+  - Secret key `LICENSE_SECRET` is embedded in the code and obfuscated in production via webpack-obfuscator
+- Verification flow:
+  1. Parse key into signature + payload
+  2. Recompute HMAC-SHA256 of payload using embedded secret
+  3. Timing-safe signature comparison
+  4. Decode payload, verify email match + expiry + type
+- `generateTestLicenseKey()` creates properly-signed test keys (365-day expiry) that pass verification
+- Fixed `useCallback` dependency arrays in echarts editor — added `requirePro` to deps so the callback updates when license status changes
+- Removed the PayProGlobal API calls entirely — verification is now instant (no network latency)
+
+Stage Summary:
+- ✅ License verification is 100% frontend (no server, no API)
+- ✅ HMAC-SHA256 cryptographic signing with embedded secret
+- ✅ Test key generation works: generates `NR.{sig}.{payload}` format
+- ✅ Verification works: test key validates successfully, PRO badge shows
+- ✅ PRO features unlock immediately after verification (SVG download + Markdown copy work)
+- ✅ Secret + algorithm protected by webpack-obfuscator in production builds
+- ✅ Lint passes, verified end-to-end in browser

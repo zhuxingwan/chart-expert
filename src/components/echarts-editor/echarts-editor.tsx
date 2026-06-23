@@ -435,7 +435,7 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
       }
       if (temp.parentNode) document.body.removeChild(temp)
     }
-  }, [option, local.theme, local.title, t])
+  }, [option, local.theme, local.title, t, requirePro])
 
   const handleCopyAsMarkdown = React.useCallback(async () => {
     if (!requirePro()) return
@@ -446,7 +446,7 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
     } catch {
       toast.error(t('toasts.copyFailed'))
     }
-  }, [option, t])
+  }, [option, t, requirePro])
 
   // ----- Random data -----
   const handleRandomData = React.useCallback(() => {
