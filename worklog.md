@@ -726,3 +726,25 @@ Stage Summary:
 - ✅ Template names display in the user's language: verified for en (Bar Chart), zh (柱状图), ja (棒グラフ)
 - ✅ Category labels also translated (Bar→柱状图, Line→折线图, etc.)
 - ✅ Lint passes (0 errors), dev server stable
+
+---
+Task ID: INFOGRAPHIC-EXPORT-DIMENSIONS
+Agent: main
+Task: Verify infographic SVG/PNG export dimensions are correct (auto-size + correct ratio)
+
+Work Log:
+- Investigated the @antv/infographic exporter API:
+  - `toDataURL({ type: 'svg' })` → returns `data:image/svg+xml;charset=utf-8,...` data URL with the SVG's content-fitted viewBox as absolute width/height (not 100%/100%).
+  - `toDataURL({ type: 'png', dpr: 2 })` → returns `data:image/png` data URL using the SAME viewBox width/height, scaled by dpr.
+- The engine's `exportToSVG()` function internally calls `computeFullViewBox()` which calculates the actual content bounding box (including clipped content), then sets `width` and `height` attributes to absolute pixel values.
+- Verified with two templates:
+  - `list-grid-compact-card`: SVG 701×463, PNG 1401×926 (ratio 1.5123 vs 1.5130 — match ✅)
+  - `sequence-timeline-simple`: SVG 346×632, PNG 692×1263 (ratio 0.5478 vs 0.5479 — match ✅)
+- Both SVG and PNG exports already have correct auto-sized dimensions with matching aspect ratios.
+- The previous SecurityError (tainted canvas) was already fixed by switching from manual `drawImage` to the engine's built-in `toDataURL()`.
+
+Stage Summary:
+- ✅ SVG export: auto-sized (absolute width/height from content bounding box, not 100%)
+- ✅ PNG export: correct aspect ratio matching the SVG (same viewBox, scaled by dpr=2)
+- ✅ No SecurityError (uses engine's built-in export, not manual canvas drawing)
+- ✅ Verified with multiple infographic templates
