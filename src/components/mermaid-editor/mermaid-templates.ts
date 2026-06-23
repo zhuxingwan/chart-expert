@@ -77,7 +77,7 @@ export const MERMAID_TEMPLATES: MermaidTemplateMeta[] = [
     description: 'Object state transitions, order lifecycle',
     category: 'Flow',
     type: 'state',
-    icon: 'State',
+    icon: 'Workflow',
     defaultCode: `stateDiagram-v2
     [*] --> Pending Payment
     Pending Payment --> Paid: User pays
@@ -241,7 +241,7 @@ export const MERMAID_TEMPLATES: MermaidTemplateMeta[] = [
     description: 'Historical events, product milestones',
     category: 'Time',
     type: 'timeline',
-    icon: 'Timeline',
+    icon: 'History',
     defaultCode: `timeline
     title Company Milestones
     section 2020

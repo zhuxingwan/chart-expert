@@ -74,14 +74,13 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Workflow,
   ArrowRightLeft,
   Network,
-  State: Workflow, // state-diagram icon alias
   Database,
   CalendarClock,
   Footprints,
   Brain,
   PieChart,
   GitBranch,
-  Timeline: History, // timeline icon alias
+  History,
   Triangle,
   ListOrdered,
 }

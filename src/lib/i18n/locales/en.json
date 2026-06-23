@@ -175,7 +175,7 @@
     "exportJson": "JSON",
     "renderError": "Render error",
     "applied": "Applied: {name}",
-    "iconPlaceholder": "Icon",
+    "iconPlaceholder": "Icon keyword (e.g. rocket)",
     "labelPlaceholder": "Title",
     "descPlaceholder": "Description (optional)",
     "valueLabel": "Value",

@@ -175,7 +175,7 @@
     "exportJson": "JSON",
     "renderError": "渲染出错",
     "applied": "已应用：{name}",
-    "iconPlaceholder": "图标",
+    "iconPlaceholder": "图标关键词（如 rocket）",
     "labelPlaceholder": "标题",
     "descPlaceholder": "描述（可选）",
     "valueLabel": "数值",

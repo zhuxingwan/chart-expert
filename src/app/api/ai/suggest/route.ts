@@ -122,7 +122,7 @@ Infographic data shape rules:
 - hierarchy templates: use "lists" with ONE root whose "children" form the tree.
 - relation templates: use "nodes" and "edges" (edges use "from"/"to" referencing node ids).
 - compare templates: use "lists" with 2 (binary) or 4 (quadrant) top-level groups, each with "children".
-- "icon" can be a single emoji or short keyword.
+- "icon" should be a short English keyword (e.g. "rocket", "trophy", "target", "growth", "idea", "check", "star", "heart", "user", "code"). The engine will automatically fetch an appropriate SVG icon based on the keyword. Do NOT use emoji.
 
 === Universal rules ===
 - EXTRACT all concrete data from the user's prompt and use it EXACTLY.

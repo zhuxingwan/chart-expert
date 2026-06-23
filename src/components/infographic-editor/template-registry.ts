@@ -251,10 +251,10 @@ export function defaultDataForShape(
   return {
     title: { text: 'List Example', subtext: 'Click + on the right to add items' },
     lists: [
-      { label: 'First Item', desc: 'Short description text', value: 80, icon: '🚀' },
-      { label: 'Second Item', desc: 'Short description text', value: 65, icon: '⭐' },
-      { label: 'Third Item', desc: 'Short description text', value: 50, icon: '🎯' },
-      { label: 'Fourth Item', desc: 'Short description text', value: 35, icon: '💡' },
+      { label: 'First Item', desc: 'Short description text', value: 80, icon: 'rocket' },
+      { label: 'Second Item', desc: 'Short description text', value: 65, icon: 'star' },
+      { label: 'Third Item', desc: 'Short description text', value: 50, icon: 'target' },
+      { label: 'Fourth Item', desc: 'Short description text', value: 35, icon: 'idea' },
     ],
   }
 }

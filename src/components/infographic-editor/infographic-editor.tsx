@@ -886,7 +886,7 @@ function ListDataEditor({
   const add = () => {
     setItems([
       ...items,
-      { label: `Item ${items.length + 1}`, desc: '', value: 50, icon: '📍' },
+      { label: `Item ${items.length + 1}`, desc: '', value: 50, icon: 'pin' },
     ])
   }
 
