@@ -88,7 +88,11 @@ import {
   type InfographicTemplateCategory,
 } from './template-registry'
 import { exportSvg } from '@/lib/chart/export'
-import { useT } from '@/lib/i18n'
+import { useT, useI18n } from '@/lib/i18n'
+import {
+  getInfographicTemplateName,
+  getInfographicCategoryLabel,
+} from '@/lib/i18n/template-names'
 
 // Icon registry — maps template icon names to lucide components
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -170,6 +174,7 @@ export interface InfographicEditorProps {
 
 export function InfographicEditor({ config, onChange, onTemplateChange, previewRef }: InfographicEditorProps) {
   const t = useT()
+  const { locale } = useI18n()
   const isMobile = useIsMobile()
   const [local, setLocal] = React.useState<InfographicConfig>(() =>
     config
@@ -220,8 +225,12 @@ export function InfographicEditor({ config, onChange, onTemplateChange, previewR
       data: defaultDataForShape(tpl.dataShape),
     }))
     onTemplateChange?.('infographic:' + tpl.id)
-    toast.success(t('infographic.applied', { name: tpl.name }))
-  }, [t, onTemplateChange])
+    toast.success(
+      t('infographic.applied', {
+        name: getInfographicTemplateName(locale, tpl.id, tpl.name),
+      }),
+    )
+  }, [t, onTemplateChange, locale])
 
   const currentTemplate = React.useMemo(
     () => TEMPLATE_REGISTRY.find((t) => t.id === local.template) ?? TEMPLATE_REGISTRY[0],
@@ -317,6 +326,7 @@ interface GalleryProps {
 
 function TemplateGallery({ currentId, onPick }: GalleryProps) {
   const t = useT()
+  const { locale } = useI18n()
   const [keyword, setKeyword] = React.useState('')
   const groups = React.useMemo(() => groupTemplatesByCategory(), [])
 
@@ -326,10 +336,11 @@ function TemplateGallery({ currentId, onPick }: GalleryProps) {
     return TEMPLATE_REGISTRY.filter(
       (tpl) =>
         tpl.name.toLowerCase().includes(kw) ||
+        getInfographicTemplateName(locale, tpl.id, tpl.name).toLowerCase().includes(kw) ||
         tpl.id.toLowerCase().includes(kw) ||
         tpl.tags.some((tag) => tag.toLowerCase().includes(kw)),
     )
-  }, [keyword])
+  }, [keyword, t, locale])
 
   return (
     <div className="flex h-full flex-col">
@@ -375,7 +386,7 @@ function TemplateGallery({ currentId, onPick }: GalleryProps) {
                   <section key={cat}>
                     <div className="mb-2 flex items-center justify-between">
                       <h4 className="text-xs font-semibold text-foreground">
-                        {CATEGORY_LABEL[cat]}
+                        {getInfographicCategoryLabel(locale, cat, CATEGORY_LABEL[cat])}
                       </h4>
                       <Badge variant="secondary" className="text-[10px]">
                         {list.length}
@@ -409,6 +420,8 @@ interface CardProps {
 }
 
 function TemplateCard({ tpl, active, onClick }: CardProps) {
+  const t = useT()
+  const { locale } = useI18n()
   const iconKey = tpl.id.split('-').slice(0, 2).join('-')
   const IconComponent = (getIcon(iconKey) || getIcon(tpl.id.split('-')[0]) || Square) as React.FC<{ className?: string }>
   return (
@@ -430,7 +443,9 @@ function TemplateCard({ tpl, active, onClick }: CardProps) {
       >
         <IconComponent className="h-4 w-4" />
       </div>
-      <div className="text-xs font-medium leading-tight">{tpl.name}</div>
+      <div className="text-xs font-medium leading-tight">
+        {getInfographicTemplateName(locale, tpl.id, tpl.name)}
+      </div>
     </button>
   )
 }
@@ -446,6 +461,7 @@ interface PreviewProps {
 
 function PreviewPanel({ config, previewRef }: PreviewProps) {
   const t = useT()
+  const { locale } = useI18n()
   const containerRef = React.useRef<HTMLDivElement>(null)
   // The @antv/infographic engine instance.
   const engineRef = React.useRef<any>(null)
@@ -700,6 +716,7 @@ interface ConfigProps {
 
 function ConfigPanel({ config, template, update }: ConfigProps) {
   const t = useT()
+  const { locale } = useI18n()
   return (
     <div className="flex h-full flex-col">
     <ScrollArea className="min-h-0 flex-1">
@@ -708,9 +725,11 @@ function ConfigPanel({ config, template, update }: ConfigProps) {
         <section className="rounded-lg border bg-muted/30 p-3">
           <div className="mb-1 flex items-center gap-2">
             <Badge variant="secondary" className="text-[10px]">
-              {CATEGORY_LABEL[template.category]}
+              {getInfographicCategoryLabel(locale, template.category, CATEGORY_LABEL[template.category])}
             </Badge>
-            <h3 className="text-sm font-semibold">{template.name}</h3>
+            <h3 className="text-sm font-semibold">
+              {getInfographicTemplateName(locale, template.id, template.name)}
+            </h3>
           </div>
           <p className="text-xs text-muted-foreground">{template.description}</p>
         </section>
@@ -822,6 +841,7 @@ function ListDataEditor({
   update: (patch: Partial<InfographicConfig>) => void
 }) {
   const t = useT()
+  const { locale } = useI18n()
   const items = config.data.lists ?? []
 
   const setItems = (next: InfographicItem[]) => {
@@ -916,6 +936,7 @@ function HierarchyDataEditor({
   update: (patch: Partial<InfographicConfig>) => void
 }) {
   const t = useT()
+  const { locale } = useI18n()
   const root = config.data.lists?.[0]
 
   const setRoot = (next: InfographicItem) => {
@@ -958,6 +979,7 @@ function NodeEditor({
   depth: number
 }) {
   const t = useT()
+  const { locale } = useI18n()
   const [expanded, setExpanded] = React.useState(depth < 2)
 
   const patch = (p: Partial<InfographicItem>) => onChange({ ...node, ...p })
@@ -1046,6 +1068,7 @@ function CompareDataEditor({
   update: (patch: Partial<InfographicConfig>) => void
 }) {
   const t = useT()
+  const { locale } = useI18n()
   const groups = config.data.lists ?? []
 
   const setGroups = (next: InfographicItem[]) => {
@@ -1146,6 +1169,7 @@ function RelationDataEditor({
   update: (patch: Partial<InfographicConfig>) => void
 }) {
   const t = useT()
+  const { locale } = useI18n()
   const nodes = config.data.nodes ?? []
   const edges = config.data.edges ?? []
 

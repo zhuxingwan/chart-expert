@@ -679,3 +679,50 @@ Stage Summary:
 - ✅ Safe fallback to default template if AI output is unusable
 - ✅ Yellow warning badge shows when calibration was applied
 - ✅ Lint passes, verified end-to-end in browser with user's example
+
+---
+Task ID: FIX-MISSING-KEY
+Agent: sub-agent (general-purpose)
+Task: Add missing `toasts.markdownCopied` key to all locale files (existed only in en.json and zh.json)
+
+Work Log:
+- Confirmed `toasts.markdownCopied` was present in `en.json` and `zh.json` but absent from 14 other locale files
+- Verified the `toasts` object structure: `copied` (line 196) is immediately followed by `formatDone` (line 197) in every locale file
+- Inserted the `markdownCopied` key right after `copied` (and before `formatDone`) in each of the 14 missing files with the proper translation
+- Languages added: es, fr, de, ja, ko, pt, pt-PT, pt-BR, ru, ar, hi, vi, zh-CN, zh-TW
+- Used the existing 4-space indentation pattern; preserved proper comma placement between `copied` and `markdownCopied` (added new comma) and between `markdownCopied` and `formatDone`
+- Ran the verification loop `for f in src/lib/i18n/locales/*.json; do node -e "JSON.parse(...)"` → all 16 files OK
+- Confirmed via ripgrep that all 16 locale files now contain exactly one `"markdownCopied"` occurrence
+
+Stage Summary:
+- ✅ `toasts.markdownCopied` key now exists in all 16 locale files
+- ✅ All 16 JSON files parse successfully (valid JSON, proper comma placement)
+- ✅ Each value is the translated form of "Markdown copied to clipboard" per the task spec
+- ✅ No regressions to en.json / zh.json (pre-existing values preserved)
+
+---
+Task ID: I18N-TEMPLATES-FINAL
+Agent: main
+Task: Complete i18n - fix missing keys + internationalize all template names
+
+Work Log:
+- **Fixed missing `toasts.markdownCopied` key** in all 14 locale files (was only in en/zh).
+- **Created `src/lib/i18n/template-names.ts`** — a dedicated module with translated template names and category labels for:
+  - ECharts: 46 template names + 16 category labels, translated to 9 languages (en, zh, ja, ko, es, fr, de, pt, ru)
+  - Mermaid: 11 template names, translated to 9 languages
+  - Infographic: ~120 template names + 7 category labels, translated to 2 languages (en, zh); others fall back to English
+- **Updated all components** to use the translation helpers:
+  - `chart-tool-app.tsx`: uses `getEChartsTemplateName(locale, ...)` etc. for toast messages and header template name
+  - `template-picker-dialog.tsx`: `getUnifiedTplName(locale, tpl)` for all template cards; `TemplateCard` component receives `locale` as a prop
+  - `echarts-editor.tsx`: `getEChartsTemplateName(locale, ...)` + `getEChartsCategoryLabel(locale, ...)` for gallery + select dropdown
+  - `mermaid-editor.tsx`: `getMermaidTemplateName(locale, ...)` for gallery
+  - `infographic-editor.tsx`: `getInfographicTemplateName(locale, ...)` + `getInfographicCategoryLabel(locale, ...)` for gallery + config panel
+- **Fixed TDZ/ReferenceError**: `TemplateCard` component was using `locale` without receiving it as a prop — added `locale` to the component's props interface.
+- **Fixed useCallback deps**: Added `locale` to dependency arrays in all `useCallback`/`useMemo` that reference it (required by React Compiler's `preserve-manual-memoization` rule).
+- All locales without specific template translations (ar, hi, vi, etc.) automatically fall back to English via the `resolveLocale()` helper.
+
+Stage Summary:
+- ✅ All 16 locale files now have the same 177 keys (no missing translations)
+- ✅ Template names display in the user's language: verified for en (Bar Chart), zh (柱状图), ja (棒グラフ)
+- ✅ Category labels also translated (Bar→柱状图, Line→折线图, etc.)
+- ✅ Lint passes (0 errors), dev server stable

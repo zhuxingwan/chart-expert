@@ -22,7 +22,12 @@ import {
   type UnifiedTemplate,
 } from '@/lib/chart/unified-catalog'
 import { toast } from 'sonner'
-import { useT } from '@/lib/i18n'
+import { useT, useI18n } from '@/lib/i18n'
+import {
+  getEChartsTemplateName,
+  getMermaidTemplateName,
+  getInfographicTemplateName,
+} from '@/lib/i18n/template-names'
 
 // Editors are loaded dynamically — the user never sees which library is used.
 const EChartsEditor = dynamic(
@@ -96,6 +101,7 @@ function activateFromTemplateId(templateId: string): ActiveDoc | null {
 
 export function ChartToolApp() {
   const t = useT()
+  const { locale } = useI18n()
   const previewRef = React.useRef<HTMLDivElement>(null)
 
   // On first mount, check the URL for a ?chart= param. If present, activate
@@ -161,8 +167,14 @@ export function ChartToolApp() {
       infographic: tpl.engine === 'infographic' ? (config as InfographicConfig) : undefined,
     })
     setPickerOpen(false)
-    toast.success(t('toasts.applied', { name: tpl.name }))
-  }, [t])
+    const name =
+      tpl.engine === 'echarts'
+        ? getEChartsTemplateName(locale, tpl.libraryType, tpl.name)
+        : tpl.engine === 'mermaid'
+          ? getMermaidTemplateName(locale, tpl.libraryType, tpl.name)
+          : getInfographicTemplateName(locale, tpl.libraryType, tpl.name)
+    toast.success(t('toasts.applied', { name }))
+  }, [t, locale])
 
   const handleApplySuggestion = React.useCallback(
     (engine: ChartEngine, config: unknown) => {
@@ -213,8 +225,16 @@ export function ChartToolApp() {
 
   const getCurrentTemplateName = React.useCallback((): string => {
     if (!doc) return ''
-    return findUnifiedTemplate(doc.templateId)?.name ?? ''
-  }, [doc])
+    const tpl = findUnifiedTemplate(doc.templateId)
+    if (!tpl) return ''
+    if (tpl.engine === 'echarts') {
+      return getEChartsTemplateName(locale, tpl.libraryType, tpl.name)
+    }
+    if (tpl.engine === 'mermaid') {
+      return getMermaidTemplateName(locale, tpl.libraryType, tpl.name)
+    }
+    return getInfographicTemplateName(locale, tpl.libraryType, tpl.name)
+  }, [doc, t, locale])
 
   return (
     <VizLibLoader>

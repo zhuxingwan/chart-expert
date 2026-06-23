@@ -34,7 +34,11 @@ import {
 
 import { cn } from '@/lib/utils'
 import type { EChartsConfig } from '@/types/chart'
-import { useT } from '@/lib/i18n'
+import { useT, useI18n } from '@/lib/i18n'
+import {
+  getEChartsTemplateName,
+  getEChartsCategoryLabel,
+} from '@/lib/i18n/template-names'
 import { useIsMobile } from '@/hooks/use-mobile'
 import {
   ResizablePanelGroup,
@@ -150,6 +154,7 @@ export interface EChartsEditorProps {
 
 export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }: EChartsEditorProps) {
   const t = useT()
+  const { locale } = useI18n()
   // CDN-loaded echarts — status flips to 'loaded' once the <script> tag from
   // VizLibLoader finishes. We render a loading placeholder until then.
   const { status } = useVizLibs()
@@ -296,7 +301,9 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
       commit(next)
       setCurrentTemplateId(tpl.id)
       onTemplateChange?.('echarts:' + tpl.id)
-      toast.success(t('toasts.applied', { name: tpl.name }))
+      toast.success(
+        t('toasts.applied', { name: getEChartsTemplateName(locale, tpl.id, tpl.name) }),
+      )
     },
     [commit, local.title, t, onTemplateChange],
   )
@@ -472,7 +479,7 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
             return (
               <div key={cat.id} className="space-y-2">
                 <div className="px-1 pt-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                  {cat.label}
+                  {getEChartsCategoryLabel(locale, cat.id, cat.label)}
                 </div>
                 {items.map((tpl) => {
                   const Icon = iconForType(tpl.type)
@@ -492,7 +499,9 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
                         <Icon className="size-4" />
                       </span>
                       <span className="flex flex-col gap-0.5 overflow-hidden">
-                        <span className="truncate text-sm font-medium">{tpl.name}</span>
+                        <span className="truncate text-sm font-medium">
+                          {getEChartsTemplateName(locale, tpl.id, tpl.name)}
+                        </span>
                         <span className="line-clamp-2 text-[11px] text-muted-foreground">
                           {tpl.description}
                         </span>
@@ -665,10 +674,12 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
                         if (items.length === 0) return null
                         return (
                           <SelectGroup key={cat.id}>
-                            <SelectLabel>{cat.label}</SelectLabel>
+                            <SelectLabel>
+                              {getEChartsCategoryLabel(locale, cat.id, cat.label)}
+                            </SelectLabel>
                             {items.map((tpl) => (
                               <SelectItem key={tpl.id} value={tpl.id}>
-                                {tpl.name}
+                                {getEChartsTemplateName(locale, tpl.id, tpl.name)}
                               </SelectItem>
                             ))}
                           </SelectGroup>

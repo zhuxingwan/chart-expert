@@ -65,7 +65,8 @@ import {
   type MermaidTemplateMeta,
 } from './mermaid-templates'
 import { exportSvg } from '@/lib/chart/export'
-import { useT } from '@/lib/i18n'
+import { useT, useI18n } from '@/lib/i18n'
+import { getMermaidTemplateName } from '@/lib/i18n/template-names'
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Workflow,
@@ -104,6 +105,7 @@ export interface MermaidEditorProps {
 
 export function MermaidEditor({ config, onChange, onTemplateChange, previewRef }: MermaidEditorProps) {
   const t = useT()
+  const { locale } = useI18n()
   const isMobile = useIsMobile()
   const [local, setLocal] = React.useState<MermaidConfig>(() =>
     config
@@ -150,8 +152,10 @@ export function MermaidEditor({ config, onChange, onTemplateChange, previewRef }
       code: tpl.defaultCode,
     }))
     onTemplateChange?.('mermaid:' + tpl.id)
-    toast.success(t('toasts.applied', { name: tpl.name }))
-  }, [t, onTemplateChange])
+    toast.success(
+      t('toasts.applied', { name: getMermaidTemplateName(locale, tpl.id, tpl.name) }),
+    )
+  }, [t, onTemplateChange, locale])
 
   const handleFormat = () => {
     update({
@@ -211,7 +215,9 @@ export function MermaidEditor({ config, onChange, onTemplateChange, previewRef }
                         active ? 'text-primary' : 'text-muted-foreground',
                       )}
                     />
-                    <span className="text-xs font-medium">{tpl.name}</span>
+                    <span className="text-xs font-medium">
+                      {getMermaidTemplateName(locale, tpl.id, tpl.name)}
+                    </span>
                   </button>
                 )
               })}

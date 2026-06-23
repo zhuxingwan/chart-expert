@@ -21,7 +21,12 @@ import {
   type UnifiedTemplate,
   type UnifiedCategory,
 } from '@/lib/chart/unified-catalog'
-import { useT } from '@/lib/i18n'
+import { useT, useI18n } from '@/lib/i18n'
+import {
+  getEChartsTemplateName,
+  getMermaidTemplateName,
+  getInfographicTemplateName,
+} from '@/lib/i18n/template-names'
 
 interface Props {
   open: boolean
@@ -36,39 +41,44 @@ const ALL_COUNT = (() => {
 })()
 
 /**
- * Map a unified category to its i18n key. We can't use the static
+ * Map a unified category to its i18n label. We can't use the static
  * `UNIFIED_CATEGORY_LABEL` (a static object can't call hooks), so we look up
  * the translation at render time via `t()`.
+ *
+ * Some unified categories (e.g. `list`, `sequence`) share names with the
+ * infographic category registry — so we also fall back to
+ * `templates.infographic.categories.*` if `categories.*` doesn't resolve.
  */
 function getCategoryLabel(cat: UnifiedCategory, t: (key: string) => string): string {
-  switch (cat) {
-    case 'comparison':
-      return t('categories.comparison')
-    case 'trend':
-      return t('categories.trend')
-    case 'composition':
-      return t('categories.composition')
-    case 'distribution':
-      return t('categories.distribution')
-    case 'flow':
-      return t('categories.flow')
-    case 'structure':
-      return t('categories.structure')
-    case 'relationship':
-      return t('categories.relationship')
-    case 'timeline':
-      return t('categories.timeline')
-    case 'list':
-      return t('categories.list')
-    case 'metric':
-      return t('categories.metric')
-    default:
-      return cat
+  const key = `categories.${cat}`
+  const translated = t(key)
+  if (translated !== key) return translated
+  // Fallback to the infographic templates category (some unified cats overlap).
+  const infKey = `templates.infographic.categories.${cat}`
+  const infTranslated = t(infKey)
+  return infTranslated !== infKey ? infTranslated : cat
+}
+
+/**
+ * Get the translated name for a unified template, dispatching to the right
+ * engine-specific helper based on `tpl.engine`.
+ */
+function getUnifiedTplName(
+  locale: string,
+  tpl: UnifiedTemplate,
+): string {
+  if (tpl.engine === 'echarts') {
+    return getEChartsTemplateName(locale, tpl.libraryType, tpl.name)
   }
+  if (tpl.engine === 'mermaid') {
+    return getMermaidTemplateName(locale, tpl.libraryType, tpl.name)
+  }
+  return getInfographicTemplateName(locale, tpl.libraryType, tpl.name)
 }
 
 export function TemplatePickerDialog({ open, onOpenChange, onPick }: Props) {
   const t = useT()
+  const { locale } = useI18n()
   const [keyword, setKeyword] = React.useState('')
   const [activeCat, setActiveCat] = React.useState<UnifiedCategory | 'all'>('all')
 
@@ -82,10 +92,11 @@ export function TemplatePickerDialog({ open, onOpenChange, onPick }: Props) {
     return all.filter(
       (tpl) =>
         tpl.name.toLowerCase().includes(kw) ||
+        getUnifiedTplName(locale, tpl).toLowerCase().includes(kw) ||
         tpl.description.toLowerCase().includes(kw) ||
         tpl.tags.some((tag) => tag.toLowerCase().includes(kw)),
     )
-  }, [keyword, groups])
+  }, [keyword, groups, t, locale])
 
   const visibleCategories: UnifiedCategory[] =
     activeCat === 'all' ? UNIFIED_CATEGORY_ORDER : [activeCat]
@@ -157,7 +168,7 @@ export function TemplatePickerDialog({ open, onOpenChange, onPick }: Props) {
             {filtered ? (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
                 {filtered.map((tplItem) => (
-                  <TemplateCard key={tplItem.id} tpl={tplItem} onPick={handlePick} />
+                  <TemplateCard key={tplItem.id} tpl={tplItem} onPick={handlePick} locale={locale} />
                 ))}
                 {filtered.length === 0 && (
                   <div className="col-span-full py-12 text-center text-sm text-muted-foreground">
@@ -183,7 +194,7 @@ export function TemplatePickerDialog({ open, onOpenChange, onPick }: Props) {
                       </div>
                       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
                         {list.map((tplItem) => (
-                          <TemplateCard key={tplItem.id} tpl={tplItem} onPick={handlePick} />
+                          <TemplateCard key={tplItem.id} tpl={tplItem} onPick={handlePick} locale={locale} />
                         ))}
                       </div>
                     </section>
@@ -228,9 +239,11 @@ function CategoryChip({
 function TemplateCard({
   tpl,
   onPick,
+  locale,
 }: {
   tpl: UnifiedTemplate
   onPick: (t: UnifiedTemplate) => void
+  locale: string
 }) {
   return (
     <button
@@ -241,7 +254,9 @@ function TemplateCard({
         {renderIcon(tpl.icon, 'h-5 w-5')}
       </div>
       <div>
-        <div className="text-sm font-medium leading-tight">{tpl.name}</div>
+        <div className="text-sm font-medium leading-tight">
+          {getUnifiedTplName(locale, tpl)}
+        </div>
         <div className="mt-0.5 line-clamp-2 text-[11px] leading-tight text-muted-foreground">
           {tpl.description}
         </div>
