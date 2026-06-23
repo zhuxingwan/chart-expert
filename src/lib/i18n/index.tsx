@@ -151,16 +151,42 @@ function detectBrowserLocale(): string {
   return DEFAULT_LOCALE
 }
 
+/** Read the `?lang=` query param. Returns the locale string or null. */
+function getLangFromUrl(): string | null {
+  if (typeof window === 'undefined') return null
+  const params = new URLSearchParams(window.location.search)
+  const lang = params.get('lang')
+  if (!lang) return null
+  const lower = lang.toLowerCase()
+  if (SUPPORTED_LOCALES.includes(lower as Locale)) return lower
+  const base = lower.split('-')[0]
+  if (SUPPORTED_LOCALES.includes(base as Locale)) return base
+  return null
+}
+
+/** Update the URL's `?lang=` param without triggering a navigation/reload. */
+function updateUrlLang(locale: string) {
+  if (typeof window === 'undefined') return
+  const url = new URL(window.location.href)
+  url.searchParams.set('lang', locale)
+  window.history.replaceState(window.history.state, '', url.toString())
+}
+
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = React.useState<string>(DEFAULT_LOCALE)
   const [messages, setMessages] = React.useState<Messages>({})
   const [loading, setLoading] = React.useState(true)
 
-  // Initial load — detect browser language or use stored preference
+  // Initial load — priority: URL ?lang= param > stored preference > browser detection
   React.useEffect(() => {
+    const urlLang = getLangFromUrl()
     const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null
-    const initial = stored ?? detectBrowserLocale()
+    const initial = urlLang ?? stored ?? detectBrowserLocale()
     setLocaleState(initial)
+    // If URL had no ?lang=, add it for shareability
+    if (!urlLang) {
+      updateUrlLang(initial)
+    }
   }, [])
 
   // Load messages whenever locale changes
@@ -178,6 +204,25 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     }
   }, [locale])
 
+  // Sync URL ?lang= whenever locale changes
+  React.useEffect(() => {
+    if (locale && locale !== DEFAULT_LOCALE) {
+      updateUrlLang(locale)
+    }
+  }, [locale])
+
+  // Listen for browser back/forward to update locale from URL
+  React.useEffect(() => {
+    const handlePopState = () => {
+      const urlLang = getLangFromUrl()
+      if (urlLang && urlLang !== locale) {
+        setLocaleState(urlLang)
+      }
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [locale])
+
   const setLocale = React.useCallback((newLocale: string) => {
     setLocaleState(newLocale)
     try {
@@ -185,6 +230,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // ignore
     }
+    updateUrlLang(newLocale)
   }, [])
 
   const t = React.useCallback(

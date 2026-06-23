@@ -27,11 +27,13 @@ import {
 import { cn } from '@/lib/utils'
 import type { EChartsConfig } from '@/types/chart'
 import { useT } from '@/lib/i18n'
+import { useIsMobile } from '@/hooks/use-mobile'
 import {
   ResizablePanelGroup,
   ResizablePanel,
   ResizableHandle,
 } from '@/components/ui/resizable'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import {
   Accordion,
   AccordionItem,
@@ -128,6 +130,8 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
   // VizLibLoader finishes. We render a loading placeholder until then.
   const { status } = useVizLibs()
   const echartsLoaded = status.echarts === 'loaded'
+  // Switch between mobile (vertical tabs) and desktop (horizontal panels) layout.
+  const isMobile = useIsMobile()
 
   // Local "live" config — the editor's source of truth between parent updates.
   const [local, setLocal] = React.useState<EChartsConfig>(() =>
@@ -223,6 +227,8 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
 
   // Init ResizeObserver + dispose on unmount. The actual first render is
   // triggered by the debounced effect above once the CDN is ready.
+  // Re-runs on `isMobile` change so the observer (and chart instance) rebinds
+  // to the new container that mounts when the layout switches.
   React.useEffect(() => {
     if (!chartContainerRef.current) return
 
@@ -238,7 +244,15 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
       chartRef.current?.dispose()
       chartRef.current = null
     }
-  }, [])
+  }, [isMobile])
+
+  // Force a re-render after the layout switches so the freshly mounted
+  // chart container gets the option applied.
+  React.useEffect(() => {
+    if (!echartsLoaded) return
+    const id = window.setTimeout(() => renderChart(), 50)
+    return () => window.clearTimeout(id)
+  }, [isMobile, renderChart, echartsLoaded])
 
   // ----- Mutators (keep immutable) -----
   const patch = React.useCallback(
@@ -351,7 +365,7 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
     try {
       const markdown = '```echarts\n' + JSON.stringify(option, null, 2) + '\n```'
       await navigator.clipboard.writeText(markdown)
-      toast.success(t('toasts.copied'))
+      toast.success(t('toasts.markdownCopied'))
     } catch {
       toast.error(t('toasts.copyFailed'))
     }
@@ -398,280 +412,326 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
   // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
+  // Extract the three sections as JSX variables so they can be rendered in
+  // EITHER the mobile tab layout OR the desktop resizable-panel layout —
+  // without duplicating the inner logic. Only one layout is in the DOM at a
+  // time (driven by `useIsMobile`), so `previewRef` / `chartContainerRef`
+  // always point at the actually-visible element.
+  const templateGalleryEl = (
+    <div className="flex h-full flex-col">
+      <div className="border-b px-4 py-3">
+        <h3 className="text-sm font-semibold">{t('echarts.templateGallery')}</h3>
+        <p className="text-xs text-muted-foreground mt-1">
+          Click a template to apply it; the config panel refreshes accordingly.
+        </p>
+      </div>
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="grid grid-cols-1 gap-2 p-3">
+          {ECHARTS_TEMPLATE_CATEGORIES.map((cat) => {
+            const items = ECHARTS_TEMPLATES.filter((t) => t.category === cat.id)
+            if (items.length === 0) return null
+            return (
+              <div key={cat.id} className="space-y-2">
+                <div className="px-1 pt-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  {cat.label}
+                </div>
+                {items.map((tpl) => {
+                  const Icon = iconForType(tpl.type)
+                  const active = currentTemplateId === tpl.id
+                  return (
+                    <button
+                      key={tpl.id}
+                      type="button"
+                      onClick={() => applyTemplate(tpl)}
+                      className={cn(
+                        'group flex w-full items-start gap-3 rounded-lg border bg-card p-3 text-left transition-all hover:border-primary/50 hover:shadow-sm',
+                        active && 'border-primary',
+                      )}
+                      title={tpl.description}
+                    >
+                      <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-primary">
+                        <Icon className="size-4" />
+                      </span>
+                      <span className="flex flex-col gap-0.5 overflow-hidden">
+                        <span className="truncate text-sm font-medium">{tpl.name}</span>
+                        <span className="line-clamp-2 text-[11px] text-muted-foreground">
+                          {tpl.description}
+                        </span>
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>
+      </ScrollArea>
+    </div>
+  )
+
+  const previewEl = (
+    <div className="flex h-full flex-col">
+      {/* Toolbar — unified across all editors (zoom left, export right) */}
+      <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
+        <div className="flex items-center gap-1.5">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={handleZoomOut}
+            aria-label="Zoom out"
+            className="h-7 w-7 p-0"
+          >
+            <ZoomOut className="h-4 w-4" />
+          </Button>
+          <span className="w-12 text-center text-xs tabular-nums text-muted-foreground">
+            {Math.round(zoom * 100)}%
+          </span>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={handleZoomIn}
+            aria-label="Zoom in"
+            className="h-7 w-7 p-0"
+          >
+            <ZoomIn className="h-4 w-4" />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={handleReset}
+            aria-label="Reset zoom"
+            className="h-7 w-7 p-0"
+          >
+            <Maximize className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="flex items-center gap-1">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={handleDownloadSvg}
+            className="h-7 gap-1 px-2 text-xs"
+          >
+            <Download className="h-3 w-3" /> SVG
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={handleDownloadPNG}
+            className="h-7 gap-1 px-2 text-xs"
+          >
+            <Download className="h-3 w-3" /> PNG
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={handleCopyAsMarkdown}
+            className="h-7 gap-1 px-2 text-xs"
+          >
+            <Copy className="h-3 w-3" /> Markdown
+          </Button>
+        </div>
+      </div>
+
+      {/* Canvas */}
+      <div
+        ref={previewRef}
+        className="relative min-h-0 flex-1 overflow-auto"
+        style={{ background: '#fff' }}
+      >
+        <div
+          style={{
+            transform: `scale(${zoom})`,
+            transformOrigin: 'center center',
+            transition: 'transform 0.15s ease',
+            width: '100%',
+            height: '100%',
+          }}
+        >
+          <div
+            ref={chartContainerRef}
+            style={{ width: '100%', height: '100%', minHeight: 400 }}
+          />
+        </div>
+        {!echartsLoaded && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/80 backdrop-blur-sm">
+            <Loader2 className="size-6 animate-spin text-primary" />
+            <span className="text-sm text-muted-foreground">
+              {t('app.loadingLib')}
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+
+  const configEl = (
+    <div className="flex h-full flex-col">
+      <div className="border-b px-4 py-3">
+        <h3 className="text-sm font-semibold">{t('echarts.configPanel')}</h3>
+        <p className="text-xs text-muted-foreground mt-1">
+          All changes sync to the preview instantly — no save button needed.
+        </p>
+      </div>
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="p-3">
+          <Accordion
+            type="multiple"
+            defaultValue={['type', 'title', 'data', 'style']}
+            className="w-full"
+          >
+            {/* 1. Chart type */}
+            <AccordionItem value="type">
+              <AccordionTrigger>
+                <span className="flex items-center gap-2 font-medium">
+                  <BarChart3 className="size-4 text-primary" /> {t('echarts.chartType')}
+                </span>
+              </AccordionTrigger>
+              <AccordionContent>
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Switching type resets sample data but keeps the title</Label>
+                  <Select value={currentTemplateId} onValueChange={onTemplateIdChange}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select chart type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ECHARTS_TEMPLATE_CATEGORIES.map((cat) => {
+                        const items = ECHARTS_TEMPLATES.filter((t) => t.category === cat.id)
+                        if (items.length === 0) return null
+                        return (
+                          <SelectGroup key={cat.id}>
+                            <SelectLabel>{cat.label}</SelectLabel>
+                            {items.map((tpl) => (
+                              <SelectItem key={tpl.id} value={tpl.id}>
+                                {tpl.name}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+
+            {/* 2. Title */}
+            <AccordionItem value="title">
+              <AccordionTrigger>
+                <span className="flex items-center gap-2 font-medium">
+                  <AlignLeft className="size-4 text-primary" /> {t('echarts.title_section')}
+                </span>
+              </AccordionTrigger>
+              <AccordionContent>
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="title-text">{t('echarts.mainTitle')}</Label>
+                    <Input
+                      id="title-text"
+                      value={local.title?.text ?? ''}
+                      onChange={(e) =>
+                        patch({ title: { ...local.title, text: e.target.value } })
+                      }
+                      placeholder="e.g. Quarterly Sales Comparison"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="title-sub">{t('echarts.subtitle')}</Label>
+                    <Input
+                      id="title-sub"
+                      value={local.title?.subtext ?? ''}
+                      onChange={(e) =>
+                        patch({ title: { ...local.title, subtext: e.target.value } })
+                      }
+                      placeholder="Optional, e.g. unit / source"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">Main and sub titles appear centered at the top of the preview.</p>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+
+            {/* 3. Data */}
+            <AccordionItem value="data">
+              <AccordionTrigger>
+                <span className="flex items-center gap-2 font-medium">
+                  <Plus className="size-4 text-primary" /> {t('echarts.data')}
+                </span>
+              </AccordionTrigger>
+              <AccordionContent>
+                <DataEditor
+                  config={local}
+                  patch={patch}
+                  onRandom={handleRandomData}
+                />
+              </AccordionContent>
+            </AccordionItem>
+
+            {/* 4. Style */}
+            <AccordionItem value="style">
+              <AccordionTrigger>
+                <span className="flex items-center gap-2 font-medium">
+                  <Activity className="size-4 text-primary" /> {t('echarts.style')}
+                </span>
+              </AccordionTrigger>
+              <AccordionContent>
+                <StyleEditor config={local} patch={patch} />
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+        </div>
+      </ScrollArea>
+    </div>
+  )
+
+  if (isMobile) {
+    // Mobile: vertical tab layout — Template | Preview | Config
+    return (
+      <Tabs defaultValue="preview" className="flex h-full w-full flex-col gap-0">
+        <TabsList className="grid h-10 w-full shrink-0 grid-cols-3 rounded-none border-b">
+          <TabsTrigger value="templates" className="text-xs">
+            {t('echarts.templateGallery')}
+          </TabsTrigger>
+          <TabsTrigger value="preview" className="text-xs">
+            Preview
+          </TabsTrigger>
+          <TabsTrigger value="config" className="text-xs">
+            {t('echarts.configPanel')}
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="templates" className="min-h-0 flex-1 overflow-hidden">
+          {templateGalleryEl}
+        </TabsContent>
+        <TabsContent value="preview" className="min-h-0 flex-1 overflow-hidden">
+          {previewEl}
+        </TabsContent>
+        <TabsContent value="config" className="min-h-0 flex-1 overflow-hidden">
+          {configEl}
+        </TabsContent>
+      </Tabs>
+    )
+  }
+
+  // Desktop: horizontal resizable panels
   return (
     <ResizablePanelGroup direction="horizontal" className="h-full w-full">
       {/* ----------------------- LEFT: Template Gallery ----------------------- */}
       <ResizablePanel defaultSize={20} minSize={14} className="bg-background">
-        <div className="flex h-full flex-col">
-          <div className="border-b px-4 py-3">
-            <h3 className="text-sm font-semibold">{t('echarts.templateGallery')}</h3>
-            <p className="text-xs text-muted-foreground mt-1">
-              Click a template to apply it; the config panel refreshes accordingly.
-            </p>
-          </div>
-          <ScrollArea className="flex-1">
-            <div className="grid grid-cols-1 gap-2 p-3">
-              {ECHARTS_TEMPLATE_CATEGORIES.map((cat) => {
-                const items = ECHARTS_TEMPLATES.filter((t) => t.category === cat.id)
-                if (items.length === 0) return null
-                return (
-                  <div key={cat.id} className="space-y-2">
-                    <div className="px-1 pt-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                      {cat.label}
-                    </div>
-                    {items.map((tpl) => {
-                      const Icon = iconForType(tpl.type)
-                      const active = currentTemplateId === tpl.id
-                      return (
-                        <button
-                          key={tpl.id}
-                          type="button"
-                          onClick={() => applyTemplate(tpl)}
-                          className={cn(
-                            'group flex w-full items-start gap-3 rounded-lg border bg-card p-3 text-left transition-all hover:border-primary/50 hover:shadow-sm',
-                            active && 'border-primary',
-                          )}
-                          title={tpl.description}
-                        >
-                          <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-primary">
-                            <Icon className="size-4" />
-                          </span>
-                          <span className="flex flex-col gap-0.5 overflow-hidden">
-                            <span className="truncate text-sm font-medium">{tpl.name}</span>
-                            <span className="line-clamp-2 text-[11px] text-muted-foreground">
-                              {tpl.description}
-                            </span>
-                          </span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                )
-              })}
-            </div>
-          </ScrollArea>
-        </div>
+        {templateGalleryEl}
       </ResizablePanel>
 
       <ResizableHandle withHandle />
 
       {/* ----------------------- MIDDLE: Preview ----------------------- */}
       <ResizablePanel defaultSize={40} minSize={30} className="bg-muted/20">
-        <div className="flex h-full flex-col">
-          {/* Toolbar — unified across all editors (zoom left, export right) */}
-          <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
-            <div className="flex items-center gap-1.5">
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={handleZoomOut}
-                aria-label="Zoom out"
-                className="h-7 w-7 p-0"
-              >
-                <ZoomOut className="h-4 w-4" />
-              </Button>
-              <span className="w-12 text-center text-xs tabular-nums text-muted-foreground">
-                {Math.round(zoom * 100)}%
-              </span>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={handleZoomIn}
-                aria-label="Zoom in"
-                className="h-7 w-7 p-0"
-              >
-                <ZoomIn className="h-4 w-4" />
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={handleReset}
-                aria-label="Reset zoom"
-                className="h-7 w-7 p-0"
-              >
-                <Maximize className="h-4 w-4" />
-              </Button>
-            </div>
-            <div className="flex items-center gap-1">
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={handleDownloadSvg}
-                className="h-7 gap-1 px-2 text-xs"
-              >
-                <Download className="h-3 w-3" /> SVG
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={handleDownloadPNG}
-                className="h-7 gap-1 px-2 text-xs"
-              >
-                <Download className="h-3 w-3" /> PNG
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={handleCopyAsMarkdown}
-                className="h-7 gap-1 px-2 text-xs"
-              >
-                <Copy className="h-3 w-3" /> Markdown
-              </Button>
-            </div>
-          </div>
-
-          {/* Canvas */}
-          <div
-            ref={previewRef}
-            className="relative flex-1 overflow-auto"
-            style={{ background: '#fff' }}
-          >
-            <div
-              style={{
-                transform: `scale(${zoom})`,
-                transformOrigin: 'center center',
-                transition: 'transform 0.15s ease',
-                width: '100%',
-                height: '100%',
-              }}
-            >
-              <div
-                ref={chartContainerRef}
-                style={{ width: '100%', height: '100%', minHeight: 400 }}
-              />
-            </div>
-            {!echartsLoaded && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/80 backdrop-blur-sm">
-                <Loader2 className="size-6 animate-spin text-primary" />
-                <span className="text-sm text-muted-foreground">
-                  {t('app.loadingLib')}
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
+        {previewEl}
       </ResizablePanel>
 
       <ResizableHandle withHandle />
 
       {/* ----------------------- RIGHT: Config Form ----------------------- */}
       <ResizablePanel defaultSize={40} minSize={30} className="bg-background">
-        <div className="flex h-full flex-col">
-          <div className="border-b px-4 py-3">
-            <h3 className="text-sm font-semibold">{t('echarts.configPanel')}</h3>
-            <p className="text-xs text-muted-foreground mt-1">
-              All changes sync to the preview instantly — no save button needed.
-            </p>
-          </div>
-          <ScrollArea className="flex-1">
-            <div className="p-3">
-              <Accordion
-                type="multiple"
-                defaultValue={['type', 'title', 'data', 'style']}
-                className="w-full"
-              >
-                {/* 1. Chart type */}
-                <AccordionItem value="type">
-                  <AccordionTrigger>
-                    <span className="flex items-center gap-2 font-medium">
-                      <BarChart3 className="size-4 text-primary" /> {t('echarts.chartType')}
-                    </span>
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">Switching type resets sample data but keeps the title</Label>
-                      <Select value={currentTemplateId} onValueChange={onTemplateIdChange}>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Select chart type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {ECHARTS_TEMPLATE_CATEGORIES.map((cat) => {
-                            const items = ECHARTS_TEMPLATES.filter((t) => t.category === cat.id)
-                            if (items.length === 0) return null
-                            return (
-                              <SelectGroup key={cat.id}>
-                                <SelectLabel>{cat.label}</SelectLabel>
-                                {items.map((tpl) => (
-                                  <SelectItem key={tpl.id} value={tpl.id}>
-                                    {tpl.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectGroup>
-                            )
-                          })}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-
-                {/* 2. Title */}
-                <AccordionItem value="title">
-                  <AccordionTrigger>
-                    <span className="flex items-center gap-2 font-medium">
-                      <AlignLeft className="size-4 text-primary" /> {t('echarts.title_section')}
-                    </span>
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <div className="space-y-3">
-                      <div className="space-y-1.5">
-                        <Label htmlFor="title-text">{t('echarts.mainTitle')}</Label>
-                        <Input
-                          id="title-text"
-                          value={local.title?.text ?? ''}
-                          onChange={(e) =>
-                            patch({ title: { ...local.title, text: e.target.value } })
-                          }
-                          placeholder="e.g. Quarterly Sales Comparison"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label htmlFor="title-sub">{t('echarts.subtitle')}</Label>
-                        <Input
-                          id="title-sub"
-                          value={local.title?.subtext ?? ''}
-                          onChange={(e) =>
-                            patch({ title: { ...local.title, subtext: e.target.value } })
-                          }
-                          placeholder="Optional, e.g. unit / source"
-                        />
-                      </div>
-                      <p className="text-xs text-muted-foreground">Main and sub titles appear centered at the top of the preview.</p>
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-
-                {/* 3. Data */}
-                <AccordionItem value="data">
-                  <AccordionTrigger>
-                    <span className="flex items-center gap-2 font-medium">
-                      <Plus className="size-4 text-primary" /> {t('echarts.data')}
-                    </span>
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <DataEditor
-                      config={local}
-                      patch={patch}
-                      onRandom={handleRandomData}
-                    />
-                  </AccordionContent>
-                </AccordionItem>
-
-                {/* 4. Style */}
-                <AccordionItem value="style">
-                  <AccordionTrigger>
-                    <span className="flex items-center gap-2 font-medium">
-                      <Activity className="size-4 text-primary" /> {t('echarts.style')}
-                    </span>
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <StyleEditor config={local} patch={patch} />
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
-            </div>
-          </ScrollArea>
-        </div>
+        {configEl}
       </ResizablePanel>
     </ResizablePanelGroup>
   )

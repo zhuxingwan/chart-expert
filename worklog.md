@@ -396,3 +396,85 @@ Stage Summary:
 - ✅ URL `?chart=` param works: preselect on load, updates on template switch (both main picker and editor gallery), browser back/forward support
 - ✅ Scrollbar issues fixed (config panels, template galleries, data editors all scroll properly)
 - ✅ Lint passes (0 errors), dev server stable, all editors verified in browser
+
+---
+
+Task ID: MOBILE-SCROLL-FIX
+Agent: main
+Task: Fix scrollbar/overflow issues + make the chart workshop mobile-friendly
+
+Work Log:
+
+### Part 1 — Template Picker Dialog scrollbar fixes
+File: `src/components/chart-tool/template-picker-dialog.tsx`
+- Dialog height changed from `h-[85vh]` to `h-[90vh] max-h-[90vh] w-full max-w-6xl` (taller + full-width on mobile).
+- Category chips bar: added `max-h-[80px] overflow-y-auto` so a long chip list scrolls vertically instead of pushing the grid off-screen.
+- Grid `ScrollArea`: changed `className="flex-1"` → `className="min-h-0 flex-1"`. Without `min-h-0` the flex child refused to shrink below its content size, so the ScrollArea's viewport never actually overflowed — that was the root cause of "content cut off, no scrollbar".
+- Grid container `p-6` kept; column counts unchanged (`grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5`).
+
+### Part 2 — Mobile-friendly editor layouts
+Files: `echarts-editor.tsx`, `mermaid-editor.tsx`, `infographic-editor.tsx`
+
+Common pattern: each editor now reads `const isMobile = useIsMobile()` (`@/hooks/use-mobile`, breakpoint 768px) and conditionally renders EITHER:
+- **Mobile**: a vertical `<Tabs>` layout (`TabsList` on top with `grid-cols-N`, three/four `TabsContent` panels each `min-h-0 flex-1 overflow-hidden`)
+- **Desktop**: the original `<ResizablePanelGroup direction="horizontal">` layout (unchanged)
+
+The complex panel contents were extracted as JSX variables (`templateGalleryEl`, `previewEl`, `configEl`) and rendered in **both** layouts without duplicating logic. Because `useIsMobile()` returns a single boolean and only one branch is mounted at a time, `previewRef` / `chartContainerRef` always point at the actually-visible element — no ref conflicts.
+
+Tabs:
+- **ECharts**: 3 tabs — "Template Gallery" / "Preview" (default) / "Config Panel"
+- **Mermaid**: 2 tabs — "Code Editor" / "Preview" (default) — since the left panel bundles templates+code+theme+cheatsheet
+- **Infographic**: 3 tabs — "Infographic Templates" / "Preview" (default) / "Config"
+
+ECharts-specific lifecycle fix:
+- The chart-instance `useEffect(... , [])` (ResizeObserver setup + dispose) now depends on `[isMobile]` so the chart rebinds to whichever container mounts after a layout switch.
+- Added a follow-up `useEffect` keyed on `[isMobile, renderChart, echartsLoaded]` that schedules a `renderChart()` 50ms after every layout switch — guarantees the freshly mounted container receives its option.
+- `ScrollArea` instances inside the extracted sections got `min-h-0 flex-1` (was `flex-1`) for the same flex-shrink reason as Part 1.
+
+### Part 3 — Mobile-friendly header
+File: `src/components/chart-tool/app-header.tsx`
+- Actions container: added `flex-wrap justify-end` so buttons wrap to a second row on very narrow screens.
+- All action buttons (`New` / `AI` / `Load` / `Save`) get `h-8 gap-1.5 px-2 sm:px-3` — slimmer on mobile (icon-only via the existing `hidden sm:inline`), normal padding on `sm+`.
+- `LanguageSwitcher` already shows just a globe on mobile — unchanged.
+
+### Part 4 — Mobile-friendly main container
+File: `src/components/chart-tool/chart-tool-app.tsx`
+- Editor container changed from `h-[calc(100vh-150px)] min-h-[520px]` → `h-[calc(100vh-140px)] min-h-[400px]`.
+- The lower minimum height gives mobile users more vertical room and matches the new header height after Part 3.
+
+### Part 5 — Template cards on mobile
+- The grid `grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5` was already mobile-friendly (2 columns) — no change needed; cards remain tappable at 2-per-row on phones.
+
+Stage Summary:
+- `bun run lint` — 0 errors, 0 warnings.
+- Dev server (port 3000) — verified with curl: `/`, `/?chart=echarts:bar`, `/?chart=mermaid:flowchart`, `/?chart=infographic:list-grid-compact-card` all return HTTP 200 with no runtime errors in `dev.log`.
+- All three editors now have:
+  - Properly scrolling config/template panels (the `min-h-0 flex-1` fix)
+  - A vertical tab layout on screens < 768px that lets users see the preview at full width
+  - The horizontal resizable 3-panel layout preserved on desktop
+- The template picker dialog now scrolls correctly and uses more vertical space on mobile.
+- Header buttons shrink to icon-only on mobile and wrap to a second row if needed.
+
+---
+Task ID: FIX-TOAST+MOBILE+URL-LANG
+Agent: main
+Task: Fix markdown copy toast, mobile-friendly UI, template picker scrollbar, URL lang sync
+
+Work Log:
+- **Toast fix**: The layout only had the radix `<Toaster>` (from `@/components/ui/toaster`), but editors use `sonner`'s `toast.success()`. Added `<SonnerToaster position="top-center" richColors closeButton />` from `@/components/ui/sonner` to the layout. Toasts now display correctly.
+- **Markdown copy toast**: Changed all three editors' `handleCopyAsMarkdown` to use `t('toasts.markdownCopied')` ("Markdown copied to clipboard" / "Markdown 已复制到剪贴板") instead of the generic `t('toasts.copied')`. Added the `markdownCopied` key to en.json and zh.json.
+- **Mobile-friendly layout** (via subagent): All three editors now detect mobile (< 768px) via `useIsMobile()` and render a vertical `<Tabs>` layout (Template / Preview / Config) instead of horizontal resizable panels. Desktop keeps the 3-panel resizable layout. Header buttons are icon-only on mobile with `flex-wrap`. Main container height adjusted to `min-h-[400px]`.
+- **Template picker scrollbar fix** (via subagent): The `ScrollArea` in the template picker dialog was missing `min-h-0` (critical for flex children to scroll). Fixed to `min-h-0 flex-1`. Category chips bar got `max-h-[80px] overflow-y-auto`. Dialog height changed to `h-[90vh]`.
+- **URL lang sync**: Added `?lang=` URL parameter support to the i18n provider:
+  - On load: priority is URL `?lang=` > localStorage > browser detection. If no `?lang=` in URL, adds it automatically for shareability.
+  - On language switch: updates URL via `history.replaceState`.
+  - Browser back/forward: `popstate` listener updates locale from URL.
+  - Example: `?lang=zh&chart=echarts:bar` loads Chinese UI with bar chart.
+
+Stage Summary:
+- ✅ Markdown copy shows success toast ("Markdown copied to clipboard" / "Markdown 已复制到剪贴板")
+- ✅ Mobile layout: vertical tabs (Template/Preview/Config) on narrow screens, resizable panels on desktop
+- ✅ Template picker dialog scrolls properly (min-h-0 fix)
+- ✅ URL `?lang=` syncs with language switcher (e.g. `?lang=zh` → Chinese UI)
+- ✅ Both `?lang=` and `?chart=` work together (e.g. `?lang=zh&chart=echarts:bar`)
+- ✅ Lint passes, dev server stable, all features verified in browser

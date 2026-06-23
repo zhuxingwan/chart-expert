@@ -34,6 +34,8 @@ import {
   ResizablePanel,
   ResizableHandle,
 } from '@/components/ui/resizable'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
@@ -100,6 +102,7 @@ export interface MermaidEditorProps {
 
 export function MermaidEditor({ config, onChange, onTemplateChange, previewRef }: MermaidEditorProps) {
   const t = useT()
+  const isMobile = useIsMobile()
   const [local, setLocal] = React.useState<MermaidConfig>(() =>
     config
       ? deepClone(config)
@@ -167,151 +170,187 @@ export function MermaidEditor({ config, onChange, onTemplateChange, previewRef }
     }
   }
 
+  // Extract the left (edit) and right (preview) sections as JSX variables so
+  // they can be rendered in EITHER the mobile tab layout OR the desktop
+  // resizable-panel layout — without duplicating the inner logic. Only one
+  // layout is in the DOM at a time (driven by `useIsMobile`), so the preview
+  // ref always points at the actually-visible element.
+  const editorEl = (
+    <div className="flex h-full flex-col">
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="space-y-4 p-4">
+          {/* Template gallery */}
+          <section>
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-semibold">{t('mermaid.templateGallery')}</h3>
+              <span className="text-xs text-muted-foreground">
+                {MERMAID_TEMPLATES.length} templates
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {MERMAID_TEMPLATES.map((tpl) => {
+                const Icon = ICON_MAP[tpl.icon] ?? Workflow
+                const active = local.type === tpl.type
+                return (
+                  <button
+                    key={tpl.id}
+                    onClick={() => applyTemplate(tpl)}
+                    className={cn(
+                      'flex flex-col items-center gap-1.5 rounded-lg border p-2.5 text-center transition-all',
+                      active
+                        ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                        : 'hover:border-foreground/30 hover:bg-muted/50',
+                    )}
+                    title={tpl.description}
+                  >
+                    <Icon
+                      className={cn(
+                        'h-5 w-5',
+                        active ? 'text-primary' : 'text-muted-foreground',
+                      )}
+                    />
+                    <span className="text-xs font-medium">{tpl.name}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+
+          {/* Code editor */}
+          <section>
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-semibold">{t('mermaid.codeEditor')}</h3>
+              <div className="flex gap-1">
+                <Button size="sm" variant="ghost" onClick={handleFormat} className="h-7 gap-1 px-2 text-xs">
+                  <Code2 className="h-3 w-3" /> {t('mermaid.format')}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={handleCopyCode} className="h-7 gap-1 px-2 text-xs">
+                  <Copy className="h-3 w-3" /> {t('mermaid.copyCode')}
+                </Button>
+              </div>
+            </div>
+            <Textarea
+              value={local.code}
+              onChange={(e) => update({ code: e.target.value })}
+              className="max-h-[420px] min-h-[220px] resize-y font-mono text-xs leading-relaxed"
+              spellCheck={false}
+              placeholder="Type Mermaid code here…"
+            />
+            <div className="mt-1 flex items-start gap-1.5 rounded-md bg-amber-50 p-2 text-[11px] text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+              <Sparkles className="mt-0.5 h-3 w-3 shrink-0" />
+              <span>{t('mermaid.aiHint')}</span>
+            </div>
+          </section>
+
+          {/* Theme + background */}
+          <section className="grid grid-cols-2 gap-3">
+            <div className="grid gap-1.5">
+              <Label className="text-xs">{t('mermaid.theme')}</Label>
+              <Select
+                value={local.theme}
+                onValueChange={(v) => update({ theme: v })}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MERMAID_THEMES.map((th) => (
+                    <SelectItem key={th.id} value={th.id} className="text-xs">
+                      {th.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-1.5">
+              <Label className="text-xs">{t('mermaid.background')}</Label>
+              <div className="flex items-center gap-1.5">
+                <Input
+                  type="color"
+                  value={local.background}
+                  onChange={(e) => update({ background: e.target.value })}
+                  className="h-8 w-10 cursor-pointer p-1"
+                />
+                <Input
+                  value={local.background}
+                  onChange={(e) => update({ background: e.target.value })}
+                  className="h-8 flex-1 font-mono text-xs"
+                />
+              </div>
+            </div>
+          </section>
+
+          {/* Cheat sheet */}
+          <section>
+            <Accordion type="multiple" className="w-full">
+              <AccordionItem value="cheat" className="border rounded-md px-3">
+                <AccordionTrigger className="text-sm hover:no-underline">
+                  {t('mermaid.cheatsheet')}
+                </AccordionTrigger>
+                <AccordionContent>
+                  <div className="space-y-3 py-1">
+                    {SYNTAX_CHEATSHEET.map((c) => (
+                      <div key={c.type}>
+                        <div className="mb-1 text-xs font-semibold text-foreground">
+                          {c.title}
+                        </div>
+                        <pre className="overflow-auto rounded bg-muted p-2 text-[10px] leading-relaxed">
+{c.lines.join('\n')}
+                        </pre>
+                      </div>
+                    ))}
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </section>
+        </div>
+      </ScrollArea>
+    </div>
+  )
+
+  const previewEl = (
+    <PreviewPanel
+      config={local}
+      previewRef={previewRef}
+    />
+  )
+
+  if (isMobile) {
+    // Mobile: vertical tab layout — Edit | Preview
+    return (
+      <Tabs defaultValue="preview" className="flex h-full w-full flex-col gap-0">
+        <TabsList className="grid h-10 w-full shrink-0 grid-cols-2 rounded-none border-b">
+          <TabsTrigger value="edit" className="text-xs">
+            {t('mermaid.codeEditor')}
+          </TabsTrigger>
+          <TabsTrigger value="preview" className="text-xs">
+            Preview
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="edit" className="min-h-0 flex-1 overflow-hidden">
+          {editorEl}
+        </TabsContent>
+        <TabsContent value="preview" className="min-h-0 flex-1 overflow-hidden">
+          {previewEl}
+        </TabsContent>
+      </Tabs>
+    )
+  }
+
+  // Desktop: horizontal resizable panels
   return (
     <ResizablePanelGroup direction="horizontal" className="h-full">
       {/* ---------------- Left: Configuration ---------------- */}
       <ResizablePanel defaultSize={45} minSize={28} maxSize={60}>
-        <div className="flex h-full flex-col">
-        <ScrollArea className="min-h-0 flex-1">
-          <div className="space-y-4 p-4">
-            {/* Template gallery */}
-            <section>
-              <div className="mb-2 flex items-center justify-between">
-                <h3 className="text-sm font-semibold">{t('mermaid.templateGallery')}</h3>
-                <span className="text-xs text-muted-foreground">
-                  {MERMAID_TEMPLATES.length} templates
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {MERMAID_TEMPLATES.map((tpl) => {
-                  const Icon = ICON_MAP[tpl.icon] ?? Workflow
-                  const active = local.type === tpl.type
-                  return (
-                    <button
-                      key={tpl.id}
-                      onClick={() => applyTemplate(tpl)}
-                      className={cn(
-                        'flex flex-col items-center gap-1.5 rounded-lg border p-2.5 text-center transition-all',
-                        active
-                          ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                          : 'hover:border-foreground/30 hover:bg-muted/50',
-                      )}
-                      title={tpl.description}
-                    >
-                      <Icon
-                        className={cn(
-                          'h-5 w-5',
-                          active ? 'text-primary' : 'text-muted-foreground',
-                        )}
-                      />
-                      <span className="text-xs font-medium">{tpl.name}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </section>
-
-            {/* Code editor */}
-            <section>
-              <div className="mb-2 flex items-center justify-between">
-                <h3 className="text-sm font-semibold">{t('mermaid.codeEditor')}</h3>
-                <div className="flex gap-1">
-                  <Button size="sm" variant="ghost" onClick={handleFormat} className="h-7 gap-1 px-2 text-xs">
-                    <Code2 className="h-3 w-3" /> {t('mermaid.format')}
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={handleCopyCode} className="h-7 gap-1 px-2 text-xs">
-                    <Copy className="h-3 w-3" /> {t('mermaid.copyCode')}
-                  </Button>
-                </div>
-              </div>
-              <Textarea
-                value={local.code}
-                onChange={(e) => update({ code: e.target.value })}
-                className="max-h-[420px] min-h-[220px] resize-y font-mono text-xs leading-relaxed"
-                spellCheck={false}
-                placeholder="Type Mermaid code here…"
-              />
-              <div className="mt-1 flex items-start gap-1.5 rounded-md bg-amber-50 p-2 text-[11px] text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
-                <Sparkles className="mt-0.5 h-3 w-3 shrink-0" />
-                <span>{t('mermaid.aiHint')}</span>
-              </div>
-            </section>
-
-            {/* Theme + background */}
-            <section className="grid grid-cols-2 gap-3">
-              <div className="grid gap-1.5">
-                <Label className="text-xs">{t('mermaid.theme')}</Label>
-                <Select
-                  value={local.theme}
-                  onValueChange={(v) => update({ theme: v })}
-                >
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {MERMAID_THEMES.map((th) => (
-                      <SelectItem key={th.id} value={th.id} className="text-xs">
-                        {th.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-1.5">
-                <Label className="text-xs">{t('mermaid.background')}</Label>
-                <div className="flex items-center gap-1.5">
-                  <Input
-                    type="color"
-                    value={local.background}
-                    onChange={(e) => update({ background: e.target.value })}
-                    className="h-8 w-10 cursor-pointer p-1"
-                  />
-                  <Input
-                    value={local.background}
-                    onChange={(e) => update({ background: e.target.value })}
-                    className="h-8 flex-1 font-mono text-xs"
-                  />
-                </div>
-              </div>
-            </section>
-
-            {/* Cheat sheet */}
-            <section>
-              <Accordion type="multiple" className="w-full">
-                <AccordionItem value="cheat" className="border rounded-md px-3">
-                  <AccordionTrigger className="text-sm hover:no-underline">
-                    {t('mermaid.cheatsheet')}
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <div className="space-y-3 py-1">
-                      {SYNTAX_CHEATSHEET.map((c) => (
-                        <div key={c.type}>
-                          <div className="mb-1 text-xs font-semibold text-foreground">
-                            {c.title}
-                          </div>
-                          <pre className="overflow-auto rounded bg-muted p-2 text-[10px] leading-relaxed">
-{c.lines.join('\n')}
-                          </pre>
-                        </div>
-                      ))}
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
-            </section>
-          </div>
-        </ScrollArea>
-        </div>
+        {editorEl}
       </ResizablePanel>
 
       <ResizableHandle withHandle />
 
       {/* ---------------- Right: Preview ---------------- */}
       <ResizablePanel defaultSize={55} minSize={35}>
-        <PreviewPanel
-          config={local}
-          previewRef={previewRef}
-        />
+        {previewEl}
       </ResizablePanel>
     </ResizablePanelGroup>
   )
@@ -467,7 +506,7 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
       // For mermaid, the markdown fence wraps the mermaid SOURCE code (not the SVG)
       const markdown = '```mermaid\n' + config.code + '\n```'
       await navigator.clipboard.writeText(markdown)
-      toast.success(t('toasts.copied'))
+      toast.success(t('toasts.markdownCopied'))
     } catch {
       toast.error(t('toasts.copyFailed'))
     }

@@ -107,7 +107,7 @@ export function TemplatePickerDialog({ open, onOpenChange, onPick }: Props) {
         }
       }}
     >
-      <DialogContent className="flex h-[85vh] max-w-6xl flex-col gap-0 p-0 sm:rounded-xl">
+      <DialogContent className="flex h-[90vh] max-h-[90vh] w-full max-w-6xl flex-col gap-0 p-0 sm:rounded-xl">
         <DialogHeader className="border-b px-6 py-4">
           <DialogTitle className="flex items-center gap-2 text-lg">
             {t('templatePicker.title')}
@@ -133,7 +133,7 @@ export function TemplatePickerDialog({ open, onOpenChange, onPick }: Props) {
 
         {/* Category filter (hidden when searching) */}
         {!filtered && (
-          <div className="flex flex-wrap gap-1.5 border-b px-6 py-2.5">
+          <div className="flex max-h-[80px] flex-wrap gap-1.5 overflow-y-auto border-b px-6 py-2.5">
             <CategoryChip
               active={activeCat === 'all'}
               onClick={() => setActiveCat('all')}
@@ -152,7 +152,7 @@ export function TemplatePickerDialog({ open, onOpenChange, onPick }: Props) {
         )}
 
         {/* Grid */}
-        <ScrollArea className="flex-1">
+        <ScrollArea className="min-h-0 flex-1">
           <div className="p-6">
             {filtered ? (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">

@@ -194,6 +194,7 @@
     "loaded": "Loaded: {title}",
     "deleted": "Deleted",
     "copied": "Copied",
+    "markdownCopied": "Markdown copied to clipboard",
     "formatDone": "Code formatted",
     "exported": "Exported",
     "exportFailed": "Export failed: {error}",

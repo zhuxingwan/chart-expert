@@ -40,12 +40,12 @@ export function AppHeader({
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
           <Button
             variant="outline"
             size="sm"
             onClick={onNewChart}
-            className="gap-1.5"
+            className="h-8 gap-1.5 px-2 sm:px-3"
           >
             <Plus className="h-4 w-4" />
             <span className="hidden sm:inline">{t('actions.new')}</span>
@@ -54,17 +54,17 @@ export function AppHeader({
             variant="outline"
             size="sm"
             onClick={onAISuggest}
-            className="gap-1.5"
+            className="h-8 gap-1.5 px-2 sm:px-3"
           >
             <Sparkles className="h-4 w-4 text-amber-500" />
             <span className="hidden sm:inline">{t('actions.aiSuggest')}</span>
             <span className="sm:hidden">{t('actions.ai')}</span>
           </Button>
-          <Button variant="outline" size="sm" onClick={onLoad} className="gap-1.5">
+          <Button variant="outline" size="sm" onClick={onLoad} className="h-8 gap-1.5 px-2 sm:px-3">
             <FolderOpen className="h-4 w-4" />
             <span className="hidden sm:inline">{t('actions.load')}</span>
           </Button>
-          <Button size="sm" onClick={onSave} className="gap-1.5">
+          <Button size="sm" onClick={onSave} className="h-8 gap-1.5 px-2 sm:px-3">
             <Save className="h-4 w-4" />
             <span className="hidden sm:inline">{t('actions.save')}</span>
           </Button>

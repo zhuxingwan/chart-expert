@@ -235,7 +235,7 @@ export function ChartToolApp() {
 
         <main className="flex-1 w-full">
           <div className="mx-auto h-full w-full max-w-[1600px] p-3 sm:p-4">
-            <div className="h-[calc(100vh-150px)] min-h-[520px] w-full rounded-xl border bg-background shadow-sm overflow-hidden">
+            <div className="h-[calc(100vh-140px)] min-h-[400px] w-full rounded-xl border bg-background shadow-sm overflow-hidden">
               {!doc ? (
                 <EmptyState onPick={() => setPickerOpen(true)} />
               ) : doc.engine === 'echarts' ? (

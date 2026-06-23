@@ -1,0 +1,1282 @@
+     1→     1→'use client'
+     2→     2→
+     3→     3→import * as React from 'react'
+     4→     4→import { toast } from 'sonner'
+     5→     5→import { useVizLibs, getECharts } from '@/lib/viz-libs/cdn-loader'
+     6→     6→import {
+     7→     7→  BarChart3,
+     8→     8→  LineChart as LineChartIcon,
+     9→     9→  PieChart as PieChartIcon,
+    10→    10→  Activity,
+    11→    11→  Target,
+    12→    12→  Triangle,
+    13→    13→  Gauge,
+    14→    14→  Grid3x3,
+    15→    15→  Plus,
+    16→    16→  Trash2,
+    17→    17→  Shuffle,
+    18→    18→  Download,
+    19→    19→  Copy,
+    20→    20→  AlignLeft,
+    21→    21→  Loader2,
+    22→    22→  ZoomIn,
+    23→    23→  ZoomOut,
+    24→    24→  Maximize,
+    25→    25→} from 'lucide-react'
+    26→    26→
+    27→    27→import { cn } from '@/lib/utils'
+    28→    28→import type { EChartsConfig } from '@/types/chart'
+    29→    29→import { useT } from '@/lib/i18n'
+    30→    30→import {
+    31→    31→  ResizablePanelGroup,
+    32→    32→  ResizablePanel,
+    33→    33→  ResizableHandle,
+    34→    34→} from '@/components/ui/resizable'
+    35→    35→import {
+    36→    36→  Accordion,
+    37→    37→  AccordionItem,
+    38→    38→  AccordionTrigger,
+    39→    39→  AccordionContent,
+    40→    40→} from '@/components/ui/accordion'
+    41→    41→import {
+    42→    42→  Select,
+    43→    43→  SelectTrigger,
+    44→    44→  SelectValue,
+    45→    45→  SelectContent,
+    46→    46→  SelectGroup,
+    47→    47→  SelectItem,
+    48→    48→  SelectLabel,
+    49→    49→} from '@/components/ui/select'
+    50→    50→import { Input } from '@/components/ui/input'
+    51→    51→import { Label } from '@/components/ui/label'
+    52→    52→import { Switch } from '@/components/ui/switch'
+    53→    53→import { Slider } from '@/components/ui/slider'
+    54→    54→import { Button } from '@/components/ui/button'
+    55→    55→import { ScrollArea } from '@/components/ui/scroll-area'
+    56→    56→import {
+    57→    57→  ECHARTS_TEMPLATES,
+    58→    58→  ECHARTS_TEMPLATE_CATEGORIES,
+    59→    59→  TEMPLATE_BY_ID,
+    60→    60→  DEFAULT_TEMPLATE,
+    61→    61→  THEME_OPTIONS,
+    62→    62→  type EChartsTemplate,
+    63→    63→} from './echarts-templates'
+    64→    64→import { buildEChartsOption } from './echarts-option-builder'
+    65→    65→
+    66→    66→// ECharts is loaded from CDN via <VizLibLoader>. getECharts() returns
+    67→    67→// window.echarts — the FULL bundle, with every chart type and component
+    68→    68→// already registered. No `echarts.use([...])` registration is needed here.
+    69→    69→// Themes shipped in the CDN build (dark / vintage / macarons) are passed
+    70→    70→// directly to echarts.init(dom, themeName); unknown names fall back silently.
+    71→    71→
+    72→    72→// ---------------------------------------------------------------------------
+    73→    73→// Helpers
+    74→    74→// ---------------------------------------------------------------------------
+    75→    75→
+    76→    76→function deepClone<T>(v: T): T {
+    77→    77→  if (typeof structuredClone === 'function') return structuredClone(v)
+    78→    78→  return JSON.parse(JSON.stringify(v)) as T
+    79→    79→}
+    80→    80→
+    81→    81→function configKey(c: EChartsConfig | null): string {
+    82→    82→  if (!c) return ''
+    83→    83→  return JSON.stringify(c)
+    84→    84→}
+    85→    85→
+    86→    86→/** Map a template's type to a lucide icon. */
+    87→    87→function iconForType(type: string) {
+    88→    88→  switch (type) {
+    89→    89→    case 'bar':
+    90→    90→      return BarChart3
+    91→    91→    case 'line':
+    92→    92→      return LineChartIcon
+    93→    93→    case 'pie':
+    94→    94→      return PieChartIcon
+    95→    95→    case 'scatter':
+    96→    96→      return Activity
+    97→    97→    case 'radar':
+    98→    98→      return Target
+    99→    99→    case 'funnel':
+   100→   100→      return Triangle
+   101→   101→    case 'gauge':
+   102→   102→      return Gauge
+   103→   103→    case 'heatmap':
+   104→   104→      return Grid3x3
+   105→   105→    default:
+   106→   106→      return BarChart3
+   107→   107→  }
+   108→   108→}
+   109→   109→
+   110→   110→// ---------------------------------------------------------------------------
+   111→   111→// Props
+   112→   112→// ---------------------------------------------------------------------------
+   113→   113→
+   114→   114→export interface EChartsEditorProps {
+   115→   115→  config: EChartsConfig | null
+   116→   116→  onChange: (cfg: EChartsConfig) => void
+   117→   117→  onTemplateChange?: (templateId: string) => void
+   118→   118→  previewRef: React.RefObject<HTMLDivElement | null>
+   119→   119→}
+   120→   120→
+   121→   121→// ===========================================================================
+   122→   122→// Component
+   123→   123→// ===========================================================================
+   124→   124→
+   125→   125→export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }: EChartsEditorProps) {
+   126→   126→  const t = useT()
+   127→   127→  // CDN-loaded echarts — status flips to 'loaded' once the <script> tag from
+   128→   128→  // VizLibLoader finishes. We render a loading placeholder until then.
+   129→   129→  const { status } = useVizLibs()
+   130→   130→  const echartsLoaded = status.echarts === 'loaded'
+   131→   131→
+   132→   132→  // Local "live" config — the editor's source of truth between parent updates.
+   133→   133→  const [local, setLocal] = React.useState<EChartsConfig>(() =>
+   134→   134→    config ? deepClone(config) : deepClone(DEFAULT_TEMPLATE.defaultConfig),
+   135→   135→  )
+   136→   136→
+   137→   137→  // Track which template is currently applied so the chart-type Select can show
+   138→   138→  // the right value. Initialized from the first template; updated whenever the
+   139→   139→  // user picks a template from the gallery or dropdown. When the parent pushes
+   140→   140→  // a config (AI suggestion / loaded chart) we best-effort match by template id
+   141→   141→  // — if we can't, we fall back to the first template whose type matches.
+   142→   142→  const [currentTemplateId, setCurrentTemplateId] = React.useState<string>(
+   143→   143→    DEFAULT_TEMPLATE.id,
+   144→   144→  )
+   145→   145→
+   146→   146→  // Track the last config we accepted from props to avoid feedback loops.
+   147→   147→  const lastAppliedKey = React.useRef<string>(configKey(config))
+   148→   148→
+   149→   149→  // Accept new config from the parent (AI suggestion / loaded chart) — only
+   150→   150→  // when the JSON actually differs from what we last applied.
+   151→   151→  React.useEffect(() => {
+   152→   152→    const incomingKey = configKey(config)
+   153→   153→    if (incomingKey && incomingKey !== lastAppliedKey.current) {
+   154→   154→      lastAppliedKey.current = incomingKey
+   155→   155→      const next = deepClone(config as EChartsConfig)
+   156→   156→      setLocal(next)
+   157→   157→      // Best-effort template match by exact defaultConfig equality, then by type.
+   158→   158→      const exact = ECHARTS_TEMPLATES.find(
+   159→   159→        (t) => configKey(t.defaultConfig) === incomingKey,
+   160→   160→      )
+   161→   161→      if (exact) {
+   162→   162→        setCurrentTemplateId(exact.id)
+   163→   163→      } else {
+   164→   164→        const byType = ECHARTS_TEMPLATES.find((t) => t.type === next.type)
+   165→   165→        if (byType) setCurrentTemplateId(byType.id)
+   166→   166→      }
+   167→   167→    }
+   168→   168→  }, [config])
+   169→   169→
+   170→   170→  // Push local edits up to the parent.
+   171→   171→  const commit = React.useCallback(
+   172→   172→    (next: EChartsConfig) => {
+   173→   173→      setLocal(next)
+   174→   174→      const key = configKey(next)
+   175→   175→      lastAppliedKey.current = key
+   176→   176→      onChange(next)
+   177→   177→    },
+   178→   178→    [onChange],
+   179→   179→  )
+   180→   180→
+   181→   181→  // ----- ECharts instance -----
+   182→   182→  const chartContainerRef = React.useRef<HTMLDivElement | null>(null)
+   183→   183→  // `any` because echarts is externalized to a CDN global — the ECharts TS
+   184→   184→  // types aren't resolvable at build time. The CDN full build exposes all
+   185→   185→  // runtime methods we need (init / setOption / dispose / resize / getDataURL).
+   186→   186→  const chartRef = React.useRef<any>(null)
+   187→   187→  const currentTheme = React.useRef<string>('default')
+   188→   188→  const resizeObsRef = React.useRef<ResizeObserver | null>(null)
+   189→   189→
+   190→   190→  // Build the option with useMemo so re-renders are cheap.
+   191→   191→  const option = React.useMemo(() => buildEChartsOption(local), [local])
+   192→   192→
+   193→   193→  const renderChart = React.useCallback(() => {
+   194→   194→    if (!chartContainerRef.current) return
+   195→   195→    const echartsLib = getECharts()
+   196→   196→    if (!echartsLib) return // CDN not ready yet — re-runs when status changes
+   197→   197→    const theme = local.theme || 'default'
+   198→   198→
+   199→   199→    // Re-create the instance if the theme changed. The CDN build auto-
+   200→   200→    // registers every theme shipped in the bundle (dark / vintage / macarons).
+   201→   201→    // Unknown theme names silently fall back to the default theme.
+   202→   202→    if (!chartRef.current || currentTheme.current !== theme) {
+   203→   203→      chartRef.current?.dispose()
+   204→   204→      chartRef.current = echartsLib.init(
+   205→   205→        chartContainerRef.current,
+   206→   206→        theme === 'default' ? undefined : theme,
+   207→   207→        { renderer: 'canvas' },
+   208→   208→      )
+   209→   209→      currentTheme.current = theme
+   210→   210→    }
+   211→   211→    chartRef.current.setOption(option, true)
+   212→   212→  }, [option, local.theme])
+   213→   213→
+   214→   214→  // Debounced re-render (150ms) when the option changes OR once the CDN
+   215→   215→  // finishes loading. Skipped entirely until echarts is ready.
+   216→   216→  React.useEffect(() => {
+   217→   217→    if (!echartsLoaded) return
+   218→   218→    const t = window.setTimeout(() => {
+   219→   219→      renderChart()
+   220→   220→    }, 150)
+   221→   221→    return () => window.clearTimeout(t)
+   222→   222→  }, [renderChart, echartsLoaded])
+   223→   223→
+   224→   224→  // Init ResizeObserver + dispose on unmount. The actual first render is
+   225→   225→  // triggered by the debounced effect above once the CDN is ready.
+   226→   226→  React.useEffect(() => {
+   227→   227→    if (!chartContainerRef.current) return
+   228→   228→
+   229→   229→    const ro = new ResizeObserver(() => {
+   230→   230→      chartRef.current?.resize()
+   231→   231→    })
+   232→   232→    ro.observe(chartContainerRef.current)
+   233→   233→    resizeObsRef.current = ro
+   234→   234→
+   235→   235→    return () => {
+   236→   236→      ro.disconnect()
+   237→   237→      resizeObsRef.current = null
+   238→   238→      chartRef.current?.dispose()
+   239→   239→      chartRef.current = null
+   240→   240→    }
+   241→   241→  }, [])
+   242→   242→
+   243→   243→  // ----- Mutators (keep immutable) -----
+   244→   244→  const patch = React.useCallback(
+   245→   245→    (p: Partial<EChartsConfig>) => commit({ ...local, ...p }),
+   246→   246→    [commit, local],
+   247→   247→  )
+   248→   248→
+   249→   249→  const applyTemplate = React.useCallback(
+   250→   250→    (tpl: EChartsTemplate, keepTitle = false) => {
+   251→   251→      const next = deepClone(tpl.defaultConfig)
+   252→   252→      if (keepTitle && local.title) next.title = deepClone(local.title)
+   253→   253→      commit(next)
+   254→   254→      setCurrentTemplateId(tpl.id)
+   255→   255→      onTemplateChange?.('echarts:' + tpl.id)
+   256→   256→      toast.success(t('toasts.applied', { name: tpl.name }))
+   257→   257→    },
+   258→   258→    [commit, local.title, t, onTemplateChange],
+   259→   259→  )
+   260→   260→
+   261→   261→  const onTemplateIdChange = React.useCallback(
+   262→   262→    (id: string) => {
+   263→   263→      const tpl = TEMPLATE_BY_ID[id]
+   264→   264→      if (tpl) applyTemplate(tpl, true)
+   265→   265→    },
+   266→   266→    [applyTemplate],
+   267→   267→  )
+   268→   268→
+   269→   269→  // ----- Zoom -----
+   270→   270→  const [zoom, setZoom] = React.useState(1)
+   271→   271→  const handleZoomIn = () => setZoom((z) => Math.min(2.5, z + 0.2))
+   272→   272→  const handleZoomOut = () => setZoom((z) => Math.max(0.4, z - 0.2))
+   273→   273→  const handleReset = () => setZoom(1)
+   274→   274→
+   275→   275→  // ----- Export handlers -----
+   276→   276→  const handleDownloadPNG = React.useCallback(() => {
+   277→   277→    if (!chartRef.current) {
+   278→   278→      toast.error(t('toasts.noContent'))
+   279→   279→      return
+   280→   280→    }
+   281→   281→    try {
+   282→   282→      const url = chartRef.current.getDataURL({
+   283→   283→        type: 'png',
+   284→   284→        pixelRatio: 2,
+   285→   285→        backgroundColor: '#fff',
+   286→   286→      })
+   287→   287→      const a = document.createElement('a')
+   288→   288→      a.href = url
+   289→   289→      a.download = `${local.title?.text || 'chart'}.png`
+   290→   290→      document.body.appendChild(a)
+   291→   291→      a.click()
+   292→   292→      document.body.removeChild(a)
+   293→   293→      toast.success(t('toasts.exported'))
+   294→   294→    } catch {
+   295→   295→      toast.error(t('toasts.exportFailed', { error: 'PNG' }))
+   296→   296→    }
+   297→   297→  }, [local.title, t])
+   298→   298→
+   299→   299→  // Render the option into a hidden, off-screen SVG-renderer ECharts instance
+   300→   300→  // and serialize the resulting SVG. The live preview uses the canvas renderer
+   301→   301→  // (which can't produce SVG), so we spin up a temporary SVG-renderer instance
+   302→   302→  // with the same option / size / theme, grab its <svg>, and tear it down.
+   303→   303→  const handleDownloadSvg = React.useCallback(() => {
+   304→   304→    const echartsLib = getECharts()
+   305→   305→    if (!echartsLib || !chartContainerRef.current) {
+   306→   306→      toast.error(t('toasts.noContent'))
+   307→   307→      return
+   308→   308→    }
+   309→   309→    const temp = document.createElement('div')
+   310→   310→    temp.style.width = chartContainerRef.current.clientWidth + 'px'
+   311→   311→    temp.style.height = chartContainerRef.current.clientHeight + 'px'
+   312→   312→    temp.style.position = 'absolute'
+   313→   313→    temp.style.left = '-9999px'
+   314→   314→    document.body.appendChild(temp)
+   315→   315→    let tempChart: any = null
+   316→   316→    try {
+   317→   317→      const themeName =
+   318→   318→        local.theme && local.theme !== 'default' ? local.theme : undefined
+   319→   319→      tempChart = echartsLib.init(temp, themeName, { renderer: 'svg' })
+   320→   320→      tempChart.setOption(option, true)
+   321→   321→      const svg = temp.querySelector('svg')
+   322→   322→      if (!svg) {
+   323→   323→        toast.error(t('toasts.noContent'))
+   324→   324→        return
+   325→   325→      }
+   326→   326→      svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+   327→   327→      const svgStr = new XMLSerializer().serializeToString(svg)
+   328→   328→      const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' })
+   329→   329→      const url = URL.createObjectURL(blob)
+   330→   330→      const a = document.createElement('a')
+   331→   331→      a.href = url
+   332→   332→      a.download = `${local.title?.text || 'chart'}.svg`
+   333→   333→      document.body.appendChild(a)
+   334→   334→      a.click()
+   335→   335→      document.body.removeChild(a)
+   336→   336→      setTimeout(() => URL.revokeObjectURL(url), 1000)
+   337→   337→      toast.success(t('toasts.exported'))
+   338→   338→    } catch (e) {
+   339→   339→      toast.error(t('toasts.exportFailed', { error: (e as Error).message }))
+   340→   340→    } finally {
+   341→   341→      try {
+   342→   342→        tempChart?.dispose()
+   343→   343→      } catch {
+   344→   344→        // ignore
+   345→   345→      }
+   346→   346→      if (temp.parentNode) document.body.removeChild(temp)
+   347→   347→    }
+   348→   348→  }, [option, local.theme, local.title, t])
+   349→   349→
+   350→   350→  const handleCopyAsMarkdown = React.useCallback(async () => {
+   351→   351→    try {
+   352→   352→      const markdown = '```echarts\n' + JSON.stringify(option, null, 2) + '\n```'
+   353→   353→      await navigator.clipboard.writeText(markdown)
+   354→   354→      toast.success(t('toasts.copied'))
+   355→   355→    } catch {
+   356→   356→      toast.error(t('toasts.copyFailed'))
+   357→   357→    }
+   358→   358→  }, [option, t])
+   359→   359→
+   360→   360→  // ----- Random data -----
+   361→   361→  const handleRandomData = React.useCallback(() => {
+   362→   362→    const type = local.type
+   363→   363→    if (type === 'pie' || type === 'funnel') {
+   364→   364→      const data = (local.single_series_data ?? []).map((d) => ({
+   365→   365→        name: d.name,
+   366→   366→        value: Math.floor(Math.random() * 900) + 100,
+   367→   367→      }))
+   368→   368→      patch({ single_series_data: data })
+   369→   369→    } else if (type === 'gauge') {
+   370→   370→      const max = Number(local.gauge_max) || 100
+   371→   371→      patch({ gauge_value: Math.floor(Math.random() * max) })
+   372→   372→    } else if (type === 'scatter') {
+   373→   373→      const data = (local.scatter_data ?? []).map(() => [
+   374→   374→        Math.floor(Math.random() * 200) + 100,
+   375→   375→        Math.floor(Math.random() * 60) + 40,
+   376→   376→      ]) as [number, number][]
+   377→   377→      patch({ scatter_data: data })
+   378→   378→    } else if (type === 'heatmap') {
+   379→   379→      const data = local.series_data.map((row) =>
+   380→   380→        row.map(() => Math.floor(Math.random() * 50)),
+   381→   381→      )
+   382→   382→      patch({ series_data: data })
+   383→   383→    } else if (type === 'radar') {
+   384→   384→      const data = local.series_data.map((row) =>
+   385→   385→        row.map(() => Math.floor(Math.random() * 100)),
+   386→   386→      )
+   387→   387→      patch({ series_data: data })
+   388→   388→    } else {
+   389→   389→      // bar / line
+   390→   390→      const data = local.series_data.map((row) =>
+   391→   391→        row.map(() => Math.floor(Math.random() * 200) + 20),
+   392→   392→      )
+   393→   393→      patch({ series_data: data })
+   394→   394→    }
+   395→   395→    toast.success(t('toasts.randomData'))
+   396→   396→  }, [local, patch, t])
+   397→   397→
+   398→   398→  // ---------------------------------------------------------------------------
+   399→   399→  // Render
+   400→   400→  // ---------------------------------------------------------------------------
+   401→   401→  return (
+   402→   402→    <ResizablePanelGroup direction="horizontal" className="h-full w-full">
+   403→   403→      {/* ----------------------- LEFT: Template Gallery ----------------------- */}
+   404→   404→      <ResizablePanel defaultSize={20} minSize={14} className="bg-background">
+   405→   405→        <div className="flex h-full flex-col">
+   406→   406→          <div className="border-b px-4 py-3">
+   407→   407→            <h3 className="text-sm font-semibold">{t('echarts.templateGallery')}</h3>
+   408→   408→            <p className="text-xs text-muted-foreground mt-1">
+   409→   409→              Click a template to apply it; the config panel refreshes accordingly.
+   410→   410→            </p>
+   411→   411→          </div>
+   412→   412→          <ScrollArea className="flex-1">
+   413→   413→            <div className="grid grid-cols-1 gap-2 p-3">
+   414→   414→              {ECHARTS_TEMPLATE_CATEGORIES.map((cat) => {
+   415→   415→                const items = ECHARTS_TEMPLATES.filter((t) => t.category === cat.id)
+   416→   416→                if (items.length === 0) return null
+   417→   417→                return (
+   418→   418→                  <div key={cat.id} className="space-y-2">
+   419→   419→                    <div className="px-1 pt-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+   420→   420→                      {cat.label}
+   421→   421→                    </div>
+   422→   422→                    {items.map((tpl) => {
+   423→   423→                      const Icon = iconForType(tpl.type)
+   424→   424→                      const active = currentTemplateId === tpl.id
+   425→   425→                      return (
+   426→   426→                        <button
+   427→   427→                          key={tpl.id}
+   428→   428→                          type="button"
+   429→   429→                          onClick={() => applyTemplate(tpl)}
+   430→   430→                          className={cn(
+   431→   431→                            'group flex w-full items-start gap-3 rounded-lg border bg-card p-3 text-left transition-all hover:border-primary/50 hover:shadow-sm',
+   432→   432→                            active && 'border-primary',
+   433→   433→                          )}
+   434→   434→                          title={tpl.description}
+   435→   435→                        >
+   436→   436→                          <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-primary">
+   437→   437→                            <Icon className="size-4" />
+   438→   438→                          </span>
+   439→   439→                          <span className="flex flex-col gap-0.5 overflow-hidden">
+   440→   440→                            <span className="truncate text-sm font-medium">{tpl.name}</span>
+   441→   441→                            <span className="line-clamp-2 text-[11px] text-muted-foreground">
+   442→   442→                              {tpl.description}
+   443→   443→                            </span>
+   444→   444→                          </span>
+   445→   445→                        </button>
+   446→   446→                      )
+   447→   447→                    })}
+   448→   448→                  </div>
+   449→   449→                )
+   450→   450→              })}
+   451→   451→            </div>
+   452→   452→          </ScrollArea>
+   453→   453→        </div>
+   454→   454→      </ResizablePanel>
+   455→   455→
+   456→   456→      <ResizableHandle withHandle />
+   457→   457→
+   458→   458→      {/* ----------------------- MIDDLE: Preview ----------------------- */}
+   459→   459→      <ResizablePanel defaultSize={40} minSize={30} className="bg-muted/20">
+   460→   460→        <div className="flex h-full flex-col">
+   461→   461→          {/* Toolbar — unified across all editors (zoom left, export right) */}
+   462→   462→          <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
+   463→   463→            <div className="flex items-center gap-1.5">
+   464→   464→              <Button
+   465→   465→                size="sm"
+   466→   466→                variant="ghost"
+   467→   467→                onClick={handleZoomOut}
+   468→   468→                aria-label="Zoom out"
+   469→   469→                className="h-7 w-7 p-0"
+   470→   470→              >
+   471→   471→                <ZoomOut className="h-4 w-4" />
+   472→   472→              </Button>
+   473→   473→              <span className="w-12 text-center text-xs tabular-nums text-muted-foreground">
+   474→   474→                {Math.round(zoom * 100)}%
+   475→   475→              </span>
+   476→   476→              <Button
+   477→   477→                size="sm"
+   478→   478→                variant="ghost"
+   479→   479→                onClick={handleZoomIn}
+   480→   480→                aria-label="Zoom in"
+   481→   481→                className="h-7 w-7 p-0"
+   482→   482→              >
+   483→   483→                <ZoomIn className="h-4 w-4" />
+   484→   484→              </Button>
+   485→   485→              <Button
+   486→   486→                size="sm"
+   487→   487→                variant="ghost"
+   488→   488→                onClick={handleReset}
+   489→   489→                aria-label="Reset zoom"
+   490→   490→                className="h-7 w-7 p-0"
+   491→   491→              >
+   492→   492→                <Maximize className="h-4 w-4" />
+   493→   493→              </Button>
+   494→   494→            </div>
+   495→   495→            <div className="flex items-center gap-1">
+   496→   496→              <Button
+   497→   497→                size="sm"
+   498→   498→                variant="ghost"
+   499→   499→                onClick={handleDownloadSvg}
+   500→   500→                className="h-7 gap-1 px-2 text-xs"
+   501→   501→              >
+   502→   502→                <Download className="h-3 w-3" /> SVG
+   503→   503→              </Button>
+   504→   504→              <Button
+   505→   505→                size="sm"
+   506→   506→                variant="ghost"
+   507→   507→                onClick={handleDownloadPNG}
+   508→   508→                className="h-7 gap-1 px-2 text-xs"
+   509→   509→              >
+   510→   510→                <Download className="h-3 w-3" /> PNG
+   511→   511→              </Button>
+   512→   512→              <Button
+   513→   513→                size="sm"
+   514→   514→                variant="ghost"
+   515→   515→                onClick={handleCopyAsMarkdown}
+   516→   516→                className="h-7 gap-1 px-2 text-xs"
+   517→   517→              >
+   518→   518→                <Copy className="h-3 w-3" /> Markdown
+   519→   519→              </Button>
+   520→   520→            </div>
+   521→   521→          </div>
+   522→   522→
+   523→   523→          {/* Canvas */}
+   524→   524→          <div
+   525→   525→            ref={previewRef}
+   526→   526→            className="relative flex-1 overflow-auto"
+   527→   527→            style={{ background: '#fff' }}
+   528→   528→          >
+   529→   529→            <div
+   530→   530→              style={{
+   531→   531→                transform: `scale(${zoom})`,
+   532→   532→                transformOrigin: 'center center',
+   533→   533→                transition: 'transform 0.15s ease',
+   534→   534→                width: '100%',
+   535→   535→                height: '100%',
+   536→   536→              }}
+   537→   537→            >
+   538→   538→              <div
+   539→   539→                ref={chartContainerRef}
+   540→   540→                style={{ width: '100%', height: '100%', minHeight: 400 }}
+   541→   541→              />
+   542→   542→            </div>
+   543→   543→            {!echartsLoaded && (
+   544→   544→              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/80 backdrop-blur-sm">
+   545→   545→                <Loader2 className="size-6 animate-spin text-primary" />
+   546→   546→                <span className="text-sm text-muted-foreground">
+   547→   547→                  {t('app.loadingLib')}
+   548→   548→                </span>
+   549→   549→              </div>
+   550→   550→            )}
+   551→   551→          </div>
+   552→   552→        </div>
+   553→   553→      </ResizablePanel>
+   554→   554→
+   555→   555→      <ResizableHandle withHandle />
+   556→   556→
+   557→   557→      {/* ----------------------- RIGHT: Config Form ----------------------- */}
+   558→   558→      <ResizablePanel defaultSize={40} minSize={30} className="bg-background">
+   559→   559→        <div className="flex h-full flex-col">
+   560→   560→          <div className="border-b px-4 py-3">
+   561→   561→            <h3 className="text-sm font-semibold">{t('echarts.configPanel')}</h3>
+   562→   562→            <p className="text-xs text-muted-foreground mt-1">
+   563→   563→              All changes sync to the preview instantly — no save button needed.
+   564→   564→            </p>
+   565→   565→          </div>
+   566→   566→          <ScrollArea className="flex-1">
+   567→   567→            <div className="p-3">
+   568→   568→              <Accordion
+   569→   569→                type="multiple"
+   570→   570→                defaultValue={['type', 'title', 'data', 'style']}
+   571→   571→                className="w-full"
+   572→   572→              >
+   573→   573→                {/* 1. Chart type */}
+   574→   574→                <AccordionItem value="type">
+   575→   575→                  <AccordionTrigger>
+   576→   576→                    <span className="flex items-center gap-2 font-medium">
+   577→   577→                      <BarChart3 className="size-4 text-primary" /> {t('echarts.chartType')}
+   578→   578→                    </span>
+   579→   579→                  </AccordionTrigger>
+   580→   580→                  <AccordionContent>
+   581→   581→                    <div className="space-y-2">
+   582→   582→                      <Label className="text-xs text-muted-foreground">Switching type resets sample data but keeps the title</Label>
+   583→   583→                      <Select value={currentTemplateId} onValueChange={onTemplateIdChange}>
+   584→   584→                        <SelectTrigger className="w-full">
+   585→   585→                          <SelectValue placeholder="Select chart type" />
+   586→   586→                        </SelectTrigger>
+   587→   587→                        <SelectContent>
+   588→   588→                          {ECHARTS_TEMPLATE_CATEGORIES.map((cat) => {
+   589→   589→                            const items = ECHARTS_TEMPLATES.filter((t) => t.category === cat.id)
+   590→   590→                            if (items.length === 0) return null
+   591→   591→                            return (
+   592→   592→                              <SelectGroup key={cat.id}>
+   593→   593→                                <SelectLabel>{cat.label}</SelectLabel>
+   594→   594→                                {items.map((tpl) => (
+   595→   595→                                  <SelectItem key={tpl.id} value={tpl.id}>
+   596→   596→                                    {tpl.name}
+   597→   597→                                  </SelectItem>
+   598→   598→                                ))}
+   599→   599→                              </SelectGroup>
+   600→   600→                            )
+   601→   601→                          })}
+   602→   602→                        </SelectContent>
+   603→   603→                      </Select>
+   604→   604→                    </div>
+   605→   605→                  </AccordionContent>
+   606→   606→                </AccordionItem>
+   607→   607→
+   608→   608→                {/* 2. Title */}
+   609→   609→                <AccordionItem value="title">
+   610→   610→                  <AccordionTrigger>
+   611→   611→                    <span className="flex items-center gap-2 font-medium">
+   612→   612→                      <AlignLeft className="size-4 text-primary" /> {t('echarts.title_section')}
+   613→   613→                    </span>
+   614→   614→                  </AccordionTrigger>
+   615→   615→                  <AccordionContent>
+   616→   616→                    <div className="space-y-3">
+   617→   617→                      <div className="space-y-1.5">
+   618→   618→                        <Label htmlFor="title-text">{t('echarts.mainTitle')}</Label>
+   619→   619→                        <Input
+   620→   620→                          id="title-text"
+   621→   621→                          value={local.title?.text ?? ''}
+   622→   622→                          onChange={(e) =>
+   623→   623→                            patch({ title: { ...local.title, text: e.target.value } })
+   624→   624→                          }
+   625→   625→                          placeholder="e.g. Quarterly Sales Comparison"
+   626→   626→                        />
+   627→   627→                      </div>
+   628→   628→                      <div className="space-y-1.5">
+   629→   629→                        <Label htmlFor="title-sub">{t('echarts.subtitle')}</Label>
+   630→   630→                        <Input
+   631→   631→                          id="title-sub"
+   632→   632→                          value={local.title?.subtext ?? ''}
+   633→   633→                          onChange={(e) =>
+   634→   634→                            patch({ title: { ...local.title, subtext: e.target.value } })
+   635→   635→                          }
+   636→   636→                          placeholder="Optional, e.g. unit / source"
+   637→   637→                        />
+   638→   638→                      </div>
+   639→   639→                      <p className="text-xs text-muted-foreground">Main and sub titles appear centered at the top of the preview.</p>
+   640→   640→                    </div>
+   641→   641→                  </AccordionContent>
+   642→   642→                </AccordionItem>
+   643→   643→
+   644→   644→                {/* 3. Data */}
+   645→   645→                <AccordionItem value="data">
+   646→   646→                  <AccordionTrigger>
+   647→   647→                    <span className="flex items-center gap-2 font-medium">
+   648→   648→                      <Plus className="size-4 text-primary" /> {t('echarts.data')}
+   649→   649→                    </span>
+   650→   650→                  </AccordionTrigger>
+   651→   651→                  <AccordionContent>
+   652→   652→                    <DataEditor
+   653→   653→                      config={local}
+   654→   654→                      patch={patch}
+   655→   655→                      onRandom={handleRandomData}
+   656→   656→                    />
+   657→   657→                  </AccordionContent>
+   658→   658→                </AccordionItem>
+   659→   659→
+   660→   660→                {/* 4. Style */}
+   661→   661→                <AccordionItem value="style">
+   662→   662→                  <AccordionTrigger>
+   663→   663→                    <span className="flex items-center gap-2 font-medium">
+   664→   664→                      <Activity className="size-4 text-primary" /> {t('echarts.style')}
+   665→   665→                    </span>
+   666→   666→                  </AccordionTrigger>
+   667→   667→                  <AccordionContent>
+   668→   668→                    <StyleEditor config={local} patch={patch} />
+   669→   669→                  </AccordionContent>
+   670→   670→                </AccordionItem>
+   671→   671→              </Accordion>
+   672→   672→            </div>
+   673→   673→          </ScrollArea>
+   674→   674→        </div>
+   675→   675→      </ResizablePanel>
+   676→   676→    </ResizablePanelGroup>
+   677→   677→  )
+   678→   678→}
+   679→   679→
+   680→   680→export default EChartsEditor
+   681→   681→
+   682→   682→// ===========================================================================
+   683→   683→// Sub-editors
+   684→   684→// ===========================================================================
+   685→   685→
+   686→   686→interface SubEditorProps {
+   687→   687→  config: EChartsConfig
+   688→   688→  patch: (p: Partial<EChartsConfig>) => void
+   689→   689→}
+   690→   690→
+   691→   691→// -------- Data editor (varies by chart type) --------
+   692→   692→function DataEditor({ config, patch, onRandom }: SubEditorProps & { onRandom: () => void }) {
+   693→   693→  const t = useT()
+   694→   694→  const type = config.type
+   695→   695→  return (
+   696→   696→    <div className="space-y-3">
+   697→   697→      <div className="flex items-center justify-between">
+   698→   698→        <p className="text-xs text-muted-foreground">
+   699→   699→          {type === 'pie' || type === 'funnel'
+   700→   700→            ? 'Edit each item name and value — left is name, right is value.'
+   701→   701→            : type === 'radar'
+   702→   702→              ? 'Edit dimensions (max) and each series values.'
+   703→   703→              : type === 'gauge'
+   704→   704→                ? 'Drag the slider to set the current gauge value.'
+   705→   705→                : type === 'scatter'
+   706→   706→                  ? 'Edit the (X, Y) coordinates of each data point.'
+   707→   707→                  : type === 'heatmap'
+   708→   708→                    ? 'Edit the matrix: each row is a Y-axis item, each column an X-axis category.'
+   709→   709→                    : 'Edit categories and per-series values, comma-separated.'}
+   710→   710→        </p>
+   711→   711→        <Button size="sm" variant="secondary" onClick={onRandom} className="shrink-0">
+   712→   712→          <Shuffle className="size-3.5" /> {t('echarts.randomData')}
+   713→   713→        </Button>
+   714→   714→      </div>
+   715→   715→
+   716→   716→      {type === 'pie' || type === 'funnel' ? (
+   717→   717→        <SingleSeriesEditor config={config} patch={patch} />
+   718→   718→      ) : type === 'radar' ? (
+   719→   719→        <RadarDataEditor config={config} patch={patch} />
+   720→   720→      ) : type === 'gauge' ? (
+   721→   721→        <GaugeDataEditor config={config} patch={patch} />
+   722→   722→      ) : type === 'scatter' ? (
+   723→   723→        <ScatterDataEditor config={config} patch={patch} />
+   724→   724→      ) : type === 'heatmap' ? (
+   725→   725→        <CartesianDataEditor config={config} patch={patch} hideCategories />
+   726→   726→      ) : (
+   727→   727→        <CartesianDataEditor config={config} patch={patch} />
+   728→   728→      )}
+   729→   729→    </div>
+   730→   730→  )
+   731→   731→}
+   732→   732→
+   733→   733→// Bar / line / heatmap (matrix) editor
+   734→   734→function CartesianDataEditor({
+   735→   735→  config,
+   736→   736→  patch,
+   737→   737→  hideCategories,
+   738→   738→}: SubEditorProps & { hideCategories?: boolean }) {
+   739→   739→  const t = useT()
+   740→   740→  const { categories, series_names, series_data } = config
+   741→   741→
+   742→   742→  const updateSeriesName = (i: number, name: string) => {
+   743→   743→    const next = [...series_names]
+   744→   744→    next[i] = name
+   745→   745→    patch({ series_names: next })
+   746→   746→  }
+   747→   747→
+   748→   748→  const updateSeriesValues = (i: number, raw: string) => {
+   749→   749→    const parts = raw.split(/[,，]/).map((s) => Number(s.trim()))
+   750→   750→    const cleaned = parts.map((n) => (Number.isFinite(n) ? n : 0))
+   751→   751→    const next = series_data.map((row, idx) => (idx === i ? cleaned : row))
+   752→   752→    patch({ series_data: next })
+   753→   753→  }
+   754→   754→
+   755→   755→  const addSeries = () => {
+   756→   756→    const len = categories.length || 1
+   757→   757→    const newRow = Array.from({ length: len }, () => 0)
+   758→   758→    patch({
+   759→   759→      series_names: [...series_names, `Series ${series_names.length + 1}`],
+   760→   760→      series_data: [...series_data, newRow],
+   761→   761→    })
+   762→   762→  }
+   763→   763→
+   764→   764→  const removeSeries = (i: number) => {
+   765→   765→    if (series_names.length <= 1) {
+   766→   766→      toast.error('Keep at least 1 series')
+   767→   767→      return
+   768→   768→    }
+   769→   769→    patch({
+   770→   770→      series_names: series_names.filter((_, idx) => idx !== i),
+   771→   771→      series_data: series_data.filter((_, idx) => idx !== i),
+   772→   772→    })
+   773→   773→  }
+   774→   774→
+   775→   775→  return (
+   776→   776→    <div className="space-y-3">
+   777→   777→      {!hideCategories && (
+   778→   778→        <div className="space-y-1.5">
+   779→   779→          <Label>{t('echarts.categories')}</Label>
+   780→   780→          <Input
+   781→   781→            value={categories.join(', ')}
+   782→   782→            onChange={(e) => {
+   783→   783→              const arr = e.target.value
+   784→   784→                .split(/[,，]/)
+   785→   785→                .map((s) => s.trim())
+   786→   786→                .filter(Boolean)
+   787→   787→              patch({ categories: arr })
+   788→   788→            }}
+   789→   789→            placeholder="e.g. Q1, Q2, Q3, Q4"
+   790→   790→          />
+   791→   791→          <p className="text-xs text-muted-foreground">
+   792→   792→            When the category count changes, each series values array auto-resizes.
+   793→   793→          </p>
+   794→   794→        </div>
+   795→   795→      )}
+   796→   796→
+   797→   797→      <div className="space-y-2">
+   798→   798→        <div className="flex items-center justify-between">
+   799→   799→          <Label>{t('echarts.data')}</Label>
+   800→   800→          <Button size="sm" variant="outline" onClick={addSeries}>
+   801→   801→            <Plus className="size-3.5" /> {t('echarts.addSeries')}
+   802→   802→          </Button>
+   803→   803→        </div>
+   804→   804→        <div className="max-h-72 overflow-y-auto rounded-md border">
+   805→   805→          <table className="w-full text-sm">
+   806→   806→            <thead className="bg-muted/50 sticky top-0">
+   807→   807→              <tr>
+   808→   808→                <th className="px-2 py-1.5 text-left font-medium">{t('echarts.seriesName')}</th>
+   809→   809→                <th className="px-2 py-1.5 text-left font-medium">{t('echarts.seriesValues')}</th>
+   810→   810→                <th className="w-10 px-2 py-1.5"></th>
+   811→   811→              </tr>
+   812→   812→            </thead>
+   813→   813→            <tbody>
+   814→   814→              {series_names.map((name, i) => (
+   815→   815→                <tr key={i} className="border-t">
+   816→   816→                  <td className="px-2 py-1.5">
+   817→   817→                    <Input
+   818→   818→                      value={name}
+   819→   819→                      onChange={(e) => updateSeriesName(i, e.target.value)}
+   820→   820→                      className="h-8"
+   821→   821→                    />
+   822→   822→                  </td>
+   823→   823→                  <td className="px-2 py-1.5">
+   824→   824→                    <Input
+   825→   825→                      value={(series_data[i] ?? []).join(', ')}
+   826→   826→                      onChange={(e) => updateSeriesValues(i, e.target.value)}
+   827→   827→                      className="h-8"
+   828→   828→                    />
+   829→   829→                  </td>
+   830→   830→                  <td className="px-2 py-1.5 text-right">
+   831→   831→                    <Button
+   832→   832→                      size="icon"
+   833→   833→                      variant="ghost"
+   834→   834→                      className="size-8 text-muted-foreground hover:text-destructive"
+   835→   835→                      onClick={() => removeSeries(i)}
+   836→   836→                      aria-label={t('echarts.removeSeries')}
+   837→   837→                    >
+   838→   838→                      <Trash2 className="size-3.5" />
+   839→   839→                    </Button>
+   840→   840→                  </td>
+   841→   841→                </tr>
+   842→   842→              ))}
+   843→   843→            </tbody>
+   844→   844→          </table>
+   845→   845→        </div>
+   846→   846→        {!hideCategories && (
+   847→   847→          <p className="text-xs text-muted-foreground">
+   848→   848→            Tip: categories are on the X-axis (quarters, months); series are different bars/lines.
+   849→   849→          </p>
+   850→   850→        )}
+   851→   851→      </div>
+   852→   852→    </div>
+   853→   853→  )
+   854→   854→}
+   855→   855→
+   856→   856→// Pie / funnel editor
+   857→   857→function SingleSeriesEditor({ config, patch }: SubEditorProps) {
+   858→   858→  const t = useT()
+   859→   859→  const data = config.single_series_data ?? []
+   860→   860→  const update = (i: number, key: 'name' | 'value', val: string) => {
+   861→   861→    const next = data.map((d, idx) =>
+   862→   862→      idx === i
+   863→   863→        ? { ...d, [key]: key === 'value' ? Number(val) || 0 : val }
+   864→   864→        : d,
+   865→   865→    )
+   866→   866→    patch({ single_series_data: next })
+   867→   867→  }
+   868→   868→  const add = () =>
+   869→   869→    patch({
+   870→   870→      single_series_data: [...data, { name: `Item ${data.length + 1}`, value: 100 }],
+   871→   871→    })
+   872→   872→  const remove = (i: number) => {
+   873→   873→    if (data.length <= 2) {
+   874→   874→      toast.error('Keep at least 2 items')
+   875→   875→      return
+   876→   876→    }
+   877→   877→    patch({ single_series_data: data.filter((_, idx) => idx !== i) })
+   878→   878→  }
+   879→   879→  return (
+   880→   880→    <div className="space-y-2">
+   881→   881→      <div className="flex items-center justify-between">
+   882→   882→        <Label>{t('echarts.data')}</Label>
+   883→   883→        <Button size="sm" variant="outline" onClick={add}>
+   884→   884→          <Plus className="size-3.5" /> {t('echarts.addItem')}
+   885→   885→        </Button>
+   886→   886→      </div>
+   887→   887→      <div className="max-h-72 overflow-y-auto rounded-md border">
+   888→   888→        <table className="w-full text-sm">
+   889→   889→          <thead className="bg-muted/50 sticky top-0">
+   890→   890→            <tr>
+   891→   891→              <th className="px-2 py-1.5 text-left font-medium">{t('echarts.itemName')}</th>
+   892→   892→              <th className="px-2 py-1.5 text-left font-medium">{t('echarts.itemValue')}</th>
+   893→   893→              <th className="w-10 px-2 py-1.5"></th>
+   894→   894→            </tr>
+   895→   895→          </thead>
+   896→   896→          <tbody>
+   897→   897→            {data.map((d, i) => (
+   898→   898→              <tr key={i} className="border-t">
+   899→   899→                <td className="px-2 py-1.5">
+   900→   900→                  <Input
+   901→   901→                    value={d.name}
+   902→   902→                    onChange={(e) => update(i, 'name', e.target.value)}
+   903→   903→                    className="h-8"
+   904→   904→                  />
+   905→   905→                </td>
+   906→   906→                <td className="px-2 py-1.5">
+   907→   907→                  <Input
+   908→   908→                    type="number"
+   909→   909→                    value={d.value}
+   910→   910→                    onChange={(e) => update(i, 'value', e.target.value)}
+   911→   911→                    className="h-8"
+   912→   912→                  />
+   913→   913→                </td>
+   914→   914→                <td className="px-2 py-1.5 text-right">
+   915→   915→                  <Button
+   916→   916→                    size="icon"
+   917→   917→                    variant="ghost"
+   918→   918→                    className="size-8 text-muted-foreground hover:text-destructive"
+   919→   919→                    onClick={() => remove(i)}
+   920→   920→                    aria-label={t('actions.delete')}
+   921→   921→                  >
+   922→   922→                    <Trash2 className="size-3.5" />
+   923→   923→                  </Button>
+   924→   924→                </td>
+   925→   925→              </tr>
+   926→   926→            ))}
+   927→   927→          </tbody>
+   928→   928→        </table>
+   929→   929→      </div>
+   930→   930→    </div>
+   931→   931→  )
+   932→   932→}
+   933→   933→
+   934→   934→// Radar editor
+   935→   935→function RadarDataEditor({ config, patch }: SubEditorProps) {
+   936→   936→  const t = useT()
+   937→   937→  const indicators = config.radar_indicators ?? []
+   938→   938→  const { series_names, series_data } = config
+   939→   939→
+   940→   940→  const updateIndicator = (i: number, key: 'name' | 'max', val: string) =>
+   941→   941→    patch({
+   942→   942→      radar_indicators: indicators.map((it, idx) =>
+   943→   943→        idx === i
+   944→   944→          ? { ...it, [key]: key === 'max' ? Number(val) || 0 : val }
+   945→   945→          : it,
+   946→   946→      ),
+   947→   947→    })
+   948→   948→  const addIndicator = () =>
+   949→   949→    patch({
+   950→   950→      radar_indicators: [...indicators, { name: `Dimension ${indicators.length + 1}`, max: 100 }],
+   951→   951→      series_data: series_data.map((row) => [...row, 0]),
+   952→   952→    })
+   953→   953→  const removeIndicator = (i: number) => {
+   954→   954→    if (indicators.length <= 3) {
+   955→   955→      toast.error('Radar needs at least 3 dimensions')
+   956→   956→      return
+   957→   957→    }
+   958→   958→    patch({
+   959→   959→      radar_indicators: indicators.filter((_, idx) => idx !== i),
+   960→   960→      series_data: series_data.map((row) => row.filter((_, idx) => idx !== i)),
+   961→   961→    })
+   962→   962→  }
+   963→   963→
+   964→   964→  return (
+   965→   965→    <div className="space-y-3">
+   966→   966→      <div className="space-y-1.5">
+   967→   967→        <div className="flex items-center justify-between">
+   968→   968→          <Label>Dimensions (Indicators)</Label>
+   969→   969→          <Button size="sm" variant="outline" onClick={addIndicator}>
+   970→   970→            <Plus className="size-3.5" /> Add dimension
+   971→   971→          </Button>
+   972→   972→        </div>
+   973→   973→        <div className="max-h-44 overflow-y-auto rounded-md border">
+   974→   974→          <table className="w-full text-sm">
+   975→   975→            <thead className="bg-muted/50 sticky top-0">
+   976→   976→              <tr>
+   977→   977→                <th className="px-2 py-1.5 text-left font-medium">Dimension</th>
+   978→   978→                <th className="px-2 py-1.5 text-left font-medium">Max</th>
+   979→   979→                <th className="w-10 px-2 py-1.5"></th>
+   980→   980→              </tr>
+   981→   981→            </thead>
+   982→   982→            <tbody>
+   983→   983→              {indicators.map((it, i) => (
+   984→   984→                <tr key={i} className="border-t">
+   985→   985→                  <td className="px-2 py-1.5">
+   986→   986→                    <Input
+   987→   987→                      value={it.name}
+   988→   988→                      onChange={(e) => updateIndicator(i, 'name', e.target.value)}
+   989→   989→                      className="h-8"
+   990→   990→                    />
+   991→   991→                  </td>
+   992→   992→                  <td className="px-2 py-1.5">
+   993→   993→                    <Input
+   994→   994→                      type="number"
+   995→   995→                      value={it.max}
+   996→   996→                      onChange={(e) => updateIndicator(i, 'max', e.target.value)}
+   997→   997→                      className="h-8"
+   998→   998→                    />
+   999→   999→                  </td>
+  1000→  1000→                  <td className="px-2 py-1.5 text-right">
+  1001→  1001→                    <Button
+  1002→  1002→                      size="icon"
+  1003→  1003→                      variant="ghost"
+  1004→  1004→                      className="size-8 text-muted-foreground hover:text-destructive"
+  1005→  1005→                      onClick={() => removeIndicator(i)}
+  1006→  1006→                      aria-label={t('actions.delete')}
+  1007→  1007→                    >
+  1008→  1008→                      <Trash2 className="size-3.5" />
+  1009→  1009→                    </Button>
+  1010→  1010→                  </td>
+  1011→  1011→                </tr>
+  1012→  1012→              ))}
+  1013→  1013→            </tbody>
+  1014→  1014→          </table>
+  1015→  1015→        </div>
+  1016→  1016→      </div>
+  1017→  1017→
+  1018→  1018→      <div className="space-y-1.5">
+  1019→  1019→        <Label>Series values (in dimension order, comma-separated)</Label>
+  1020→  1020→        <div className="max-h-44 overflow-y-auto rounded-md border">
+  1021→  1021→          <table className="w-full text-sm">
+  1022→  1022→            <thead className="bg-muted/50 sticky top-0">
+  1023→  1023→              <tr>
+  1024→  1024→                <th className="px-2 py-1.5 text-left font-medium">{t('echarts.seriesName')}</th>
+  1025→  1025→                <th className="px-2 py-1.5 text-left font-medium">Values</th>
+  1026→  1026→              </tr>
+  1027→  1027→            </thead>
+  1028→  1028→            <tbody>
+  1029→  1029→              {series_names.map((name, i) => (
+  1030→  1030→                <tr key={i} className="border-t">
+  1031→  1031→                  <td className="px-2 py-1.5">
+  1032→  1032→                    <Input
+  1033→  1033→                      value={name}
+  1034→  1034→                      onChange={(e) => {
+  1035→  1035→                        const next = [...series_names]
+  1036→  1036→                        next[i] = e.target.value
+  1037→  1037→                        patch({ series_names: next })
+  1038→  1038→                      }}
+  1039→  1039→                      className="h-8"
+  1040→  1040→                    />
+  1041→  1041→                  </td>
+  1042→  1042→                  <td className="px-2 py-1.5">
+  1043→  1043→                    <Input
+  1044→  1044→                      value={(series_data[i] ?? []).join(', ')}
+  1045→  1045→                      onChange={(e) => {
+  1046→  1046→                        const cleaned = e.target.value
+  1047→  1047→                          .split(/[,，]/)
+  1048→  1048→                          .map((s) => Number(s.trim()))
+  1049→  1049→                          .map((n) => (Number.isFinite(n) ? n : 0))
+  1050→  1050→                        const next = series_data.map((row, idx) =>
+  1051→  1051→                          idx === i ? cleaned : row,
+  1052→  1052→                        )
+  1053→  1053→                        patch({ series_data: next })
+  1054→  1054→                      }}
+  1055→  1055→                      className="h-8"
+  1056→  1056→                    />
+  1057→  1057→                  </td>
+  1058→  1058→                </tr>
+  1059→  1059→              ))}
+  1060→  1060→            </tbody>
+  1061→  1061→          </table>
+  1062→  1062→        </div>
+  1063→  1063→      </div>
+  1064→  1064→    </div>
+  1065→  1065→  )
+  1066→  1066→}
+  1067→  1067→
+  1068→  1068→// Gauge editor
+  1069→  1069→function GaugeDataEditor({ config, patch }: SubEditorProps) {
+  1070→  1070→  const value = Number(config.gauge_value) || 0
+  1071→  1071→  const max = Number(config.gauge_max) || 100
+  1072→  1072→  return (
+  1073→  1073→    <div className="space-y-3">
+  1074→  1074→      <div className="space-y-2">
+  1075→  1075→        <div className="flex items-center justify-between">
+  1076→  1076→          <Label>Current value</Label>
+  1077→  1077→          <span className="text-sm font-medium tabular-nums">{value}</span>
+  1078→  1078→        </div>
+  1079→  1079→        <Slider
+  1080→  1080→          min={0}
+  1081→  1081→          max={max}
+  1082→  1082→          step={1}
+  1083→  1083→          value={[value]}
+  1084→  1084→          onValueChange={(v) => patch({ gauge_value: v[0] ?? 0 })}
+  1085→  1085→        />
+  1086→  1086→      </div>
+  1087→  1087→      <div className="space-y-1.5">
+  1088→  1088→        <Label htmlFor="gauge-max">Max</Label>
+  1089→  1089→        <Input
+  1090→  1090→          id="gauge-max"
+  1091→  1091→          type="number"
+  1092→  1092→          value={max}
+  1093→  1093→          onChange={(e) => patch({ gauge_max: Number(e.target.value) || 0 })}
+  1094→  1094→        />
+  1095→  1095→        <p className="text-xs text-muted-foreground">Gauge scale goes from 0 to max — usually 100 for percentage.</p>
+  1096→  1096→      </div>
+  1097→  1097→    </div>
+  1098→  1098→  )
+  1099→  1099→}
+  1100→  1100→
+  1101→  1101→// Scatter editor
+  1102→  1102→function ScatterDataEditor({ config, patch }: SubEditorProps) {
+  1103→  1103→  const t = useT()
+  1104→  1104→  const data = config.scatter_data ?? []
+  1105→  1105→  const update = (i: number, axis: 0 | 1, val: string) => {
+  1106→  1106→    const n = Number(val)
+  1107→  1107→    const next = data.map((p, idx) =>
+  1108→  1108→      idx === i ? ([axis === 0 ? n : p[0], axis === 1 ? n : p[1]] as [number, number]) : p,
+  1109→  1109→    )
+  1110→  1110→    patch({ scatter_data: next })
+  1111→  1111→  }
+  1112→  1112→  const add = () =>
+  1113→  1113→    patch({ scatter_data: [...data, [Math.floor(Math.random() * 200) + 100, Math.floor(Math.random() * 60) + 40]] })
+  1114→  1114→  const remove = (i: number) => {
+  1115→  1115→    if (data.length <= 1) {
+  1116→  1116→      toast.error('Keep at least 1 data point')
+  1117→  1117→      return
+  1118→  1118→    }
+  1119→  1119→    patch({ scatter_data: data.filter((_, idx) => idx !== i) })
+  1120→  1120→  }
+  1121→  1121→  return (
+  1122→  1122→    <div className="space-y-2">
+  1123→  1123→      <div className="flex items-center justify-between">
+  1124→  1124→        <Label>Data points</Label>
+  1125→  1125→        <Button size="sm" variant="outline" onClick={add}>
+  1126→  1126→          <Plus className="size-3.5" /> Add point
+  1127→  1127→        </Button>
+  1128→  1128→      </div>
+  1129→  1129→      <div className="max-h-72 overflow-y-auto rounded-md border">
+  1130→  1130→        <table className="w-full text-sm">
+  1131→  1131→          <thead className="bg-muted/50 sticky top-0">
+  1132→  1132→            <tr>
+  1133→  1133→              <th className="px-2 py-1.5 text-left font-medium">X</th>
+  1134→  1134→              <th className="px-2 py-1.5 text-left font-medium">Y</th>
+  1135→  1135→              <th className="w-10 px-2 py-1.5"></th>
+  1136→  1136→            </tr>
+  1137→  1137→          </thead>
+  1138→  1138→          <tbody>
+  1139→  1139→            {data.map((p, i) => (
+  1140→  1140→              <tr key={i} className="border-t">
+  1141→  1141→                <td className="px-2 py-1.5">
+  1142→  1142→                  <Input
+  1143→  1143→                    type="number"
+  1144→  1144→                    value={p[0]}
+  1145→  1145→                    onChange={(e) => update(i, 0, e.target.value)}
+  1146→  1146→                    className="h-8"
+  1147→  1147→                  />
+  1148→  1148→                </td>
+  1149→  1149→                <td className="px-2 py-1.5">
+  1150→  1150→                  <Input
+  1151→  1151→                    type="number"
+  1152→  1152→                    value={p[1]}
+  1153→  1153→                    onChange={(e) => update(i, 1, e.target.value)}
+  1154→  1154→                    className="h-8"
+  1155→  1155→                  />
+  1156→  1156→                </td>
+  1157→  1157→                <td className="px-2 py-1.5 text-right">
+  1158→  1158→                  <Button
+  1159→  1159→                    size="icon"
+  1160→  1160→                    variant="ghost"
+  1161→  1161→                    className="size-8 text-muted-foreground hover:text-destructive"
+  1162→  1162→                    onClick={() => remove(i)}
+  1163→  1163→                    aria-label={t('actions.delete')}
+  1164→  1164→                  >
+  1165→  1165→                    <Trash2 className="size-3.5" />
+  1166→  1166→                  </Button>
+  1167→  1167→                </td>
+  1168→  1168→              </tr>
+  1169→  1169→            ))}
+  1170→  1170→          </tbody>
+  1171→  1171→        </table>
+  1172→  1172→      </div>
+  1173→  1173→    </div>
+  1174→  1174→  )
+  1175→  1175→}
+  1176→  1176→
+  1177→  1177→// Style toggle row (declared outside to satisfy react-hooks/static-components)
+  1178→  1178→function StyleToggle({
+  1179→  1179→  id,
+  1180→  1180→  label,
+  1181→  1181→  checked,
+  1182→  1182→  onChange,
+  1183→  1183→  hint,
+  1184→  1184→  disabled,
+  1185→  1185→}: {
+  1186→  1186→  id: string
+  1187→  1187→  label: string
+  1188→  1188→  checked: boolean
+  1189→  1189→  onChange: (v: boolean) => void
+  1190→  1190→  hint?: string
+  1191→  1191→  disabled?: boolean
+  1192→  1192→}) {
+  1193→  1193→  return (
+  1194→  1194→    <div className={cn('flex items-center justify-between gap-3', disabled && 'opacity-50')}>
+  1195→  1195→      <div className="space-y-0.5">
+  1196→  1196→        <Label htmlFor={id} className={cn(disabled && 'cursor-not-allowed')}>
+  1197→  1197→          {label}
+  1198→  1198→        </Label>
+  1199→  1199→        {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
+  1200→  1200→      </div>
+  1201→  1201→      <Switch id={id} checked={checked} onCheckedChange={onChange} disabled={disabled} />
+  1202→  1202→    </div>
+  1203→  1203→  )
+  1204→  1204→}
+  1205→  1205→
+  1206→  1206→// Style editor
+  1207→  1207→function StyleEditor({ config, patch }: SubEditorProps) {
+  1208→  1208→  const t = useT()
+  1209→  1209→  const type = config.type
+  1210→  1210→  const isBar = type === 'bar'
+  1211→  1211→  const isLine = type === 'line'
+  1212→  1212→
+  1213→  1213→  return (
+  1214→  1214→    <div className="space-y-4">
+  1215→  1215→      <StyleToggle
+  1216→  1216→        id="legend"
+  1217→  1217→        label={t('echarts.legend')}
+  1218→  1218→        checked={config.legend}
+  1219→  1219→        onChange={(v) => patch({ legend: v })}
+  1220→  1220→        hint="Show color legend for each series at the bottom."
+  1221→  1221→      />
+  1222→  1222→      <StyleToggle
+  1223→  1223→        id="stack"
+  1224→  1224→        label={t('echarts.stack')}
+  1225→  1225→        checked={config.stack}
+  1226→  1226→        onChange={(v) => patch({ stack: v })}
+  1227→  1227→        disabled={!isBar && !isLine}
+  1228→  1228→        hint={isBar || isLine ? 'Stack multiple series to show totals.' : 'Only available for bar / line charts.'}
+  1229→  1229→      />
+  1230→  1230→      <StyleToggle
+  1231→  1231→        id="smooth"
+  1232→  1232→        label={t('echarts.smooth')}
+  1233→  1233→        checked={config.smooth}
+  1234→  1234→        onChange={(v) => patch({ smooth: v })}
+  1235→  1235→        disabled={!isLine}
+  1236→  1236→        hint={isLine ? 'Smooth the line into a curve.' : 'Only available for line charts.'}
+  1237→  1237→      />
+  1238→  1238→      <StyleToggle
+  1239→  1239→        id="horizontal"
+  1240→  1240→        label={t('echarts.horizontal')}
+  1241→  1241→        checked={config.horizontal}
+  1242→  1242→        onChange={(v) => patch({ horizontal: v })}
+  1243→  1243→        disabled={!isBar}
+  1244→  1244→        hint={isBar ? 'Swap X/Y axes to make bars horizontal.' : 'Only available for bar charts.'}
+  1245→  1245→      />
+  1246→  1246→      <StyleToggle
+  1247→  1247→        id="label"
+  1248→  1248→        label={t('echarts.showLabel')}
+  1249→  1249→        checked={config.showLabel}
+  1250→  1250→        onChange={(v) => patch({ showLabel: v })}
+  1251→  1251→        hint="Show values directly on data points."
+  1252→  1252→      />
+  1253→  1253→      <StyleToggle
+  1254→  1254→        id="toolbox"
+  1255→  1255→        label={t('echarts.showToolbox')}
+  1256→  1256→        checked={config.showToolbox}
+  1257→  1257→        onChange={(v) => patch({ showToolbox: v })}
+  1258→  1258→        hint="Floating toolbar (top-right): save image, data view, etc."
+  1259→  1259→      />
+  1260→  1260→
+  1261→  1261→      <div className="space-y-1.5">
+  1262→  1262→        <Label htmlFor="theme">{t('echarts.theme')}</Label>
+  1263→  1263→        <Select value={config.theme} onValueChange={(v) => patch({ theme: v })}>
+  1264→  1264→          <SelectTrigger id="theme" className="w-full">
+  1265→  1265→            <SelectValue placeholder="Select theme" />
+  1266→  1266→          </SelectTrigger>
+  1267→  1267→          <SelectContent>
+  1268→  1268→            {THEME_OPTIONS.map((o) => (
+  1269→  1269→              <SelectItem key={o.value} value={o.value}>
+  1270→  1270→                {o.label}
+  1271→  1271→              </SelectItem>
+  1272→  1272→            ))}
+  1273→  1273→          </SelectContent>
+  1274→  1274→        </Select>
+  1275→  1275→        <p className="text-xs text-muted-foreground">
+  1276→  1276→          Switching theme re-initializes the chart instance to apply theme styles.
+  1277→  1277→        </p>
+  1278→  1278→      </div>
+  1279→  1279→    </div>
+  1280→  1280→  )
+  1281→  1281→}
+  1282→  1282→

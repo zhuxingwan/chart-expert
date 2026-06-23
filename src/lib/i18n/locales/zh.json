@@ -194,6 +194,7 @@
     "loaded": "已载入：{title}",
     "deleted": "已删除",
     "copied": "已复制",
+    "markdownCopied": "Markdown 已复制到剪贴板",
     "formatDone": "已整理代码",
     "exported": "已导出",
     "exportFailed": "导出失败：{error}",

@@ -59,6 +59,8 @@ import {
   ResizablePanel,
   ResizableHandle,
 } from '@/components/ui/resizable'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -166,6 +168,7 @@ export interface InfographicEditorProps {
 
 export function InfographicEditor({ config, onChange, onTemplateChange, previewRef }: InfographicEditorProps) {
   const t = useT()
+  const isMobile = useIsMobile()
   const [local, setLocal] = React.useState<InfographicConfig>(() =>
     config
       ? deepClone(config)
@@ -223,6 +226,50 @@ export function InfographicEditor({ config, onChange, onTemplateChange, previewR
     [local.template],
   )
 
+  // Three panel contents are already factored into separate components —
+  // render them in EITHER a mobile vertical tab layout OR a desktop
+  // horizontal resizable-panel layout. Only one layout is in the DOM at a
+  // time (driven by `useIsMobile`), so the preview ref always points at the
+  // actually-visible element.
+  if (isMobile) {
+    // Mobile: vertical tab layout — Template | Preview | Config
+    return (
+      <Tabs defaultValue="preview" className="flex h-full w-full flex-col gap-0">
+        <TabsList className="grid h-10 w-full shrink-0 grid-cols-3 rounded-none border-b">
+          <TabsTrigger value="templates" className="text-xs">
+            {t('infographic.templateGallery')}
+          </TabsTrigger>
+          <TabsTrigger value="preview" className="text-xs">
+            Preview
+          </TabsTrigger>
+          <TabsTrigger value="config" className="text-xs">
+            {t('infographic.configPanel')}
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="templates" className="min-h-0 flex-1 overflow-hidden">
+          <TemplateGallery
+            currentId={local.template}
+            onPick={applyTemplate}
+          />
+        </TabsContent>
+        <TabsContent value="preview" className="min-h-0 flex-1 overflow-hidden">
+          <PreviewPanel
+            config={local}
+            previewRef={previewRef}
+          />
+        </TabsContent>
+        <TabsContent value="config" className="min-h-0 flex-1 overflow-hidden">
+          <ConfigPanel
+            config={local}
+            template={currentTemplate}
+            update={update}
+          />
+        </TabsContent>
+      </Tabs>
+    )
+  }
+
+  // Desktop: horizontal resizable panels
   return (
     <ResizablePanelGroup direction="horizontal" className="h-full">
       {/* ---------------- Left: Template gallery ---------------- */}
@@ -534,7 +581,7 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
     const syntax = generateInfographicSyntax(config)
     const markdown = '```infographic\n' + syntax + '\n```'
     navigator.clipboard.writeText(markdown).then(() => {
-      toast.success(t('toasts.copied'))
+      toast.success(t('toasts.markdownCopied'))
     }).catch(() => {
       toast.error(t('toasts.copyFailed'))
     })
