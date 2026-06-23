@@ -32,16 +32,16 @@ export type UnifiedCategory =
   | 'metric' // 指标 / 仪表
 
 export const UNIFIED_CATEGORY_LABEL: Record<UnifiedCategory, string> = {
-  comparison: '对比',
-  trend: '趋势',
-  composition: '占比构成',
-  distribution: '分布',
-  flow: '流程步骤',
-  structure: '层级结构',
-  relationship: '关系网络',
-  timeline: '时间线',
-  list: '列表要点',
-  metric: '指标仪表',
+  comparison: 'Comparison',
+  trend: 'Trend',
+  composition: 'Composition',
+  distribution: 'Distribution',
+  flow: 'Flow & Steps',
+  structure: 'Hierarchy',
+  relationship: 'Relationship',
+  timeline: 'Timeline',
+  list: 'List',
+  metric: 'Gauge',
 }
 
 export const UNIFIED_CATEGORY_ORDER: UnifiedCategory[] = [

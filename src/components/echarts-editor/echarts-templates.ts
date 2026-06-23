@@ -15,31 +15,31 @@ export interface EChartsTemplate {
 }
 
 export const ECHARTS_TEMPLATE_CATEGORIES: { id: string; label: string }[] = [
-  { id: 'bar', label: '柱状图' },
-  { id: 'line', label: '折线图' },
-  { id: 'pie', label: '饼图' },
-  { id: 'scatter', label: '散点图' },
-  { id: 'radar', label: '雷达图' },
-  { id: 'funnel', label: '漏斗图' },
-  { id: 'gauge', label: '仪表盘' },
-  { id: 'heatmap', label: '热力图' },
+  { id: 'bar', label: 'Bar' },
+  { id: 'line', label: 'Line' },
+  { id: 'pie', label: 'Pie' },
+  { id: 'scatter', label: 'Scatter' },
+  { id: 'radar', label: 'Radar' },
+  { id: 'funnel', label: 'Funnel' },
+  { id: 'gauge', label: 'Gauge' },
+  { id: 'heatmap', label: 'Heatmap' },
 ]
 
 export const ECHARTS_TEMPLATES: EChartsTemplate[] = [
-  // ---------- 柱状图 ----------
+  // ---------- Bar ----------
   {
     id: 'bar',
-    name: '柱状图',
-    description: '经典的垂直柱状图，适合对比不同类别的数值。',
+    name: 'Bar Chart',
+    description: 'Classic vertical bar chart, ideal for comparing values across categories.',
     category: 'bar',
     type: 'bar',
     defaultConfig: {
-      title: { text: '季度销售额对比', subtext: '2024 年各产品线业绩（单位：万元）' },
+      title: { text: 'Quarterly Sales Comparison', subtext: '2024 product lines (10K USD)' },
       legend: true,
       theme: 'default',
       type: 'bar',
       categories: ['Q1', 'Q2', 'Q3', 'Q4'],
-      series_names: ['产品 A', '产品 B', '产品 C'],
+      series_names: ['Product A', 'Product B', 'Product C'],
       series_data: [
         [120, 200, 150, 80],
         [90, 160, 130, 110],
@@ -54,17 +54,17 @@ export const ECHARTS_TEMPLATES: EChartsTemplate[] = [
   },
   {
     id: 'bar-horizontal',
-    name: '横向柱状图',
-    description: '条形图，类别名较长或对比排名时更清晰。',
+    name: 'Horizontal Bar Chart',
+    description: 'Horizontal bars — clearer when category names are long or for rankings.',
     category: 'bar',
     type: 'bar',
     defaultConfig: {
-      title: { text: '城市用户活跃度', subtext: '日活跃用户数（万）' },
+      title: { text: 'City User Activity', subtext: 'Daily active users (10K)' },
       legend: true,
       theme: 'default',
       type: 'bar',
-      categories: ['北京', '上海', '广州', '深圳', '杭州', '成都'],
-      series_names: ['日活', '月活'],
+      categories: ['Beijing', 'Shanghai', 'Guangzhou', 'Shenzhen', 'Hangzhou', 'Chengdu'],
+      series_names: ['DAU', 'MAU'],
       series_data: [
         [320, 410, 280, 360, 210, 180],
         [1200, 1500, 1100, 1300, 800, 700],
@@ -78,17 +78,17 @@ export const ECHARTS_TEMPLATES: EChartsTemplate[] = [
   },
   {
     id: 'bar-stack',
-    name: '堆叠柱状图',
-    description: '多系列堆叠展示总量与构成。',
+    name: 'Stacked Bar Chart',
+    description: 'Multiple stacked series showing both totals and composition.',
     category: 'bar',
     type: 'bar',
     defaultConfig: {
-      title: { text: '各部门预算构成', subtext: '人力 / 运营 / 研发 堆叠（万元）' },
+      title: { text: 'Department Budget Composition', subtext: 'HR / Ops / R&D stacked (10K USD)' },
       legend: true,
       theme: 'default',
       type: 'bar',
-      categories: ['1月', '2月', '3月', '4月', '5月', '6月'],
-      series_names: ['人力', '运营', '研发'],
+      categories: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+      series_names: ['HR', 'Ops', 'R&D'],
       series_data: [
         [40, 42, 45, 50, 48, 52],
         [25, 28, 30, 32, 35, 38],
@@ -102,19 +102,19 @@ export const ECHARTS_TEMPLATES: EChartsTemplate[] = [
     },
   },
 
-  // ---------- 折线图 ----------
+  // ---------- Line ----------
   {
     id: 'line',
-    name: '折线图',
-    description: '展示随时间变化的趋势走势。',
+    name: 'Line Chart',
+    description: 'Shows trends over time.',
     category: 'line',
     type: 'line',
     defaultConfig: {
-      title: { text: '网站访问量趋势', subtext: '近 7 天 PV / UV' },
+      title: { text: 'Website Traffic Trend', subtext: 'Last 7 days PV / UV' },
       legend: true,
       theme: 'default',
       type: 'line',
-      categories: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
+      categories: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
       series_names: ['PV', 'UV'],
       series_data: [
         [820, 932, 901, 934, 1290, 1330, 1520],
@@ -129,17 +129,17 @@ export const ECHARTS_TEMPLATES: EChartsTemplate[] = [
   },
   {
     id: 'line-smooth',
-    name: '平滑折线图',
-    description: '曲线版折线图，趋势更柔和。',
+    name: 'Smooth Line Chart',
+    description: 'Curved line chart for softer trends.',
     category: 'line',
     type: 'line',
     defaultConfig: {
-      title: { text: '气温变化', subtext: '一周最高 / 最低气温（°C）' },
+      title: { text: 'Temperature Changes', subtext: 'Weekly high / low (°C)' },
       legend: true,
       theme: 'default',
       type: 'line',
-      categories: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
-      series_names: ['最高温', '最低温'],
+      categories: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+      series_names: ['High', 'Low'],
       series_data: [
         [22, 25, 28, 26, 24, 21, 19],
         [12, 14, 16, 15, 13, 11, 10],
@@ -153,17 +153,17 @@ export const ECHARTS_TEMPLATES: EChartsTemplate[] = [
   },
   {
     id: 'area',
-    name: '面积图',
-    description: '折线图带阴影填充，强调累计体量。',
+    name: 'Area Chart',
+    description: 'Line chart with shaded fill, emphasizing cumulative volume.',
     category: 'line',
     type: 'line',
     defaultConfig: {
-      title: { text: '销售额累计', subtext: '上半年月度累计（万元）' },
+      title: { text: 'Cumulative Sales', subtext: 'H1 monthly cumulative (10K USD)' },
       legend: true,
       theme: 'default',
       type: 'line',
-      categories: ['1月', '2月', '3月', '4月', '5月', '6月'],
-      series_names: ['累计销售额'],
+      categories: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+      series_names: ['Cumulative Sales'],
       series_data: [[100, 230, 380, 520, 690, 880]],
       stack: false,
       smooth: true,
@@ -173,20 +173,20 @@ export const ECHARTS_TEMPLATES: EChartsTemplate[] = [
     },
   },
 
-  // ---------- 饼图 ----------
+  // ---------- Pie ----------
   {
     id: 'pie',
-    name: '饼图',
-    description: '展示各类别占比构成。',
+    name: 'Pie Chart',
+    description: 'Shows the share of each category in the total.',
     category: 'pie',
     type: 'pie',
     defaultConfig: {
-      title: { text: '流量来源占比', subtext: '各渠道访问占比' },
+      title: { text: 'Traffic Sources', subtext: 'Share of visits by channel' },
       legend: true,
       theme: 'default',
       type: 'pie',
       categories: [],
-      series_names: ['流量'],
+      series_names: ['Traffic'],
       series_data: [],
       stack: false,
       smooth: false,
@@ -194,27 +194,27 @@ export const ECHARTS_TEMPLATES: EChartsTemplate[] = [
       showLabel: true,
       showToolbox: true,
       single_series_data: [
-        { name: '搜索引擎', value: 1048 },
-        { name: '直接访问', value: 735 },
-        { name: '邮件营销', value: 580 },
-        { name: '联盟广告', value: 484 },
-        { name: '视频广告', value: 300 },
+        { name: 'Search Engine', value: 1048 },
+        { name: 'Direct', value: 735 },
+        { name: 'Email', value: 580 },
+        { name: 'Affiliate Ads', value: 484 },
+        { name: 'Video Ads', value: 300 },
       ],
     },
   },
   {
     id: 'pie-donut',
-    name: '环形图',
-    description: '中空的饼图，中心可放总数等关键指标。',
+    name: 'Donut Chart',
+    description: 'Hollow pie chart — center can display a key metric.',
     category: 'pie',
     type: 'pie',
     defaultConfig: {
-      title: { text: '设备分布', subtext: '终端设备占比' },
+      title: { text: 'Device Distribution', subtext: 'Share by terminal device' },
       legend: true,
       theme: 'default',
       type: 'pie',
       categories: [],
-      series_names: ['设备'],
+      series_names: ['Device'],
       series_data: [],
       stack: false,
       smooth: false,
@@ -225,25 +225,25 @@ export const ECHARTS_TEMPLATES: EChartsTemplate[] = [
         { name: 'iOS', value: 1280 },
         { name: 'Android', value: 1890 },
         { name: 'Web', value: 760 },
-        { name: '小程序', value: 420 },
+        { name: 'Mini Program', value: 420 },
       ],
     },
   },
 
-  // ---------- 散点图 ----------
+  // ---------- Scatter ----------
   {
     id: 'scatter',
-    name: '散点图',
-    description: '展示两个变量之间的关系分布。',
+    name: 'Scatter Plot',
+    description: 'Shows the distribution of two variables.',
     category: 'scatter',
     type: 'scatter',
     defaultConfig: {
-      title: { text: '身高 vs 体重', subtext: '样本身高（cm）与体重（kg）' },
+      title: { text: 'Height vs Weight', subtext: 'Sample height (cm) vs weight (kg)' },
       legend: true,
       theme: 'default',
       type: 'scatter',
       categories: [],
-      series_names: ['样本'],
+      series_names: ['Samples'],
       series_data: [],
       stack: false,
       smooth: false,
@@ -258,20 +258,20 @@ export const ECHARTS_TEMPLATES: EChartsTemplate[] = [
     },
   },
 
-  // ---------- 雷达图 ----------
+  // ---------- Radar ----------
   {
     id: 'radar',
-    name: '雷达图',
-    description: '多维能力对比，常用于能力评估。',
+    name: 'Radar Chart',
+    description: 'Multi-dimensional comparison, commonly used for capability assessment.',
     category: 'radar',
     type: 'radar',
     defaultConfig: {
-      title: { text: '能力雷达图', subtext: '产品 vs 竞品多维对比' },
+      title: { text: 'Capability Radar', subtext: 'Our product vs competitor' },
       legend: true,
       theme: 'default',
       type: 'radar',
       categories: [],
-      series_names: ['本产品', '竞品 A'],
+      series_names: ['Our Product', 'Competitor A'],
       series_data: [
         [85, 70, 90, 65, 80, 75],
         [72, 88, 65, 80, 70, 82],
@@ -282,30 +282,30 @@ export const ECHARTS_TEMPLATES: EChartsTemplate[] = [
       showLabel: true,
       showToolbox: true,
       radar_indicators: [
-        { name: '功能', max: 100 },
-        { name: '易用性', max: 100 },
-        { name: '性能', max: 100 },
-        { name: '设计', max: 100 },
-        { name: '服务', max: 100 },
-        { name: '价格', max: 100 },
+        { name: 'Features', max: 100 },
+        { name: 'Usability', max: 100 },
+        { name: 'Performance', max: 100 },
+        { name: 'Design', max: 100 },
+        { name: 'Service', max: 100 },
+        { name: 'Price', max: 100 },
       ],
     },
   },
 
-  // ---------- 漏斗图 ----------
+  // ---------- Funnel ----------
   {
     id: 'funnel',
-    name: '漏斗图',
-    description: '展示转化漏斗，常用于运营分析。',
+    name: 'Funnel Chart',
+    description: 'Shows conversion funnels, commonly used in operations analysis.',
     category: 'funnel',
     type: 'funnel',
     defaultConfig: {
-      title: { text: '购买转化漏斗', subtext: '从访问到复购的转化路径' },
+      title: { text: 'Purchase Conversion Funnel', subtext: 'From visit to repurchase' },
       legend: true,
       theme: 'default',
       type: 'funnel',
       categories: [],
-      series_names: ['转化'],
+      series_names: ['Conversion'],
       series_data: [],
       stack: false,
       smooth: false,
@@ -313,29 +313,29 @@ export const ECHARTS_TEMPLATES: EChartsTemplate[] = [
       showLabel: true,
       showToolbox: true,
       single_series_data: [
-        { name: '访问', value: 10000 },
-        { name: '注册', value: 4500 },
-        { name: '加购', value: 2200 },
-        { name: '下单', value: 1300 },
-        { name: '复购', value: 480 },
+        { name: 'Visit', value: 10000 },
+        { name: 'Sign Up', value: 4500 },
+        { name: 'Add to Cart', value: 2200 },
+        { name: 'Place Order', value: 1300 },
+        { name: 'Repurchase', value: 480 },
       ],
     },
   },
 
-  // ---------- 仪表盘 ----------
+  // ---------- Gauge ----------
   {
     id: 'gauge',
-    name: '仪表盘',
-    description: '展示单值指标完成度或评分。',
+    name: 'Gauge',
+    description: 'Shows a single-value metric — completion rate or score.',
     category: 'gauge',
     type: 'gauge',
     defaultConfig: {
-      title: { text: '年度目标完成率', subtext: '当前完成度（%）' },
+      title: { text: 'Annual Goal Completion', subtext: 'Current completion (%)' },
       legend: false,
       theme: 'default',
       type: 'gauge',
       categories: [],
-      series_names: ['完成率'],
+      series_names: ['Completion'],
       series_data: [],
       stack: false,
       smooth: false,
@@ -347,21 +347,21 @@ export const ECHARTS_TEMPLATES: EChartsTemplate[] = [
     },
   },
 
-  // ---------- 热力图 ----------
+  // ---------- Heatmap ----------
   {
     id: 'heatmap',
-    name: '热力图',
-    description: '用颜色深浅展示二维数据的强弱。',
+    name: 'Heatmap',
+    description: 'Uses color intensity to show strength in 2D data.',
     category: 'heatmap',
     type: 'heatmap',
     defaultConfig: {
-      title: { text: '一周活跃热力图', subtext: '不同时段的访问强度' },
+      title: { text: 'Weekly Activity Heatmap', subtext: 'Visit intensity by time slot' },
       legend: true,
       theme: 'default',
       type: 'heatmap',
-      categories: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
-      series_names: ['0-6时', '6-12时', '12-18时', '18-24时'],
-      // 热力图借用 series_data：每个内层数组按 categories 顺序给出每列的值
+      categories: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+      series_names: ['0-6h', '6-12h', '12-18h', '18-24h'],
+      // Heatmap reuses series_data: each inner array gives per-column values in `categories` order
       series_data: [
         [3, 4, 2, 5, 6, 8, 9],
         [12, 15, 14, 16, 18, 22, 25],
@@ -390,8 +390,8 @@ export const TEMPLATE_BY_ID: Record<string, EChartsTemplate> = ECHARTS_TEMPLATES
 export const DEFAULT_TEMPLATE = ECHARTS_TEMPLATES[0]
 
 export const THEME_OPTIONS: { value: string; label: string }[] = [
-  { value: 'default', label: '默认' },
-  { value: 'dark', label: '深色' },
-  { value: 'vintage', label: '复古' },
-  { value: 'macarons', label: '马卡龙' },
+  { value: 'default', label: 'Default' },
+  { value: 'dark', label: 'Dark' },
+  { value: 'vintage', label: 'Vintage' },
+  { value: 'macarons', label: 'Macarons' },
 ]

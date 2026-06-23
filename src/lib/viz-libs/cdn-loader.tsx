@@ -18,15 +18,8 @@ const CDN_SCRIPTS = [
     src: 'https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js',
     check: () => typeof window !== 'undefined' && !!(window as unknown as { mermaid?: unknown }).mermaid,
   },
-  {
-    id: 'antv-infographic',
-    src: 'https://cdn.jsdelivr.net/npm/@antv/infographic@0.2.19/dist/infographic.min.js',
-    check: () => {
-      if (typeof window === 'undefined') return false
-      const w = window as unknown as { AntVInfographic?: { Infographic?: unknown } }
-      return !!w.AntVInfographic?.Infographic
-    },
-  },
+  // NOTE: @antv/infographic is bundled directly (not CDN) because its UMD build
+  // has hidden external deps (lodash `_`, graphlib) that break CDN loading.
 ]
 
 type LoadStatus = 'idle' | 'loading' | 'loaded' | 'error'
@@ -34,13 +27,12 @@ type LoadStatus = 'idle' | 'loading' | 'loaded' | 'error'
 interface LoadState {
   echarts: LoadStatus
   mermaid: LoadStatus
-  infographic: LoadStatus
 }
 
 const LibContext = React.createContext<{
   status: LoadState
 }>({
-  status: { echarts: 'idle', mermaid: 'idle', infographic: 'idle' },
+  status: { echarts: 'idle', mermaid: 'idle' },
 })
 
 export function useVizLibs() {
@@ -76,7 +68,6 @@ export function VizLibLoader({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = React.useState<LoadState>({
     echarts: 'idle',
     mermaid: 'idle',
-    infographic: 'idle',
   })
 
   React.useEffect(() => {
@@ -127,9 +118,16 @@ export function getMermaid(): any | null {
   return w.mermaid ?? null
 }
 
-/** Get the AntV Infographic constructor from the CDN-loaded global. */
+/** Get the AntV Infographic constructor (bundled, not CDN). */
 export function getInfographic(): any | null {
-  if (typeof window === 'undefined') return null
-  const w = window as unknown as { AntVInfographic?: { Infographic?: any } }
-  return w.AntVInfographic?.Infographic ?? null
+  // Lazy import the bundled module — returns the Infographic class.
+  // This is a synchronous getter for API parity with getECharts/getMermaid;
+  // the actual module is pre-bundled by webpack so no network fetch occurs.
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require('@antv/infographic')
+    return mod.Infographic ?? mod.default?.Infographic ?? null
+  } catch {
+    return null
+  }
 }

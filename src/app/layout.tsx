@@ -14,9 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "图表制作工坊 - 零代码可视化工具",
-  description: "丰富的图表制作工具，支持数据图表、流程图、信息图。对非代码人员友好，零代码即可创建专业可视化。基于 ECharts、Mermaid、AntV Infographic。",
-  keywords: ["图表", "可视化", "ECharts", "Mermaid", "AntV Infographic", "信息图", "流程图", "零代码"],
+  title: "Chart Workshop - Zero-code Visualization Tool",
+  description: "A rich chart-making tool supporting data charts, flowcharts, and infographics. Non-coder friendly. Built with ECharts, Mermaid, and AntV Infographic.",
+  keywords: ["chart", "visualization", "ECharts", "Mermaid", "AntV Infographic", "infographic", "flowchart", "zero-code"],
   authors: [{ name: "Z.ai" }],
   icons: {
     icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",

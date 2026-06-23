@@ -21,6 +21,7 @@ import {
   type UnifiedTemplate,
 } from '@/lib/chart/unified-catalog'
 import { toast } from 'sonner'
+import { useT } from '@/lib/i18n'
 
 // Editors are loaded dynamically — the user never sees which library is used.
 const EChartsEditor = dynamic(
@@ -37,9 +38,10 @@ const InfographicEditor = dynamic(
 )
 
 function EditorSkeleton() {
+  const t = useT()
   return (
     <div className="flex h-full w-full items-center justify-center">
-      <div className="text-muted-foreground text-sm">正在加载编辑器…</div>
+      <div className="text-muted-foreground text-sm">{t('app.loadingEditor')}</div>
     </div>
   )
 }
@@ -53,6 +55,7 @@ interface ActiveDoc {
 }
 
 export function ChartToolApp() {
+  const t = useT()
   const previewRef = React.useRef<HTMLDivElement>(null)
   const [doc, setDoc] = React.useState<ActiveDoc | null>(null)
 
@@ -77,8 +80,8 @@ export function ChartToolApp() {
       infographic: tpl.engine === 'infographic' ? (config as InfographicConfig) : undefined,
     })
     setPickerOpen(false)
-    toast.success(`已创建：${tpl.name}`)
-  }, [])
+    toast.success(t('toasts.applied', { name: tpl.name }))
+  }, [t])
 
   const handleApplySuggestion = React.useCallback(
     (engine: ChartEngine, config: unknown) => {
@@ -95,9 +98,9 @@ export function ChartToolApp() {
         infographic: engine === 'infographic' ? (config as InfographicConfig) : undefined,
       })
       setAiOpen(false)
-      toast.success('已应用 AI 推荐')
+      toast.success(t('toasts.aiApplied'))
     },
-    [],
+    [t],
   )
 
   const handleLoadSaved = React.useCallback(
@@ -115,9 +118,9 @@ export function ChartToolApp() {
         infographic: loaded.engine === 'infographic' ? (loaded.config as InfographicConfig) : undefined,
       })
       setLoadOpen(false)
-      toast.success(`已载入：${loaded.title}`)
+      toast.success(t('toasts.loaded', { title: loaded.title }))
     },
-    [],
+    [t],
   )
 
   const getConfig = React.useCallback((): unknown => {
@@ -140,7 +143,7 @@ export function ChartToolApp() {
           onNewChart={() => setPickerOpen(true)}
           onSave={() => {
             if (!doc) {
-              toast.error('请先选择一个模板')
+              toast.error('Please select a template first')
               return
             }
             setSaveOpen(true)
@@ -208,6 +211,7 @@ export function ChartToolApp() {
 }
 
 function EmptyState({ onPick }: { onPick: () => void }) {
+  const t = useT()
   return (
     <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
       <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-primary">
@@ -217,16 +221,16 @@ function EmptyState({ onPick }: { onPick: () => void }) {
         </svg>
       </div>
       <div>
-        <h2 className="text-lg font-semibold">开始制作你的图表</h2>
+        <h2 className="text-lg font-semibold">{t('emptyState.title')}</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          从丰富的模板库中挑选一个开始，或让 AI 帮你推荐
+          {t('emptyState.description')}
         </p>
       </div>
       <button
         onClick={onPick}
         className="rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
       >
-        选择模板
+        {t('emptyState.selectTemplate')}
       </button>
     </div>
   )

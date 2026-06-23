@@ -17,6 +17,7 @@ import { saveChart } from '@/lib/chart/storage'
 import { generateThumbnail } from '@/lib/chart/export'
 import type { ChartEngine } from '@/types/chart'
 import { toast } from 'sonner'
+import { useT, useI18n } from '@/lib/i18n'
 
 interface Props {
   open: boolean
@@ -33,17 +34,24 @@ export function SaveDialog({
   getConfig,
   previewRef,
 }: Props) {
+  const t = useT()
+  const { locale } = useI18n()
   const [title, setTitle] = useState('')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    if (open) setTitle(`我的${engine === 'echarts' ? '数据图表' : engine === 'mermaid' ? '流程图' : '信息图'} ${new Date().toLocaleString('zh-CN', { hour12: false })}`)
-  }, [open, engine])
+    if (open) {
+      const defaultName =
+        engine === 'echarts' ? 'My Chart' : engine === 'mermaid' ? 'My Flowchart' : 'My Infographic'
+      const stamp = new Date().toLocaleString(locale, { hour12: false })
+      setTitle(`${defaultName} ${stamp}`)
+    }
+  }, [open, engine, locale])
 
   const handleSave = async () => {
     const config = getConfig()
     if (!config) {
-      toast.error('当前没有可保存的内容')
+      toast.error(t('saveDialog.nothingToSave'))
       return
     }
     setSaving(true)
@@ -53,11 +61,11 @@ export function SaveDialog({
       if (previewRef.current) {
         thumbnail = await generateThumbnail(previewRef.current)
       }
-      await saveChart({ title: title || '未命名图表', engine, type, config, thumbnail })
-      toast.success('已保存到我的图表')
+      await saveChart({ title: title || 'Untitled Chart', engine, type, config, thumbnail })
+      toast.success(t('saveDialog.saved'))
       onOpenChange(false)
     } catch (e) {
-      toast.error('保存失败：' + (e as Error).message)
+      toast.error(t('saveDialog.saveFailed', { error: (e as Error).message }))
     } finally {
       setSaving(false)
     }
@@ -67,29 +75,29 @@ export function SaveDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>保存图表</DialogTitle>
+          <DialogTitle>{t('saveDialog.title')}</DialogTitle>
           <DialogDescription>
-            给图表起一个名字，方便日后查找与复用。
+            {t('saveDialog.description')}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-2">
           <div className="grid gap-2">
-            <Label htmlFor="title">图表名称</Label>
+            <Label htmlFor="title">{t('saveDialog.chartName')}</Label>
             <Input
               id="title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="例如：2024 年季度销售对比"
+              placeholder={t('saveDialog.placeholder')}
             />
           </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-            取消
+            {t('actions.cancel')}
           </Button>
           <Button onClick={handleSave} disabled={saving} className="gap-1.5">
             {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-            保存
+            {t('actions.save')}
           </Button>
         </DialogFooter>
       </DialogContent>

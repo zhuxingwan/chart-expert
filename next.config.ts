@@ -6,16 +6,16 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
-  // The three viz libraries are loaded from CDN via <script> tags
-  // (see src/lib/viz-libs/cdn-loader.tsx). Externalize them so webpack
-  // never tries to bundle 200MB+ of source — keeps the dev server light.
+  // echarts (62MB) and mermaid (76MB) are loaded from CDN via <script> tags
+  // (see src/lib/viz-libs/cdn-loader.tsx). @antv/infographic (17MB, compiles
+  // to ~870KB) is small enough to bundle directly — its UMD build has hidden
+  // external deps (lodash, graphlib) that make CDN loading fragile.
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.externals = config.externals || [];
       (config.externals as Array<Record<string, string>>).push({
         echarts: "echarts",
         mermaid: "mermaid",
-        "@antv/infographic": "AntVInfographic",
       });
     }
     return config;

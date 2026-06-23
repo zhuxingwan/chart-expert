@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from 'react'
-import { useVizLibs, getInfographic } from '@/lib/viz-libs/cdn-loader'
+import { Infographic as InfographicEngine } from '@antv/infographic'
 import { toast } from 'sonner'
 import {
   Download,
@@ -44,7 +44,6 @@ import {
   Cloud,
   Square,
   Search,
-  Loader2,
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -85,6 +84,7 @@ import {
   type InfographicTemplateCategory,
 } from './template-registry'
 import { exportSvg, exportJson } from '@/lib/chart/export'
+import { useT } from '@/lib/i18n'
 
 // Icon registry — maps template icon names to lucide components
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -119,6 +119,7 @@ export interface InfographicEditorProps {
 // ===========================================================================
 
 export function InfographicEditor({ config, onChange, previewRef }: InfographicEditorProps) {
+  const t = useT()
   const [local, setLocal] = React.useState<InfographicConfig>(() =>
     config
       ? deepClone(config)
@@ -146,14 +147,14 @@ export function InfographicEditor({ config, onChange, previewRef }: InfographicE
 
   // Sync local -> parent (debounced 200ms)
   React.useEffect(() => {
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       const key = JSON.stringify(local)
       if (key !== lastAppliedKey.current) {
         lastAppliedKey.current = key
         onChange(deepClone(local))
       }
     }, 200)
-    return () => clearTimeout(t)
+    return () => clearTimeout(timer)
   }, [local, onChange])
 
   const update = React.useCallback((patch: Partial<InfographicConfig>) => {
@@ -167,8 +168,8 @@ export function InfographicEditor({ config, onChange, previewRef }: InfographicE
       template: tpl.id,
       data: defaultDataForShape(tpl.dataShape),
     }))
-    toast.success(`已应用模板：${tpl.name}`)
-  }, [])
+    toast.success(t('infographic.applied', { name: tpl.name }))
+  }, [t])
 
   const currentTemplate = React.useMemo(
     () => TEMPLATE_REGISTRY.find((t) => t.id === local.template) ?? TEMPLATE_REGISTRY[0],
@@ -219,6 +220,7 @@ interface GalleryProps {
 }
 
 function TemplateGallery({ currentId, onPick }: GalleryProps) {
+  const t = useT()
   const [keyword, setKeyword] = React.useState('')
   const groups = React.useMemo(() => groupTemplatesByCategory(), [])
 
@@ -226,10 +228,10 @@ function TemplateGallery({ currentId, onPick }: GalleryProps) {
     if (!keyword.trim()) return null
     const kw = keyword.toLowerCase()
     return TEMPLATE_REGISTRY.filter(
-      (t) =>
-        t.name.toLowerCase().includes(kw) ||
-        t.id.toLowerCase().includes(kw) ||
-        t.tags.some((tag) => tag.toLowerCase().includes(kw)),
+      (tpl) =>
+        tpl.name.toLowerCase().includes(kw) ||
+        tpl.id.toLowerCase().includes(kw) ||
+        tpl.tags.some((tag) => tag.toLowerCase().includes(kw)),
     )
   }, [keyword])
 
@@ -238,14 +240,14 @@ function TemplateGallery({ currentId, onPick }: GalleryProps) {
       <div className="border-b p-3">
         <div className="mb-2 flex items-center gap-2">
           <Wand2 className="h-4 w-4 text-primary" />
-          <h3 className="text-sm font-semibold">信息图模板</h3>
+          <h3 className="text-sm font-semibold">{t('infographic.templateGallery')}</h3>
         </div>
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            placeholder="搜索模板…"
+            placeholder={t('actions.search')}
             className="h-8 pl-8 text-xs"
           />
         </div>
@@ -254,17 +256,17 @@ function TemplateGallery({ currentId, onPick }: GalleryProps) {
         <div className="p-3">
           {filtered ? (
             <div className="grid grid-cols-2 gap-2">
-              {filtered.map((t) => (
+              {filtered.map((tpl) => (
                 <TemplateCard
-                  key={t.id}
-                  tpl={t}
-                  active={t.id === currentId}
-                  onClick={() => onPick(t)}
+                  key={tpl.id}
+                  tpl={tpl}
+                  active={tpl.id === currentId}
+                  onClick={() => onPick(tpl)}
                 />
               ))}
               {filtered.length === 0 && (
                 <div className="col-span-2 py-8 text-center text-xs text-muted-foreground">
-                  没有匹配的模板
+                  {t('templatePicker.noResults')}
                 </div>
               )}
             </div>
@@ -284,12 +286,12 @@ function TemplateGallery({ currentId, onPick }: GalleryProps) {
                       </Badge>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                      {list.map((t) => (
+                      {list.map((tpl) => (
                         <TemplateCard
-                          key={t.id}
-                          tpl={t}
-                          active={t.id === currentId}
-                          onClick={() => onPick(t)}
+                          key={tpl.id}
+                          tpl={tpl}
+                          active={tpl.id === currentId}
+                          onClick={() => onPick(tpl)}
                         />
                       ))}
                     </div>
@@ -347,25 +349,17 @@ interface PreviewProps {
 }
 
 function PreviewPanel({ config, previewRef }: PreviewProps) {
+  const t = useT()
   const containerRef = React.useRef<HTMLDivElement>(null)
-  // `any` because the @antv/infographic types aren't resolvable now that the
-  // library is externalized to a CDN global. The runtime API (constructor,
-  // render, destroy) is identical to the bundled build.
+  // The @antv/infographic engine instance.
   const engineRef = React.useRef<any>(null)
   const [zoom, setZoom] = React.useState(1)
   const [error, setError] = React.useState<string | null>(null)
   const renderSeq = React.useRef(0)
 
-  // Infographic engine is loaded from CDN via <VizLibLoader>. Wait for the
-  // `loaded` status before constructing the engine.
-  const { status } = useVizLibs()
-  const infographicLoaded = status.infographic === 'loaded'
-
-  // Create / destroy engine — gated on CDN load. Re-creates when status flips.
+  // Create / destroy engine — @antv/infographic is bundled directly (not CDN).
   React.useEffect(() => {
-    if (!containerRef.current || !infographicLoaded) return
-    const InfographicEngine = getInfographic()
-    if (!InfographicEngine) return
+    if (!containerRef.current) return
     try {
       engineRef.current = new InfographicEngine({
         container: containerRef.current,
@@ -385,13 +379,12 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
       }
       engineRef.current = null
     }
-  }, [infographicLoaded])
+  }, [])
 
-  // Render on config change (debounced 250ms) — gated on CDN load.
+  // Render on config change (debounced 250ms)
   React.useEffect(() => {
-    if (!infographicLoaded) return
     const seq = ++renderSeq.current
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       if (!engineRef.current || renderSeq.current !== seq) return
       try {
         engineRef.current.render({
@@ -405,8 +398,8 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
         setError((e as Error).message)
       }
     }, 250)
-    return () => clearTimeout(t)
-  }, [config.template, config.data, config.theme, infographicLoaded])
+    return () => clearTimeout(timer)
+  }, [config.template, config.data, config.theme])
 
   const handleZoomIn = () => setZoom((z) => Math.min(2.5, z + 0.2))
   const handleZoomOut = () => setZoom((z) => Math.max(0.4, z - 0.2))
@@ -415,7 +408,7 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
   const handleDownloadSvg = async () => {
     const svg = containerRef.current?.querySelector('svg')
     if (!svg) {
-      toast.error('暂无可导出的内容')
+      toast.error(t('toasts.noContent'))
       return
     }
     // Add background rect if needed
@@ -428,13 +421,13 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
       clone.insertBefore(rect, clone.firstChild)
     }
     exportSvg(clone, `infographic-${Date.now()}.svg`)
-    toast.success('SVG 已下载')
+    toast.success(t('toasts.exported'))
   }
 
   const handleDownloadPng = async () => {
     const svg = containerRef.current?.querySelector('svg')
     if (!svg) {
-      toast.error('暂无可导出的内容')
+      toast.error(t('toasts.noContent'))
       return
     }
     try {
@@ -476,21 +469,21 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
           a.click()
           setTimeout(() => URL.revokeObjectURL(a.href), 1000)
         }, 'image/png')
-        toast.success('PNG 已下载')
+        toast.success(t('toasts.exported'))
       }
       img.onerror = () => {
         URL.revokeObjectURL(url)
-        toast.error('PNG 导出失败')
+        toast.error(t('toasts.exportFailed', { error: 'PNG' }))
       }
       img.src = url
     } catch (e) {
-      toast.error('PNG 导出失败：' + (e as Error).message)
+      toast.error(t('toasts.exportFailed', { error: (e as Error).message }))
     }
   }
 
   const handleExportJson = () => {
     exportJson(config, `infographic-config-${Date.now()}.json`)
-    toast.success('配置已导出')
+    toast.success(t('toasts.exported'))
   }
 
   return (
@@ -513,13 +506,13 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
         </div>
         <div className="flex items-center gap-1">
           <Button size="sm" variant="ghost" onClick={handleDownloadSvg} className="h-7 gap-1 px-2 text-xs">
-            <Download className="h-3 w-3" /> SVG
+            <Download className="h-3 w-3" /> {t('infographic.downloadSvg')}
           </Button>
           <Button size="sm" variant="ghost" onClick={handleDownloadPng} className="h-7 gap-1 px-2 text-xs">
-            <Download className="h-3 w-3" /> PNG
+            <Download className="h-3 w-3" /> {t('infographic.downloadPng')}
           </Button>
           <Button size="sm" variant="ghost" onClick={handleExportJson} className="h-7 gap-1 px-2 text-xs">
-            <Copy className="h-3 w-3" /> JSON
+            <Copy className="h-3 w-3" /> {t('infographic.exportJson')}
           </Button>
         </div>
       </div>
@@ -544,15 +537,9 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
             style={{ minHeight: 400 }}
           />
         </div>
-        {!infographicLoaded && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/80 backdrop-blur-sm">
-            <Loader2 className="size-6 animate-spin text-primary" />
-            <span className="text-sm text-muted-foreground">正在加载图表库…</span>
-          </div>
-        )}
         {error && (
           <div className="absolute inset-x-4 bottom-4 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-xs text-destructive">
-            <div className="mb-1 font-semibold">渲染出错</div>
+            <div className="mb-1 font-semibold">{t('infographic.renderError')}</div>
             <pre className="max-h-32 overflow-auto whitespace-pre-wrap">{error}</pre>
           </div>
         )}
@@ -572,6 +559,7 @@ interface ConfigProps {
 }
 
 function ConfigPanel({ config, template, update }: ConfigProps) {
+  const t = useT()
   return (
     <ScrollArea className="h-full">
       <div className="space-y-5 p-4">
@@ -588,7 +576,7 @@ function ConfigPanel({ config, template, update }: ConfigProps) {
 
         {/* Title */}
         <section className="space-y-2">
-          <h4 className="text-xs font-semibold text-muted-foreground">标题</h4>
+          <h4 className="text-xs font-semibold text-muted-foreground">{t('infographic.title_section')}</h4>
           <div className="grid gap-2">
             <Input
               value={config.data.title?.text ?? ''}
@@ -603,7 +591,7 @@ function ConfigPanel({ config, template, update }: ConfigProps) {
                   },
                 })
               }
-              placeholder="主标题"
+              placeholder={t('infographic.mainTitle')}
               className="h-8 text-xs"
             />
             <Input
@@ -619,7 +607,7 @@ function ConfigPanel({ config, template, update }: ConfigProps) {
                   },
                 })
               }
-              placeholder="副标题（可选）"
+              placeholder={t('infographic.subtitle')}
               className="h-8 text-xs"
             />
           </div>
@@ -627,7 +615,7 @@ function ConfigPanel({ config, template, update }: ConfigProps) {
 
         {/* Data editor — switch by data shape */}
         <section className="space-y-2">
-          <h4 className="text-xs font-semibold text-muted-foreground">数据</h4>
+          <h4 className="text-xs font-semibold text-muted-foreground">{t('infographic.data')}</h4>
           {template.dataShape === 'relation' ? (
             <RelationDataEditor config={config} update={update} />
           ) : template.dataShape === 'hierarchy' ? (
@@ -641,7 +629,7 @@ function ConfigPanel({ config, template, update }: ConfigProps) {
 
         {/* Theme & background */}
         <section className="space-y-2">
-          <h4 className="text-xs font-semibold text-muted-foreground">样式</h4>
+          <h4 className="text-xs font-semibold text-muted-foreground">{t('infographic.style')}</h4>
           <div className="grid gap-2">
             <div className="grid grid-cols-3 gap-1.5">
               {(['light', 'dark', 'hand-drawn'] as const).map((th) => (
@@ -655,12 +643,12 @@ function ConfigPanel({ config, template, update }: ConfigProps) {
                       : 'hover:bg-muted',
                   )}
                 >
-                  {th === 'light' ? '亮色' : th === 'dark' ? '暗色' : '手绘'}
+                  {th === 'light' ? t('infographic.themeLight') : th === 'dark' ? t('infographic.themeDark') : t('infographic.themeHandDrawn')}
                 </button>
               ))}
             </div>
             <div className="flex items-center gap-1.5">
-              <Label className="w-16 text-xs">背景色</Label>
+              <Label className="w-16 text-xs">{t('infographic.background')}</Label>
               <Input
                 type="color"
                 value={config.background}
@@ -691,6 +679,7 @@ function ListDataEditor({
   config: InfographicConfig
   update: (patch: Partial<InfographicConfig>) => void
 }) {
+  const t = useT()
   const items = config.data.lists ?? []
 
   const setItems = (next: InfographicItem[]) => {
@@ -700,7 +689,7 @@ function ListDataEditor({
   const add = () => {
     setItems([
       ...items,
-      { label: `新条目 ${items.length + 1}`, desc: '', value: 50, icon: '📍' },
+      { label: `Item ${items.length + 1}`, desc: '', value: 50, icon: '📍' },
     ])
   }
 
@@ -728,34 +717,34 @@ function ListDataEditor({
             <Input
               value={it.icon ?? ''}
               onChange={(e) => updateItem(i, { icon: e.target.value })}
-              placeholder="图标"
+              placeholder={t('infographic.iconPlaceholder')}
               className="h-7 w-12 text-center text-xs"
             />
             <Input
               value={it.label ?? ''}
               onChange={(e) => updateItem(i, { label: e.target.value })}
-              placeholder="标题"
+              placeholder={t('infographic.labelPlaceholder')}
               className="h-7 flex-1 text-xs"
             />
-            <Button size="sm" variant="ghost" onClick={() => move(i, -1)} className="h-7 w-6 p-0" disabled={i === 0}>
+            <Button size="sm" variant="ghost" onClick={() => move(i, -1)} className="h-7 w-6 p-0" disabled={i === 0} aria-label={t('infographic.moveUp')}>
               ↑
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => move(i, 1)} className="h-7 w-6 p-0" disabled={i === items.length - 1}>
+            <Button size="sm" variant="ghost" onClick={() => move(i, 1)} className="h-7 w-6 p-0" disabled={i === items.length - 1} aria-label={t('infographic.moveDown')}>
               ↓
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => remove(i)} className="h-7 w-6 p-0 text-destructive">
+            <Button size="sm" variant="ghost" onClick={() => remove(i)} className="h-7 w-6 p-0 text-destructive" aria-label={t('actions.delete')}>
               <Trash2 className="h-3 w-3" />
             </Button>
           </div>
           <Input
             value={it.desc ?? ''}
             onChange={(e) => updateItem(i, { desc: e.target.value })}
-            placeholder="描述（可选）"
+            placeholder={t('infographic.descPlaceholder')}
             className="h-7 text-xs"
           />
           {(it.value !== undefined) && (
             <div className="flex items-center gap-1.5">
-              <Label className="w-10 text-[10px] text-muted-foreground">数值</Label>
+              <Label className="w-10 text-[10px] text-muted-foreground">{t('infographic.valueLabel')}</Label>
               <Input
                 type="number"
                 value={it.value ?? 0}
@@ -767,7 +756,7 @@ function ListDataEditor({
         </div>
       ))}
       <Button size="sm" variant="outline" onClick={add} className="w-full gap-1 text-xs">
-        <Plus className="h-3 w-3" /> 添加条目
+        <Plus className="h-3 w-3" /> {t('infographic.addNode')}
       </Button>
     </div>
   )
@@ -784,6 +773,7 @@ function HierarchyDataEditor({
   config: InfographicConfig
   update: (patch: Partial<InfographicConfig>) => void
 }) {
+  const t = useT()
   const root = config.data.lists?.[0]
 
   const setRoot = (next: InfographicItem) => {
@@ -796,9 +786,9 @@ function HierarchyDataEditor({
         size="sm"
         variant="outline"
         className="w-full text-xs"
-        onClick={() => setRoot({ label: '根节点', children: [] })}
+        onClick={() => setRoot({ label: 'Root', children: [] })}
       >
-        初始化树
+        {t('infographic.initTree')}
       </Button>
     )
   }
@@ -825,12 +815,13 @@ function NodeEditor({
   onChange: (n: InfographicItem) => void
   depth: number
 }) {
+  const t = useT()
   const [expanded, setExpanded] = React.useState(depth < 2)
 
   const patch = (p: Partial<InfographicItem>) => onChange({ ...node, ...p })
 
   const addChild = () => {
-    const children = [...(node.children ?? []), { label: `新节点 ${(node.children?.length ?? 0) + 1}` }]
+    const children = [...(node.children ?? []), { label: `Node ${(node.children?.length ?? 0) + 1}` }]
     patch({ children })
     if (!expanded) setExpanded(true)
   }
@@ -859,12 +850,12 @@ function NodeEditor({
         <Input
           value={node.label ?? ''}
           onChange={(e) => patch({ label: e.target.value })}
-          placeholder="节点标题"
+          placeholder={t('infographic.labelPlaceholder')}
           className="h-7 flex-1 text-xs"
           style={{ fontWeight: depth === 0 ? 600 : 400 }}
         />
         {depth > 0 && (
-          <Button size="sm" variant="ghost" onClick={() => onChange({})} className="h-7 w-6 p-0 text-destructive">
+          <Button size="sm" variant="ghost" onClick={() => onChange({})} className="h-7 w-6 p-0 text-destructive" aria-label={t('actions.delete')}>
             <Trash2 className="h-3 w-3" />
           </Button>
         )}
@@ -873,7 +864,7 @@ function NodeEditor({
         <Input
           value={node.desc ?? ''}
           onChange={(e) => patch({ desc: e.target.value })}
-          placeholder="根节点描述（可选）"
+          placeholder={t('infographic.descPlaceholder')}
           className="h-7 text-xs"
         />
       )}
@@ -895,7 +886,7 @@ function NodeEditor({
         onClick={addChild}
         className="h-6 gap-1 text-[10px] text-muted-foreground"
       >
-        <Plus className="h-2.5 w-2.5" /> 添加子节点
+        <Plus className="h-2.5 w-2.5" /> {t('infographic.addChild')}
       </Button>
     </div>
   )
@@ -912,6 +903,7 @@ function CompareDataEditor({
   config: InfographicConfig
   update: (patch: Partial<InfographicConfig>) => void
 }) {
+  const t = useT()
   const groups = config.data.lists ?? []
 
   const setGroups = (next: InfographicItem[]) => {
@@ -919,7 +911,7 @@ function CompareDataEditor({
   }
 
   const addGroup = () => {
-    setGroups([...groups, { label: `类别 ${groups.length + 1}`, children: [] }])
+    setGroups([...groups, { label: `Group ${groups.length + 1}`, children: [] }])
   }
 
   const updateGroup = (i: number, g: InfographicItem) => {
@@ -938,17 +930,17 @@ function CompareDataEditor({
             <Input
               value={g.label ?? ''}
               onChange={(e) => updateGroup(i, { ...g, label: e.target.value })}
-              placeholder="组名"
+              placeholder="Group name"
               className="h-7 flex-1 text-xs font-medium"
             />
-            <Button size="sm" variant="ghost" onClick={() => removeGroup(i)} className="h-7 w-6 p-0 text-destructive">
+            <Button size="sm" variant="ghost" onClick={() => removeGroup(i)} className="h-7 w-6 p-0 text-destructive" aria-label={t('actions.delete')}>
               <Trash2 className="h-3 w-3" />
             </Button>
           </div>
           <Input
             value={g.desc ?? ''}
             onChange={(e) => updateGroup(i, { ...g, desc: e.target.value })}
-            placeholder="组描述（可选）"
+            placeholder={t('infographic.descPlaceholder')}
             className="h-7 text-xs"
           />
           {/* children */}
@@ -962,7 +954,7 @@ function CompareDataEditor({
                     children[j] = { ...c, label: e.target.value }
                     updateGroup(i, { ...g, children })
                   }}
-                  placeholder="要点"
+                  placeholder="Point"
                   className="h-6 flex-1 text-[11px]"
                 />
                 <Button
@@ -973,6 +965,7 @@ function CompareDataEditor({
                     updateGroup(i, { ...g, children })
                   }}
                   className="h-6 w-5 p-0 text-destructive"
+                  aria-label={t('actions.delete')}
                 >
                   <Trash2 className="h-2.5 w-2.5" />
                 </Button>
@@ -982,18 +975,18 @@ function CompareDataEditor({
               size="sm"
               variant="ghost"
               onClick={() => {
-                const children = [...(g.children ?? []), { label: '新要点' }]
+                const children = [...(g.children ?? []), { label: 'New point' }]
                 updateGroup(i, { ...g, children })
               }}
               className="h-5 gap-1 text-[10px] text-muted-foreground"
             >
-              <Plus className="h-2.5 w-2.5" /> 添加要点
+              <Plus className="h-2.5 w-2.5" /> {t('infographic.addChild')}
             </Button>
           </div>
         </div>
       ))}
       <Button size="sm" variant="outline" onClick={addGroup} className="w-full gap-1 text-xs">
-        <Plus className="h-3 w-3" /> 添加分组
+        <Plus className="h-3 w-3" /> {t('infographic.addGroup')}
       </Button>
     </div>
   )
@@ -1010,6 +1003,7 @@ function RelationDataEditor({
   config: InfographicConfig
   update: (patch: Partial<InfographicConfig>) => void
 }) {
+  const t = useT()
   const nodes = config.data.nodes ?? []
   const edges = config.data.edges ?? []
 
@@ -1025,19 +1019,19 @@ function RelationDataEditor({
       {/* Nodes */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <span className="text-[11px] font-medium text-muted-foreground">节点 ({nodes.length})</span>
+          <span className="text-[11px] font-medium text-muted-foreground">{t('infographic.nodes', { count: nodes.length })}</span>
           <Button
             size="sm"
             variant="ghost"
             onClick={() =>
               setNodes([
                 ...nodes,
-                { id: `n${nodes.length + 1}`, label: `节点 ${nodes.length + 1}` },
+                { id: `n${nodes.length + 1}`, label: `Node ${nodes.length + 1}` },
               ])
             }
             className="h-6 gap-1 px-1.5 text-[10px]"
           >
-            <Plus className="h-2.5 w-2.5" /> 添加
+            <Plus className="h-2.5 w-2.5" /> {t('infographic.addNode')}
           </Button>
         </div>
         {nodes.map((n, i) => (
@@ -1045,19 +1039,19 @@ function RelationDataEditor({
             <Input
               value={n.id}
               onChange={(e) => setNodes(nodes.map((nn, idx) => (idx === i ? { ...nn, id: e.target.value } : nn)))}
-              placeholder="id"
+              placeholder={t('infographic.nodeId')}
               className="h-7 w-16 font-mono text-[10px]"
             />
             <Input
               value={n.label}
               onChange={(e) => setNodes(nodes.map((nn, idx) => (idx === i ? { ...nn, label: e.target.value } : nn)))}
-              placeholder="名称"
+              placeholder={t('infographic.nodeName')}
               className="h-7 flex-1 text-xs"
             />
             <Input
               value={n.group ?? ''}
               onChange={(e) => setNodes(nodes.map((nn, idx) => (idx === i ? { ...nn, group: e.target.value } : nn)))}
-              placeholder="组"
+              placeholder={t('infographic.nodeGroup')}
               className="h-7 w-12 text-[10px]"
             />
             <Button
@@ -1065,6 +1059,7 @@ function RelationDataEditor({
               variant="ghost"
               onClick={() => setNodes(nodes.filter((_, idx) => idx !== i))}
               className="h-7 w-6 p-0 text-destructive"
+              aria-label={t('actions.delete')}
             >
               <Trash2 className="h-3 w-3" />
             </Button>
@@ -1075,14 +1070,14 @@ function RelationDataEditor({
       {/* Edges */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <span className="text-[11px] font-medium text-muted-foreground">连线 ({edges.length})</span>
+          <span className="text-[11px] font-medium text-muted-foreground">{t('infographic.edges', { count: edges.length })}</span>
           <Button
             size="sm"
             variant="ghost"
             onClick={() => setEdges([...edges, { from: nodes[0]?.id ?? '', to: nodes[1]?.id ?? '' }])}
             className="h-6 gap-1 px-1.5 text-[10px]"
           >
-            <Plus className="h-2.5 w-2.5" /> 添加
+            <Plus className="h-2.5 w-2.5" /> {t('infographic.addEdge')}
           </Button>
         </div>
         {edges.map((e, i) => (
@@ -1092,7 +1087,7 @@ function RelationDataEditor({
               onValueChange={(v) => setEdges(edges.map((ee, idx) => (idx === i ? { ...ee, from: v } : ee)))}
             >
               <SelectTrigger className="h-7 w-16 text-[10px]">
-                <SelectValue placeholder="起点" />
+                <SelectValue placeholder={t('infographic.edgeFrom')} />
               </SelectTrigger>
               <SelectContent>
                 {nodes.map((n) => (
@@ -1108,7 +1103,7 @@ function RelationDataEditor({
               onValueChange={(v) => setEdges(edges.map((ee, idx) => (idx === i ? { ...ee, to: v } : ee)))}
             >
               <SelectTrigger className="h-7 w-16 text-[10px]">
-                <SelectValue placeholder="终点" />
+                <SelectValue placeholder={t('infographic.edgeTo')} />
               </SelectTrigger>
               <SelectContent>
                 {nodes.map((n) => (
@@ -1121,7 +1116,7 @@ function RelationDataEditor({
             <Input
               value={e.label ?? ''}
               onChange={(ev) => setEdges(edges.map((ee, idx) => (idx === i ? { ...ee, label: ev.target.value } : ee)))}
-              placeholder="标签"
+              placeholder={t('infographic.edgeLabel')}
               className="h-7 flex-1 text-[10px]"
             />
             <Button
@@ -1129,6 +1124,7 @@ function RelationDataEditor({
               variant="ghost"
               onClick={() => setEdges(edges.filter((_, idx) => idx !== i))}
               className="h-7 w-6 p-0 text-destructive"
+              aria-label={t('actions.delete')}
             >
               <Trash2 className="h-3 w-3" />
             </Button>

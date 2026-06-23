@@ -16,6 +16,7 @@ import { listCharts, deleteChart } from '@/lib/chart/storage'
 import { cn } from '@/lib/utils'
 import type { SavedChart, ChartEngine } from '@/types/chart'
 import { toast } from 'sonner'
+import { useT, useI18n } from '@/lib/i18n'
 
 interface Props {
   open: boolean
@@ -35,6 +36,8 @@ const ENGINE_COLOR: Record<ChartEngine, string> = {
 }
 
 export function SavedChartsDialog({ open, onOpenChange, onLoad }: Props) {
+  const t = useT()
+  const { locale } = useI18n()
   const [charts, setCharts] = useState<SavedChart[]>([])
   const [loading, setLoading] = useState(false)
   const [keyword, setKeyword] = useState('')
@@ -44,7 +47,7 @@ export function SavedChartsDialog({ open, onOpenChange, onLoad }: Props) {
     try {
       setCharts(await listCharts())
     } catch (e) {
-      toast.error('加载失败：' + (e as Error).message)
+      toast.error(t('loadDialog.loadFailed', { error: (e as Error).message }))
     } finally {
       setLoading(false)
     }
@@ -64,9 +67,9 @@ export function SavedChartsDialog({ open, onOpenChange, onLoad }: Props) {
     try {
       await deleteChart(id)
       setCharts((prev) => prev.filter((c) => c.id !== id))
-      toast.success('已删除')
+      toast.success(t('toasts.deleted'))
     } catch (e) {
-      toast.error('删除失败：' + (e as Error).message)
+      toast.error(t('loadDialog.deleteFailed', { error: (e as Error).message }))
     }
   }
 
@@ -79,9 +82,9 @@ export function SavedChartsDialog({ open, onOpenChange, onLoad }: Props) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>我的图表</DialogTitle>
+          <DialogTitle>{t('loadDialog.title')}</DialogTitle>
           <DialogDescription>
-            点击任意一张图表即可载入到编辑器继续编辑。
+            {t('loadDialog.description')}
           </DialogDescription>
         </DialogHeader>
 
@@ -90,7 +93,7 @@ export function SavedChartsDialog({ open, onOpenChange, onLoad }: Props) {
           <Input
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
-            placeholder="搜索图表名称或类型…"
+            placeholder={t('actions.search')}
             className="pl-9"
           />
         </div>
@@ -98,12 +101,12 @@ export function SavedChartsDialog({ open, onOpenChange, onLoad }: Props) {
         <ScrollArea className="h-[55vh] pr-2">
           {loading ? (
             <div className="flex h-40 items-center justify-center text-sm text-muted-foreground">
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 加载中…
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> {t('app.loadingEditor')}
             </div>
           ) : filtered.length === 0 ? (
             <div className="flex h-40 flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
               <Inbox className="h-8 w-8" />
-              <span>暂无图表，先去创建一个吧！</span>
+              <span>{t('loadDialog.empty')}</span>
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -124,7 +127,7 @@ export function SavedChartsDialog({ open, onOpenChange, onLoad }: Props) {
                           className="max-h-full max-w-full object-contain"
                         />
                       ) : (
-                        <div className="text-xs text-muted-foreground">无预览</div>
+                        <div className="text-xs text-muted-foreground">{t('loadDialog.noPreview')}</div>
                       )}
                     </div>
                     <div className="p-2.5">
@@ -143,7 +146,7 @@ export function SavedChartsDialog({ open, onOpenChange, onLoad }: Props) {
                         </span>
                       </div>
                       <div className="mt-1 text-[10px] text-muted-foreground">
-                        {new Date(c.updatedAt).toLocaleString('zh-CN', { hour12: false })}
+                        {new Date(c.updatedAt).toLocaleString(locale, { hour12: false })}
                       </div>
                     </div>
                   </button>
@@ -153,7 +156,7 @@ export function SavedChartsDialog({ open, onOpenChange, onLoad }: Props) {
                       handleDelete(c.id)
                     }}
                     className="absolute right-1.5 top-1.5 hidden rounded-md bg-background/80 p-1 text-muted-foreground hover:text-destructive group-hover:block"
-                    aria-label="删除"
+                    aria-label={t('actions.delete')}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>

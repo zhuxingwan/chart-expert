@@ -156,3 +156,115 @@ Stage Summary:
 - ✅ IndexedDB save/load verified: saved "测试柱状图", confirmed "charts in DB: 1", "我的图表" dialog shows the saved chart with thumbnail.
 - ✅ Template picker: 161 templates across 10 purpose categories, search works.
 - ✅ The "Retrying 1/3..." Prisma timeout messages are gone (no more DB connection attempts during compilation).
+
+---
+Task ID: I18N-TRANSLATIONS
+Agent: general-purpose
+Task: Create translation JSON files for 10 languages plus pt-PT, pt-BR, and convert zh-TW to Traditional Chinese
+
+Work Log:
+- Read prior worklog and confirmed `en.json` (English base) and `zh.json` (Simplified Chinese) exist in `src/lib/i18n/locales/`. Also discovered `zh-CN.json` (copy of zh.json) and a stub `pt.json` (copy of en.json) and `zh-TW.json` (copy of zh.json) already present.
+- Read `en.json` (211 lines, 192 keys across 14 top-level sections: app, actions, templatePicker, categories, emptyState, saveDialog, loadDialog, aiDialog, echarts, mermaid, infographic, footer, toasts, language) and the existing `zh.json` to understand the structure and interpolation syntax (`{name}`, `{count}`, `{title}`, `{error}`).
+- Created 10 new translation files with idiomatic (not word-for-word) translations, keeping all JSON keys identical to `en.json` and preserving all `{placeholder}` interpolation syntax intact:
+  - `es.json` — Spanish (Taller de gráficos)
+  - `fr.json` — French (Atelier de graphiques)
+  - `de.json` — German (Diagrammwerkstatt)
+  - `ja.json` — Japanese (チャート工房)
+  - `ko.json` — Korean (차트 워크숍)
+  - `pt.json` — Portuguese (Oficina de Gráficos) — overwrote the existing stub
+  - `ru.json` — Russian (Мастерская диаграмм)
+  - `ar.json` — Arabic (ورشة الرسوم البيانية) — RTL
+  - `hi.json` — Hindi (चार्ट कार्यशाला)
+  - `vi.json` — Vietnamese (Xưởng biểu đồ)
+- Kept technical terms `SVG`, `PNG`, `JSON`, `AI`, `id` as-is in all languages per the spec.
+- Created `pt-PT.json` and `pt-BR.json` as byte-identical copies of `pt.json` (to be diverged later if needed).
+- Converted `zh-TW.json` from Simplified Chinese to Traditional Chinese:
+  - Wrote a Python conversion script (`/home/z/convert_zh_tw.py`, since removed) that applies the user-provided "key conversion" table as multi-char (vocabulary-level) substitutions FIRST, then a comprehensive single-char Simplified→Traditional mapping covering ~250 character pairs.
+  - Vocabulary-level (multi-char) substitutions included the user-specified ones plus a few Taiwanese tech-locale terms: 信息图 → 資訊圖, 软件 → 軟體, 关系 → 關係 (where 系 → 係 contextually).
+  - Single-char pass covered the user's listed conversions (图→圖, 标→標, 设→設, 当→當, 线→線, 码→碼, 关→關, 开→開, 应→應, 运→運, 过→過, 为→為, 产→產, 场→場, 从→從, 让→讓, 帮→幫, 选→選, 简→簡, 视→視, 构→構, 态→態, 换→換, 环→環, 资→資, plus the implied 制→製, 择→擇, 编→編, 辑→輯, 据→據, 数→數, 题→題, 复→複, 删→刪, 显→顯, 设→設) AND common S2T differences appearing in the source text (丰→豐, 库→庫, 类→類, 浏→瀏, 览→覽, 称→稱, 网→網, 络→絡, 时→時, 间→間, 骤→驟, 层→層, 级→級, 结→結, 仪→儀, 给→給, 个→個, 后→後, 与→與, 别→別, 号→號, 项→項, 计→計, 随→隨, 机→機, 样→樣, 栏→欄, 写→寫, 语→語, 缩→縮, 错→錯, 节→節, 点→點, 连→連, 终→終, 树→樹, 绘→繪, 档→檔, 败→敗, 无→無, 确→確, 认→認, 储→儲, 单→單, 词→詞, 头→頭, 经→經, 这→這, 们→們, 对→對, 现→現, 还→還, 发→發, 长→長, 问→問, 处→處, 动→動, 业→業, 学→學, 检→檢, 见→見, 论→論, 测→測, 试→試, 内→內, 决→決, 实→實, 强→強, 历→歷, 维→維, 护→護, 总→總, 声→聲, 区→區, 风→風, 师→師, 务→務, 员→員, 备→備, 录→錄, 续→續, 键→鍵, 签→籤, 该→該, 验→驗, 达→達, 观→觀, 记→記, 识→識, 证→證, 议→議, plus 荐→薦, 击→擊, 没→沒, 势→勢, 销→銷, 张→張, 暂→暫, 适→適, 脑→腦, 误→誤, 条→條, 叠→疊, 贴→貼, 础→礎, 组→組, 创→創, 继→繼, 趋→趨, etc.).
+  - Vocab tweak: 并 → 並 (more common in modern Traditional Chinese than 併).
+  - Iteratively verified no common Simplified-only characters remain in the converted file.
+- Verified final state with a Python script:
+  - All 16 locale files (en + zh + zh-CN + zh-TW + 10 new + pt-PT + pt-BR) have valid JSON.
+  - All non-reference files have the same 192 keys as `en.json` — zero missing, zero extra.
+  - All 15 placeholder occurrences (across keys like `app.current`, `templatePicker.description`, `templatePicker.all`, `saveDialog.saveFailed`, `loadDialog.deleteFailed`, `loadDialog.loadFailed`, `loadDialog.loaded`, `aiDialog.failed`, `infographic.nodes`, `infographic.edges`, `infographic.applied`, `toasts.applied`, `toasts.loaded`, `toasts.exportFailed`, `toasts.languageChanged`) match `en.json` exactly — no `{...}` syntax was broken.
+  - `pt-PT.json` and `pt-BR.json` are byte-identical to `pt.json`.
+  - Spot-checked titles in all 10 new languages plus zh-TW to confirm translation quality and proper script (CJK / Cyrillic / Devanagari / Arabic / Latin).
+
+Stage Summary:
+- ✅ Created 10 new translation files: `es.json`, `fr.json`, `de.json`, `ja.json`, `ko.json`, `pt.json` (overwrote stub), `ru.json`, `ar.json`, `hi.json`, `vi.json`.
+- ✅ Created `pt-PT.json` and `pt-BR.json` as byte-identical copies of `pt.json`.
+- ✅ Converted `zh-TW.json` from Simplified Chinese to proper Traditional Chinese using the user-provided "key conversions" table plus a comprehensive S2T character mapping (~250 char pairs).
+- ✅ All 16 locale files (existing + new) pass JSON validation, key-structure match against `en.json` (192 keys), and placeholder-syntax match (15 occurrences).
+- ✅ Technical terms (`SVG`, `PNG`, `JSON`, `AI`, `id`) kept as-is in all translations.
+- ✅ Idiomatic translations (not word-for-word) for each language; RTL-ready strings for Arabic.
+- No source code under `src/components/` or `src/lib/` was modified — only JSON resource files under `src/lib/i18n/locales/` were created/updated.
+- Next step (out of scope for this task): wire these new locales into the i18n config / language picker UI so users can actually switch to them.
+
+---
+Task ID: I18N-COMPONENTS
+Agent: main
+Task: Replace hardcoded Chinese strings in all UI components with i18n `t()` calls; translate template metadata to English
+
+Work Log:
+- Read prior worklog and confirmed the i18n system (`src/lib/i18n/index.tsx`) exposes `useT()` (returns `t`) and `useI18n()` (returns `{ locale, messages, loading, setLocale, t }`). English/Chinese locale files at `src/lib/i18n/locales/en.json` and `zh.json` already contain every key the task referenced.
+- **chart-tool-app.tsx**: Added `import { useT } from '@/lib/i18n'`; `ChartToolApp` and `EditorSkeleton` and `EmptyState` each call `const t = useT()`. Replaced:
+  - `正在加载编辑器…` → `t('app.loadingEditor')`
+  - `已创建：${tpl.name}` → `t('toasts.applied', { name: tpl.name })`
+  - `已应用 AI 推荐` → `t('toasts.aiApplied')`
+  - `已载入：${loaded.title}` → `t('toasts.loaded', { title: loaded.title })`
+  - `请先选择一个模板` → `'Please select a template first'` (hardcoded English per task spec)
+  - EmptyState: `开始制作你的图表` → `t('emptyState.title')`; description → `t('emptyState.description')`; button → `t('emptyState.selectTemplate')`
+  - Removed a duplicate `import { useT }` line that an earlier edit had introduced.
+- **app-footer.tsx**: Added `useT`; replaced `基于` → `t('footer.builtWith')`, removed `构建`, `为非代码人员友好设计` → `t('app.forNonCoders')`, `文档` → `t('footer.docs')`, `Open Source` text → `t('footer.openSource')`.
+- **save-dialog.tsx**: Added `useT` + `useI18n`; default-title logic changed to English names (`My Chart`, `My Flowchart`, `My Infographic`) + `new Date().toLocaleString(locale, { hour12: false })` using the active locale; replaced dialog title/description/labels (`saveDialog.title`, `saveDialog.description`, `saveDialog.chartName`, `saveDialog.placeholder`, `saveDialog.saved`, `saveDialog.saveFailed`, `saveDialog.nothingToSave`) and buttons (`actions.cancel`, `actions.save`); the `'未命名图表'` fallback became `'Untitled Chart'`.
+- **saved-charts-dialog.tsx**: Added `useT` + `useI18n`; replaced `我的图表`, `点击任意一张图表…`, `搜索图表名称或类型…`, `加载中…`, `暂无图表，先去创建一个吧！`, `无预览`, `已删除`, `删除失败：`, `加载失败：`, `已载入：`, `删除` (aria-label) with their i18n keys; the date string now uses `locale` instead of `'zh-CN'`. Removed a stale `// eslint-disable-next-line` directive that was triggering an "unused eslint-disable" warning.
+- **ai-suggest-dialog.tsx**: Added `useT`; replaced all UI strings with `t()` calls (`aiDialog.title`, `aiDialog.description`, `aiDialog.promptLabel`, `aiDialog.promptPlaceholder`, `aiDialog.generate`, `aiDialog.recommended`, `aiDialog.failed`, `aiDialog.enterPrompt`, `actions.cancel`, `actions.apply`); translated the `PROMPT_IDEAS` array to English; renamed inner `throw new Error(err.error || '请求失败')` to English `'Request failed'`; chip-truncation threshold raised from 18→32 chars to suit English text.
+- **template-picker-dialog.tsx**: Added `useT`; removed the static `UNIFIED_CATEGORY_LABEL` import (since static objects can't call hooks) and added a `getCategoryLabel(cat, t)` helper that maps each `UnifiedCategory` to its `categories.*` i18n key; replaced all UI strings with `t()` calls (`templatePicker.title`, `templatePicker.description` with `{count: ALL_COUNT}`, `templatePicker.searchPlaceholder`, `templatePicker.noResults`, `templatePicker.all` with `{count: ALL_COUNT}`); renamed the inner `.filter((t) => …)` map parameter from `t` to `tplItem` to avoid shadowing the i18n `t`.
+- **echarts-templates.ts**: Translated `ECHARTS_TEMPLATE_CATEGORIES[].label` (柱状图→Bar, 折线图→Line, 饼图→Pie, 散点图→Scatter, 雷达图→Radar, 漏斗图→Funnel, 仪表盘→Gauge, 热力图→Heatmap). Translated every template's `name`, `description`, and sample-data labels (titles, subtext, categories, series_names, single_series_data names, radar_indicators) to English. Translated `THEME_OPTIONS[].label` (默认→Default, 深色→Dark, 复古→Vintage, 马卡龙→Macarons).
+- **mermaid-templates.ts**: Translated every template's `name`, `description`, `category`, and `defaultCode` content to English — the mermaid code samples now use English labels (e.g. `A([Start])`, `participant U as User`, `state Pending Payment`, `section Design Phase`, `root((Product Strategy))`). Translated `MERMAID_THEMES[].name` and the entire `SYNTAX_CHEATSHEET` titles/lines to English.
+- **template-registry.ts**: Translated `CATEGORY_LABEL` (列表→List, 流程/步骤→Flow/Steps, etc.) and every entry's `name`, `description`, and `tags` to English. The `defaultDataForShape()` helper now returns English sample text (`'Relationship Example'`, `'Root'`, `'Group A'`, `'First Item'`, etc.).
+- **unified-catalog.ts**: Translated `UNIFIED_CATEGORY_LABEL` values to English (对比→Comparison, 趋势→Trend, 占比构成→Composition, 分布→Distribution, 流程步骤→Flow & Steps, 层级结构→Hierarchy, 关系网络→Relationship, 时间线→Timeline, 列表要点→List, 指标仪表→Gauge).
+- **echarts-editor.tsx**: Added `import { useT } from '@/lib/i18n'`; added `const t = useT()` to `EChartsEditor`, `DataEditor`, `CartesianDataEditor`, `SingleSeriesEditor`, `RadarDataEditor`, `ScatterDataEditor`, and `StyleEditor`. Renamed the inner `const t = local.type` in `handleRandomData` to `const type = local.type` (and the `const t = config.type` in `DataEditor` and `StyleEditor` similarly) to avoid shadowing the i18n `t`. Replaced all UI labels with `t('echarts.*')` / `t('toasts.*')` / `t('actions.*')` calls. Translated inline placeholders, hints, and helper text (no i18n key exists for them — used English literals). Translated the `typeNameLabel(type)` map values to English (柱状图→Bar, etc.). Comments containing Chinese were also translated.
+- **mermaid-editor.tsx**: Added `import { useT } from '@/lib/i18n'`; added `const t = useT()` to `MermaidEditor` and `PreviewPanel`. Renamed the inner `const t = setTimeout(...)` to `const timer = setTimeout(...)` in both the local→parent sync effect and the render-debounce effect (to avoid shadowing). Replaced all UI strings with `t('mermaid.*')`, `t('toasts.*')`, `t('app.loadingLib')` calls. Translated `'在此输入 Mermaid 代码…'` placeholder and the `请求失败` error to English.
+- **infographic-editor.tsx**: Added `import { useT } from '@/lib/i18n'`; added `const t = useT()` to `InfographicEditor`, `TemplateGallery`, `PreviewPanel`, `ConfigPanel`, `ListDataEditor`, `HierarchyDataEditor`, `NodeEditor`, `CompareDataEditor`, `RelationDataEditor`. Renamed inner `const t = setTimeout(...)` to `const timer = setTimeout(...)` in both debounce effects. Renamed the inner `.map((t) => …)` filter/map parameters to `tpl` to avoid shadowing. Replaced all UI strings with `t('infographic.*')`, `t('toasts.*')`, `t('templatePicker.noResults')`, `t('actions.search')`, `t('actions.delete')` calls. Translated inline placeholders (`'组名'`→`'Group name'`, `'要点'`→`'Point'`, `'新要点'`→`'New point'`, `'根节点'`→`'Root'`) to English literals since no specific i18n keys exist for them.
+- Lint: `bun run lint` → 0 errors / 0 warnings (after removing the unused eslint-disable directive in saved-charts-dialog.tsx).
+- Verified dev log: after the duplicate-useT fix, the page compiles cleanly (GET / 200 in ~15-20ms compile, ~16-30ms render) and all subsequent requests succeed.
+
+Stage Summary:
+- All hardcoded Chinese strings in `src/components/chart-tool/` (6 files) and the three editor directories (3 .tsx editors + 3 template-metadata .ts files + 1 unified-catalog.ts) have been replaced with i18n `t()` calls or English literals.
+- en.json and zh.json were NOT modified (per task spec).
+- Template metadata (names, descriptions, sample data, mermaid code) is now English-only — these are not UI chrome.
+- `UNIFIED_CATEGORY_LABEL` is now English-only in unified-catalog.ts; `template-picker-dialog.tsx` uses a new `getCategoryLabel(cat, t)` helper to render the localized label at runtime via `t('categories.*')`.
+- The two main `t` shadowing hazards (echarts `handleRandomData`'s `const t = local.type` and the various `const t = setTimeout(...)` debounce timers in mermaid/infographic editors) were resolved by renaming the local variable.
+- Lint passes (0/0), dev server compiles cleanly, GET / returns 200.
+- Files modified: `chart-tool-app.tsx`, `app-footer.tsx`, `save-dialog.tsx`, `saved-charts-dialog.tsx`, `ai-suggest-dialog.tsx`, `template-picker-dialog.tsx`, `echarts-templates.ts`, `mermaid-templates.ts`, `template-registry.ts`, `unified-catalog.ts`, `echarts-editor.tsx`, `mermaid-editor.tsx`, `infographic-editor.tsx`.
+
+---
+Task ID: FIX-INFographic + I18N
+Agent: main
+Task: Fix infographic loading spinner + implement 43-language i18n
+
+Work Log:
+- Diagnosed infographic spinner: the CDN UMD bundle references external globals (window._, window.graphlib) that weren't loaded, so the library never initialized.
+- Fix: switched @antv/infographic from CDN to bundled import. Removed it from webpack externals and CDN_SCRIPTS. The infographic editor now imports `Infographic` directly from `@antv/infographic` — no CDN, no spinner, instant render.
+- echarts (62MB) and mermaid (76MB) remain on CDN via webpack externals.
+- Created i18n infrastructure:
+  - `src/lib/i18n/index.tsx` — React context provider with `useT()`/`useI18n()` hooks, browser language auto-detection, localStorage persistence, graceful fallback chain (exact locale → base language → English)
+  - 43 supported locales configured
+  - `LOCALE_NAMES` map with native names for all 43 languages
+- Created English base translation (`en.json`) with 192 keys covering all UI strings.
+- Created Chinese translation (`zh.json`) — complete.
+- Subagent created 10 additional translations: es, fr, de, ja, ko, pt, ru, ar, hi, vi + pt-PT, pt-BR, zh-TW (Traditional Chinese conversion).
+- For remaining ~30 languages without translation files, the system falls back to English automatically.
+- Created `LanguageSwitcher` component (globe icon + popover with all 43 languages).
+- Wired `I18nProvider` in `page.tsx`, added `LanguageSwitcher` to header.
+- Subagent updated ALL 13 UI components to use `t()` calls, converted all template metadata (names/descriptions/sample data) to English.
+
+Stage Summary:
+- ✅ Infographic editor renders instantly (no spinner) — bundled import, no CDN deps
+- ✅ 43 languages supported, English default, browser auto-detection
+- ✅ Language switcher with native language names in header
+- ✅ 16 translation files (en, zh, zh-CN, zh-TW, es, fr, de, ja, ko, pt, pt-PT, pt-BR, ru, ar, hi, vi)
+- ✅ Lint passes (0 errors), all JSON valid
+- ✅ Verified in browser: English default works, Chinese switch works, infographic renders, ECharts renders, server stable

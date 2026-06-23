@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label'
 import { Loader2, Sparkles, Lightbulb } from 'lucide-react'
 import type { ChartEngine } from '@/types/chart'
 import { toast } from 'sonner'
+import { useT } from '@/lib/i18n'
 
 interface Props {
   open: boolean
@@ -32,24 +33,25 @@ interface AISuggestion {
 }
 
 const PROMPT_IDEAS = [
-  '展示 2024 年四个季度各产品线的销售额对比',
-  '画一个用户下单流程图，从加购到支付成功',
-  '做一个产品发布路线图，包含设计、开发、测试、上线',
-  '对比 React 和 Vue 的优缺点',
-  '展示公司组织架构，CEO 下设 CTO/CFO/COO',
-  '展示一周内每天不同时段的访问热度',
-  '画一个购买转化漏斗',
-  '展示项目里程碑时间线，从立项到上线',
+  'Compare 2024 quarterly sales across product lines',
+  'Draw a user checkout flowchart from add-to-cart to payment success',
+  'Make a product launch roadmap covering design, dev, test, release',
+  'Compare the pros and cons of React and Vue',
+  'Show the company org chart with CEO over CTO/CFO/COO',
+  'Show weekly visit intensity across different times of day',
+  'Draw a purchase conversion funnel',
+  'Show project milestones timeline from kickoff to launch',
 ]
 
 export function AISuggestDialog({ open, onOpenChange, engine, onApply }: Props) {
+  const t = useT()
   const [prompt, setPrompt] = React.useState('')
   const [loading, setLoading] = React.useState(false)
   const [suggestion, setSuggestion] = React.useState<AISuggestion | null>(null)
 
   const handleSuggest = async () => {
     if (!prompt.trim()) {
-      toast.error('请先描述你想要的图表')
+      toast.error(t('aiDialog.enterPrompt'))
       return
     }
     setLoading(true)
@@ -62,13 +64,13 @@ export function AISuggestDialog({ open, onOpenChange, engine, onApply }: Props) 
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
-        throw new Error(err.error || '请求失败')
+        throw new Error(err.error || 'Request failed')
       }
       const data = await res.json()
       setSuggestion(data.result as AISuggestion)
-      toast.success('AI 已生成推荐')
+      toast.success(t('aiDialog.generate'))
     } catch (e) {
-      toast.error('AI 推荐失败：' + (e as Error).message)
+      toast.error(t('aiDialog.failed', { error: (e as Error).message }))
     } finally {
       setLoading(false)
     }
@@ -95,20 +97,20 @@ export function AISuggestDialog({ open, onOpenChange, engine, onApply }: Props) 
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-amber-500" />
-            AI 智能推荐
+            {t('aiDialog.title')}
           </DialogTitle>
           <DialogDescription>
-            用一句话描述你想呈现的内容，AI 帮你挑选最合适的图表类型并生成示例数据。
+            {t('aiDialog.description')}
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-2">
           <div className="grid gap-2">
-            <Label>描述你的需求</Label>
+            <Label>{t('aiDialog.promptLabel')}</Label>
             <Textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder="例如：展示 2024 年四个季度各产品线的销售额对比，产品线包括手机、电脑、平板。"
+              placeholder={t('aiDialog.promptPlaceholder')}
               rows={3}
               className="resize-none"
             />
@@ -119,7 +121,7 @@ export function AISuggestDialog({ open, onOpenChange, engine, onApply }: Props) 
                   onClick={() => setPrompt(idea)}
                   className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
                 >
-                  {idea.length > 18 ? idea.slice(0, 18) + '…' : idea}
+                  {idea.length > 32 ? idea.slice(0, 32) + '…' : idea}
                 </button>
               ))}
             </div>
@@ -131,7 +133,7 @@ export function AISuggestDialog({ open, onOpenChange, engine, onApply }: Props) 
             ) : (
               <Sparkles className="h-4 w-4" />
             )}
-            生成推荐
+            {t('aiDialog.generate')}
           </Button>
 
           {suggestion && (
@@ -140,7 +142,7 @@ export function AISuggestDialog({ open, onOpenChange, engine, onApply }: Props) 
                 <Lightbulb className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
                 <div className="flex-1 space-y-1.5">
                   <div className="text-sm">
-                    <span className="text-muted-foreground">推荐图表：</span>
+                    <span className="text-muted-foreground">{t('aiDialog.recommended')}</span>
                     <span className="font-medium">{suggestion.recommendedTypeName}</span>
                   </div>
                   <p className="text-xs text-muted-foreground">{suggestion.reason}</p>
@@ -155,10 +157,10 @@ export function AISuggestDialog({ open, onOpenChange, engine, onApply }: Props) 
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            取消
+            {t('actions.cancel')}
           </Button>
           <Button onClick={handleApply} disabled={!suggestion}>
-            应用到编辑器
+            {t('actions.apply')}
           </Button>
         </DialogFooter>
       </DialogContent>

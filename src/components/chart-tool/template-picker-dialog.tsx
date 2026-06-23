@@ -15,14 +15,13 @@ import { cn } from '@/lib/utils'
 import { Search } from 'lucide-react'
 import * as LucideIcons from 'lucide-react'
 import {
-  UNIFIED_CATEGORY_LABEL,
   UNIFIED_CATEGORY_ORDER,
   UNIFIED_CATEGORY_ICON,
   groupUnifiedByCategory,
-  findUnifiedTemplate,
   type UnifiedTemplate,
   type UnifiedCategory,
 } from '@/lib/chart/unified-catalog'
+import { useT } from '@/lib/i18n'
 
 interface Props {
   open: boolean
@@ -36,7 +35,40 @@ const ALL_COUNT = (() => {
   return UNIFIED_CATEGORY_ORDER.reduce((acc, k) => acc + g[k].length, 0)
 })()
 
+/**
+ * Map a unified category to its i18n key. We can't use the static
+ * `UNIFIED_CATEGORY_LABEL` (a static object can't call hooks), so we look up
+ * the translation at render time via `t()`.
+ */
+function getCategoryLabel(cat: UnifiedCategory, t: (key: string) => string): string {
+  switch (cat) {
+    case 'comparison':
+      return t('categories.comparison')
+    case 'trend':
+      return t('categories.trend')
+    case 'composition':
+      return t('categories.composition')
+    case 'distribution':
+      return t('categories.distribution')
+    case 'flow':
+      return t('categories.flow')
+    case 'structure':
+      return t('categories.structure')
+    case 'relationship':
+      return t('categories.relationship')
+    case 'timeline':
+      return t('categories.timeline')
+    case 'list':
+      return t('categories.list')
+    case 'metric':
+      return t('categories.metric')
+    default:
+      return cat
+  }
+}
+
 export function TemplatePickerDialog({ open, onOpenChange, onPick }: Props) {
+  const t = useT()
   const [keyword, setKeyword] = React.useState('')
   const [activeCat, setActiveCat] = React.useState<UnifiedCategory | 'all'>('all')
 
@@ -48,10 +80,10 @@ export function TemplatePickerDialog({ open, onOpenChange, onPick }: Props) {
     const all: UnifiedTemplate[] = []
     for (const cat of UNIFIED_CATEGORY_ORDER) all.push(...groups[cat])
     return all.filter(
-      (t) =>
-        t.name.toLowerCase().includes(kw) ||
-        t.description.toLowerCase().includes(kw) ||
-        t.tags.some((tag) => tag.toLowerCase().includes(kw)),
+      (tpl) =>
+        tpl.name.toLowerCase().includes(kw) ||
+        tpl.description.toLowerCase().includes(kw) ||
+        tpl.tags.some((tag) => tag.toLowerCase().includes(kw)),
     )
   }, [keyword, groups])
 
@@ -78,10 +110,10 @@ export function TemplatePickerDialog({ open, onOpenChange, onPick }: Props) {
       <DialogContent className="flex h-[85vh] max-w-6xl flex-col gap-0 p-0 sm:rounded-xl">
         <DialogHeader className="border-b px-6 py-4">
           <DialogTitle className="flex items-center gap-2 text-lg">
-            选择模板
+            {t('templatePicker.title')}
           </DialogTitle>
           <DialogDescription>
-            按用途分类浏览全部 {ALL_COUNT} 个模板，点击任意一个即可开始编辑。
+            {t('templatePicker.description', { count: ALL_COUNT })}
           </DialogDescription>
         </DialogHeader>
 
@@ -92,7 +124,7 @@ export function TemplatePickerDialog({ open, onOpenChange, onPick }: Props) {
             <Input
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
-              placeholder="搜索模板名称、描述或标签…"
+              placeholder={t('templatePicker.searchPlaceholder')}
               className="pl-9"
               autoFocus
             />
@@ -105,14 +137,14 @@ export function TemplatePickerDialog({ open, onOpenChange, onPick }: Props) {
             <CategoryChip
               active={activeCat === 'all'}
               onClick={() => setActiveCat('all')}
-              label={`全部 ${ALL_COUNT}`}
+              label={t('templatePicker.all', { count: ALL_COUNT })}
             />
             {UNIFIED_CATEGORY_ORDER.map((cat) => (
               <CategoryChip
                 key={cat}
                 active={activeCat === cat}
                 onClick={() => setActiveCat(cat)}
-                label={`${UNIFIED_CATEGORY_LABEL[cat]} ${groups[cat].length}`}
+                label={`${getCategoryLabel(cat, t)} ${groups[cat].length}`}
                 icon={UNIFIED_CATEGORY_ICON[cat]}
               />
             ))}
@@ -124,12 +156,12 @@ export function TemplatePickerDialog({ open, onOpenChange, onPick }: Props) {
           <div className="p-6">
             {filtered ? (
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-                {filtered.map((t) => (
-                  <TemplateCard key={t.id} tpl={t} onPick={handlePick} />
+                {filtered.map((tplItem) => (
+                  <TemplateCard key={tplItem.id} tpl={tplItem} onPick={handlePick} />
                 ))}
                 {filtered.length === 0 && (
                   <div className="col-span-full py-12 text-center text-sm text-muted-foreground">
-                    没有找到匹配的模板
+                    {t('templatePicker.noResults')}
                   </div>
                 )}
               </div>
@@ -143,15 +175,15 @@ export function TemplatePickerDialog({ open, onOpenChange, onPick }: Props) {
                       <div className="mb-3 flex items-center gap-2">
                         {renderIcon(UNIFIED_CATEGORY_ICON[cat], 'h-4 w-4 text-primary')}
                         <h3 className="text-sm font-semibold">
-                          {UNIFIED_CATEGORY_LABEL[cat]}
+                          {getCategoryLabel(cat, t)}
                         </h3>
                         <Badge variant="secondary" className="text-[10px]">
                           {list.length}
                         </Badge>
                       </div>
                       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-                        {list.map((t) => (
-                          <TemplateCard key={t.id} tpl={t} onPick={handlePick} />
+                        {list.map((tplItem) => (
+                          <TemplateCard key={tplItem.id} tpl={tplItem} onPick={handlePick} />
                         ))}
                       </div>
                     </section>

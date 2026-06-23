@@ -60,6 +60,7 @@ import {
   type MermaidTemplateMeta,
 } from './mermaid-templates'
 import { exportSvg, exportJson } from '@/lib/chart/export'
+import { useT } from '@/lib/i18n'
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Workflow,
@@ -96,6 +97,7 @@ export interface MermaidEditorProps {
 // ===========================================================================
 
 export function MermaidEditor({ config, onChange, previewRef }: MermaidEditorProps) {
+  const t = useT()
   const [local, setLocal] = React.useState<MermaidConfig>(() =>
     config
       ? deepClone(config)
@@ -120,14 +122,14 @@ export function MermaidEditor({ config, onChange, previewRef }: MermaidEditorPro
 
   // Sync local -> parent (debounced 200ms)
   React.useEffect(() => {
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       const key = JSON.stringify(local)
       if (key !== lastAppliedKey.current) {
         lastAppliedKey.current = key
         onChange(deepClone(local))
       }
     }, 200)
-    return () => clearTimeout(t)
+    return () => clearTimeout(timer)
   }, [local, onChange])
 
   const update = React.useCallback((patch: Partial<MermaidConfig>) => {
@@ -140,8 +142,8 @@ export function MermaidEditor({ config, onChange, previewRef }: MermaidEditorPro
       type: tpl.type,
       code: tpl.defaultCode,
     }))
-    toast.success(`已应用模板：${tpl.name}`)
-  }, [])
+    toast.success(t('toasts.applied', { name: tpl.name }))
+  }, [t])
 
   const handleFormat = () => {
     update({
@@ -150,15 +152,15 @@ export function MermaidEditor({ config, onChange, previewRef }: MermaidEditorPro
         .map((l) => l.replace(/\s+$/, ''))
         .join('\n'),
     })
-    toast.success('已整理代码')
+    toast.success(t('toasts.formatDone'))
   }
 
   const handleCopyCode = async () => {
     try {
       await navigator.clipboard.writeText(local.code)
-      toast.success('代码已复制到剪贴板')
+      toast.success(t('mermaid.codeCopied'))
     } catch {
-      toast.error('复制失败')
+      toast.error(t('toasts.copyFailed'))
     }
   }
 
@@ -171,9 +173,9 @@ export function MermaidEditor({ config, onChange, previewRef }: MermaidEditorPro
             {/* Template gallery */}
             <section>
               <div className="mb-2 flex items-center justify-between">
-                <h3 className="text-sm font-semibold">选择模板</h3>
+                <h3 className="text-sm font-semibold">{t('mermaid.templateGallery')}</h3>
                 <span className="text-xs text-muted-foreground">
-                  {MERMAID_TEMPLATES.length} 个模板
+                  {MERMAID_TEMPLATES.length} templates
                 </span>
               </div>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -208,13 +210,13 @@ export function MermaidEditor({ config, onChange, previewRef }: MermaidEditorPro
             {/* Code editor */}
             <section>
               <div className="mb-2 flex items-center justify-between">
-                <h3 className="text-sm font-semibold">代码编辑</h3>
+                <h3 className="text-sm font-semibold">{t('mermaid.codeEditor')}</h3>
                 <div className="flex gap-1">
                   <Button size="sm" variant="ghost" onClick={handleFormat} className="h-7 gap-1 px-2 text-xs">
-                    <Code2 className="h-3 w-3" /> 整理
+                    <Code2 className="h-3 w-3" /> {t('mermaid.format')}
                   </Button>
                   <Button size="sm" variant="ghost" onClick={handleCopyCode} className="h-7 gap-1 px-2 text-xs">
-                    <Copy className="h-3 w-3" /> 复制
+                    <Copy className="h-3 w-3" /> {t('mermaid.copyCode')}
                   </Button>
                 </div>
               </div>
@@ -223,18 +225,18 @@ export function MermaidEditor({ config, onChange, previewRef }: MermaidEditorPro
                 onChange={(e) => update({ code: e.target.value })}
                 className="min-h-[300px] resize-y font-mono text-xs leading-relaxed"
                 spellCheck={false}
-                placeholder="在此输入 Mermaid 代码…"
+                placeholder="Type Mermaid code here…"
               />
               <div className="mt-1 flex items-start gap-1.5 rounded-md bg-amber-50 p-2 text-[11px] text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
                 <Sparkles className="mt-0.5 h-3 w-3 shrink-0" />
-                <span>不会写代码？点击右上角"AI 智能推荐"，用一句话描述需求即可生成。</span>
+                <span>{t('mermaid.aiHint')}</span>
               </div>
             </section>
 
             {/* Theme + background */}
             <section className="grid grid-cols-2 gap-3">
               <div className="grid gap-1.5">
-                <Label className="text-xs">主题</Label>
+                <Label className="text-xs">{t('mermaid.theme')}</Label>
                 <Select
                   value={local.theme}
                   onValueChange={(v) => update({ theme: v })}
@@ -243,16 +245,16 @@ export function MermaidEditor({ config, onChange, previewRef }: MermaidEditorPro
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {MERMAID_THEMES.map((t) => (
-                      <SelectItem key={t.id} value={t.id} className="text-xs">
-                        {t.name}
+                    {MERMAID_THEMES.map((th) => (
+                      <SelectItem key={th.id} value={th.id} className="text-xs">
+                        {th.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="grid gap-1.5">
-                <Label className="text-xs">背景色</Label>
+                <Label className="text-xs">{t('mermaid.background')}</Label>
                 <div className="flex items-center gap-1.5">
                   <Input
                     type="color"
@@ -274,7 +276,7 @@ export function MermaidEditor({ config, onChange, previewRef }: MermaidEditorPro
               <Accordion type="multiple" className="w-full">
                 <AccordionItem value="cheat" className="border rounded-md px-3">
                   <AccordionTrigger className="text-sm hover:no-underline">
-                    语法速查
+                    {t('mermaid.cheatsheet')}
                   </AccordionTrigger>
                   <AccordionContent>
                     <div className="space-y-3 py-1">
@@ -320,6 +322,7 @@ interface PreviewProps {
 }
 
 function PreviewPanel({ config, previewRef }: PreviewProps) {
+  const t = useT()
   const containerRef = React.useRef<HTMLDivElement>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [zoom, setZoom] = React.useState(1)
@@ -356,7 +359,7 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
   React.useEffect(() => {
     if (!mermaidLoaded) return
     const seq = ++renderSeq.current
-    const t = setTimeout(async () => {
+    const timer = setTimeout(async () => {
       if (!containerRef.current || !initialized.current) return
       const mermaid = getMermaid()
       if (!mermaid) return
@@ -381,7 +384,7 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
         if (containerRef.current) containerRef.current.innerHTML = ''
       }
     }, 300)
-    return () => clearTimeout(t)
+    return () => clearTimeout(timer)
   }, [config.code, config.theme, config.background, mermaidLoaded])
 
   const handleZoomIn = () => setZoom((z) => Math.min(3, z + 0.2))
@@ -391,17 +394,17 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
   const handleDownloadSvg = () => {
     const svg = containerRef.current?.querySelector('svg')
     if (!svg) {
-      toast.error('暂无可导出的内容')
+      toast.error(t('toasts.noContent'))
       return
     }
     exportSvg(svg, `mermaid-${Date.now()}.svg`)
-    toast.success('SVG 已下载')
+    toast.success(t('toasts.exported'))
   }
 
   const handleDownloadPng = async () => {
     const svg = containerRef.current?.querySelector('svg')
     if (!svg) {
-      toast.error('暂无可导出的内容')
+      toast.error(t('toasts.noContent'))
       return
     }
     try {
@@ -437,36 +440,36 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
           a.click()
           setTimeout(() => URL.revokeObjectURL(a.href), 1000)
         }, 'image/png')
-        toast.success('PNG 已下载')
+        toast.success(t('toasts.exported'))
       }
       img.onerror = () => {
         URL.revokeObjectURL(url)
-        toast.error('PNG 导出失败')
+        toast.error(t('toasts.exportFailed', { error: 'PNG' }))
       }
       img.src = url
     } catch (e) {
-      toast.error('PNG 导出失败：' + (e as Error).message)
+      toast.error(t('toasts.exportFailed', { error: (e as Error).message }))
     }
   }
 
   const handleCopySvg = async () => {
     const svg = containerRef.current?.querySelector('svg')
     if (!svg) {
-      toast.error('暂无可复制的内容')
+      toast.error(t('toasts.noContent'))
       return
     }
     try {
       const str = new XMLSerializer().serializeToString(svg)
       await navigator.clipboard.writeText(str)
-      toast.success('SVG 源码已复制')
+      toast.success(t('toasts.copied'))
     } catch {
-      toast.error('复制失败')
+      toast.error(t('toasts.copyFailed'))
     }
   }
 
   const handleExportJson = () => {
     exportJson(config, `mermaid-config-${Date.now()}.json`)
-    toast.success('配置已导出')
+    toast.success(t('toasts.exported'))
   }
 
   return (
@@ -495,7 +498,7 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
             <Download className="h-3 w-3" /> PNG
           </Button>
           <Button size="sm" variant="ghost" onClick={handleCopySvg} className="h-7 gap-1 px-2 text-xs">
-            <Copy className="h-3 w-3" /> SVG 源码
+            <Copy className="h-3 w-3" /> {t('mermaid.copySvg')}
           </Button>
           <Button size="sm" variant="ghost" onClick={handleExportJson} className="h-7 gap-1 px-2 text-xs">
             <Code2 className="h-3 w-3" /> JSON
@@ -522,12 +525,12 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
         {!mermaidLoaded && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/80 backdrop-blur-sm">
             <Loader2 className="size-6 animate-spin text-primary" />
-            <span className="text-sm text-muted-foreground">正在加载图表库…</span>
+            <span className="text-sm text-muted-foreground">{t('app.loadingLib')}</span>
           </div>
         )}
         {error && (
           <div className="absolute inset-x-4 bottom-4 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-xs text-destructive">
-            <div className="mb-1 font-semibold">渲染出错</div>
+            <div className="mb-1 font-semibold">{t('mermaid.renderError')}</div>
             <pre className="max-h-32 overflow-auto whitespace-pre-wrap">{error}</pre>
           </div>
         )}

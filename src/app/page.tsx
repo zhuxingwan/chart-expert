@@ -1,7 +1,12 @@
 'use client'
 
+import { I18nProvider } from '@/lib/i18n'
 import { ChartToolApp } from '@/components/chart-tool/chart-tool-app'
 
 export default function Home() {
-  return <ChartToolApp />
+  return (
+    <I18nProvider>
+      <ChartToolApp />
+    </I18nProvider>
+  )
 }

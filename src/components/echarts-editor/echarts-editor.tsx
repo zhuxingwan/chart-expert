@@ -24,6 +24,7 @@ import {
 
 import { cn } from '@/lib/utils'
 import type { EChartsConfig } from '@/types/chart'
+import { useT } from '@/lib/i18n'
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -114,14 +115,14 @@ function iconForType(type: string) {
 
 function typeNameLabel(type: string): string {
   const map: Record<string, string> = {
-    bar: '柱状图',
-    line: '折线图',
-    pie: '饼图',
-    scatter: '散点图',
-    radar: '雷达图',
-    funnel: '漏斗图',
-    gauge: '仪表盘',
-    heatmap: '热力图',
+    bar: 'Bar',
+    line: 'Line',
+    pie: 'Pie',
+    scatter: 'Scatter',
+    radar: 'Radar',
+    funnel: 'Funnel',
+    gauge: 'Gauge',
+    heatmap: 'Heatmap',
   }
   return map[type] ?? type
 }
@@ -141,6 +142,7 @@ export interface EChartsEditorProps {
 // ===========================================================================
 
 export function EChartsEditor({ config, onChange, previewRef }: EChartsEditorProps) {
+  const t = useT()
   // CDN-loaded echarts — status flips to 'loaded' once the <script> tag from
   // VizLibLoader finishes. We render a loading placeholder until then.
   const { status } = useVizLibs()
@@ -151,7 +153,7 @@ export function EChartsEditor({ config, onChange, previewRef }: EChartsEditorPro
     config ? deepClone(config) : deepClone(DEFAULT_TEMPLATE.defaultConfig),
   )
 
-  // Track which template is currently applied so the 图表类型 Select can show
+  // Track which template is currently applied so the chart-type Select can show
   // the right value. Initialized from the first template; updated whenever the
   // user picks a template from the gallery or dropdown. When the parent pushes
   // a config (AI suggestion / loaded chart) we best-effort match by template id
@@ -269,9 +271,9 @@ export function EChartsEditor({ config, onChange, previewRef }: EChartsEditorPro
       if (keepTitle && local.title) next.title = deepClone(local.title)
       commit(next)
       setCurrentTemplateId(tpl.id)
-      toast.success(`已切换为「${tpl.name}」`)
+      toast.success(t('toasts.applied', { name: tpl.name }))
     },
-    [commit, local.title],
+    [commit, local.title, t],
   )
 
   const onTemplateIdChange = React.useCallback(
@@ -285,7 +287,7 @@ export function EChartsEditor({ config, onChange, previewRef }: EChartsEditorPro
   // ----- Export handlers -----
   const handleDownloadPNG = React.useCallback(() => {
     if (!chartRef.current) {
-      toast.error('图表尚未渲染完成')
+      toast.error('Chart not rendered yet')
       return
     }
     try {
@@ -300,11 +302,11 @@ export function EChartsEditor({ config, onChange, previewRef }: EChartsEditorPro
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
-      toast.success('已下载 PNG 图片')
+      toast.success(t('toasts.exported'))
     } catch {
-      toast.error('导出 PNG 失败')
+      toast.error(t('toasts.exportFailed', { error: 'PNG' }))
     }
-  }, [local.title])
+  }, [local.title, t])
 
   const handleDownloadJSON = React.useCallback(() => {
     try {
@@ -319,45 +321,45 @@ export function EChartsEditor({ config, onChange, previewRef }: EChartsEditorPro
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
-      toast.success('已下载配置 JSON')
+      toast.success(t('toasts.exported'))
     } catch {
-      toast.error('导出 JSON 失败')
+      toast.error(t('toasts.exportFailed', { error: 'JSON' }))
     }
-  }, [local])
+  }, [local, t])
 
   const handleCopyOption = React.useCallback(async () => {
     try {
       await navigator.clipboard.writeText(JSON.stringify(option, null, 2))
-      toast.success('已复制 ECharts option 到剪贴板')
+      toast.success(t('echarts.copied'))
     } catch {
-      toast.error('复制失败，请检查浏览器权限')
+      toast.error(t('toasts.copyFailed'))
     }
-  }, [option])
+  }, [option, t])
 
   // ----- Random data -----
   const handleRandomData = React.useCallback(() => {
-    const t = local.type
-    if (t === 'pie' || t === 'funnel') {
+    const type = local.type
+    if (type === 'pie' || type === 'funnel') {
       const data = (local.single_series_data ?? []).map((d) => ({
         name: d.name,
         value: Math.floor(Math.random() * 900) + 100,
       }))
       patch({ single_series_data: data })
-    } else if (t === 'gauge') {
+    } else if (type === 'gauge') {
       const max = Number(local.gauge_max) || 100
       patch({ gauge_value: Math.floor(Math.random() * max) })
-    } else if (t === 'scatter') {
+    } else if (type === 'scatter') {
       const data = (local.scatter_data ?? []).map(() => [
         Math.floor(Math.random() * 200) + 100,
         Math.floor(Math.random() * 60) + 40,
       ]) as [number, number][]
       patch({ scatter_data: data })
-    } else if (t === 'heatmap') {
+    } else if (type === 'heatmap') {
       const data = local.series_data.map((row) =>
         row.map(() => Math.floor(Math.random() * 50)),
       )
       patch({ series_data: data })
-    } else if (t === 'radar') {
+    } else if (type === 'radar') {
       const data = local.series_data.map((row) =>
         row.map(() => Math.floor(Math.random() * 100)),
       )
@@ -369,8 +371,8 @@ export function EChartsEditor({ config, onChange, previewRef }: EChartsEditorPro
       )
       patch({ series_data: data })
     }
-    toast.success('已生成随机数据')
-  }, [local, patch])
+    toast.success(t('toasts.randomData'))
+  }, [local, patch, t])
 
   // ---------------------------------------------------------------------------
   // Render
@@ -381,9 +383,9 @@ export function EChartsEditor({ config, onChange, previewRef }: EChartsEditorPro
       <ResizablePanel defaultSize={20} minSize={14} className="bg-background">
         <div className="flex h-full flex-col">
           <div className="border-b px-4 py-3">
-            <h3 className="text-sm font-semibold">模板库</h3>
+            <h3 className="text-sm font-semibold">{t('echarts.templateGallery')}</h3>
             <p className="text-xs text-muted-foreground mt-1">
-              点击模板即可一键应用，配置会随之刷新。
+              Click a template to apply it; the config panel refreshes accordingly.
             </p>
           </div>
           <ScrollArea className="flex-1">
@@ -442,14 +444,14 @@ export function EChartsEditor({ config, onChange, previewRef }: EChartsEditorPro
                   <Badge variant="secondary" className="font-normal">
                     {typeNameLabel(local.type)}
                   </Badge>
-                  <span className="text-base">{local.title?.text || '未命名图表'}</span>
+                  <span className="text-base">{local.title?.text || 'Untitled Chart'}</span>
                 </CardTitle>
                 {local.title?.subtext ? (
                   <CardDescription className="mt-1">{local.title.subtext}</CardDescription>
                 ) : null}
               </div>
               <Badge variant="outline" className="hidden md:inline-flex">
-                实时预览
+                Live Preview
               </Badge>
             </div>
           </CardHeader>
@@ -465,7 +467,7 @@ export function EChartsEditor({ config, onChange, previewRef }: EChartsEditorPro
               {!echartsLoaded && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/80 backdrop-blur-sm">
                   <Loader2 className="size-6 animate-spin text-primary" />
-                  <span className="text-sm text-muted-foreground">正在加载图表库…</span>
+                  <span className="text-sm text-muted-foreground">{t('app.loadingLib')}</span>
                 </div>
               )}
             </div>
@@ -479,9 +481,9 @@ export function EChartsEditor({ config, onChange, previewRef }: EChartsEditorPro
       <ResizablePanel defaultSize={40} minSize={30} className="bg-background">
         <div className="flex h-full flex-col">
           <div className="border-b px-4 py-3">
-            <h3 className="text-sm font-semibold">配置面板</h3>
+            <h3 className="text-sm font-semibold">{t('echarts.configPanel')}</h3>
             <p className="text-xs text-muted-foreground mt-1">
-              所有改动都会即时同步到预览，无需保存按钮。
+              All changes sync to the preview instantly — no save button needed.
             </p>
           </div>
           <ScrollArea className="flex-1">
@@ -491,19 +493,19 @@ export function EChartsEditor({ config, onChange, previewRef }: EChartsEditorPro
                 defaultValue={['type', 'title', 'data', 'style', 'export']}
                 className="w-full"
               >
-                {/* 1. 图表类型 */}
+                {/* 1. Chart type */}
                 <AccordionItem value="type">
                   <AccordionTrigger>
                     <span className="flex items-center gap-2 font-medium">
-                      <BarChart3 className="size-4 text-primary" /> 图表类型
+                      <BarChart3 className="size-4 text-primary" /> {t('echarts.chartType')}
                     </span>
                   </AccordionTrigger>
                   <AccordionContent>
                     <div className="space-y-2">
-                      <Label className="text-xs text-muted-foreground">切换类型会重置数据示例，但保留标题</Label>
+                      <Label className="text-xs text-muted-foreground">Switching type resets sample data but keeps the title</Label>
                       <Select value={currentTemplateId} onValueChange={onTemplateIdChange}>
                         <SelectTrigger className="w-full">
-                          <SelectValue placeholder="选择图表类型" />
+                          <SelectValue placeholder="Select chart type" />
                         </SelectTrigger>
                         <SelectContent>
                           {ECHARTS_TEMPLATE_CATEGORIES.map((cat) => {
@@ -526,47 +528,47 @@ export function EChartsEditor({ config, onChange, previewRef }: EChartsEditorPro
                   </AccordionContent>
                 </AccordionItem>
 
-                {/* 2. 标题 */}
+                {/* 2. Title */}
                 <AccordionItem value="title">
                   <AccordionTrigger>
                     <span className="flex items-center gap-2 font-medium">
-                      <AlignLeft className="size-4 text-primary" /> 标题
+                      <AlignLeft className="size-4 text-primary" /> {t('echarts.title_section')}
                     </span>
                   </AccordionTrigger>
                   <AccordionContent>
                     <div className="space-y-3">
                       <div className="space-y-1.5">
-                        <Label htmlFor="title-text">主标题</Label>
+                        <Label htmlFor="title-text">{t('echarts.mainTitle')}</Label>
                         <Input
                           id="title-text"
                           value={local.title?.text ?? ''}
                           onChange={(e) =>
                             patch({ title: { ...local.title, text: e.target.value } })
                           }
-                          placeholder="例如：季度销售额对比"
+                          placeholder="e.g. Quarterly Sales Comparison"
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <Label htmlFor="title-sub">副标题</Label>
+                        <Label htmlFor="title-sub">{t('echarts.subtitle')}</Label>
                         <Input
                           id="title-sub"
                           value={local.title?.subtext ?? ''}
                           onChange={(e) =>
                             patch({ title: { ...local.title, subtext: e.target.value } })
                           }
-                          placeholder="可选，例如：单位 / 来源说明"
+                          placeholder="Optional, e.g. unit / source"
                         />
                       </div>
-                      <p className="text-xs text-muted-foreground">主副标题会显示在预览区顶部居中位置。</p>
+                      <p className="text-xs text-muted-foreground">Main and sub titles appear centered at the top of the preview.</p>
                     </div>
                   </AccordionContent>
                 </AccordionItem>
 
-                {/* 3. 数据 */}
+                {/* 3. Data */}
                 <AccordionItem value="data">
                   <AccordionTrigger>
                     <span className="flex items-center gap-2 font-medium">
-                      <Plus className="size-4 text-primary" /> 数据
+                      <Plus className="size-4 text-primary" /> {t('echarts.data')}
                     </span>
                   </AccordionTrigger>
                   <AccordionContent>
@@ -578,11 +580,11 @@ export function EChartsEditor({ config, onChange, previewRef }: EChartsEditorPro
                   </AccordionContent>
                 </AccordionItem>
 
-                {/* 4. 样式 */}
+                {/* 4. Style */}
                 <AccordionItem value="style">
                   <AccordionTrigger>
                     <span className="flex items-center gap-2 font-medium">
-                      <Activity className="size-4 text-primary" /> 样式
+                      <Activity className="size-4 text-primary" /> {t('echarts.style')}
                     </span>
                   </AccordionTrigger>
                   <AccordionContent>
@@ -590,26 +592,26 @@ export function EChartsEditor({ config, onChange, previewRef }: EChartsEditorPro
                   </AccordionContent>
                 </AccordionItem>
 
-                {/* 5. 导出 */}
+                {/* 5. Export */}
                 <AccordionItem value="export">
                   <AccordionTrigger>
                     <span className="flex items-center gap-2 font-medium">
-                      <Download className="size-4 text-primary" /> 导出
+                      <Download className="size-4 text-primary" /> {t('echarts.export_section')}
                     </span>
                   </AccordionTrigger>
                   <AccordionContent>
                     <div className="space-y-2">
                       <p className="text-xs text-muted-foreground">
-                        PNG 适合插入文档；JSON 可下次导入继续编辑；option JSON 适合开发者直接调用。
+                        PNG is great for documents; JSON can be re-imported to keep editing; option JSON is for developers to call directly.
                       </p>
                       <Button onClick={handleDownloadPNG} className="w-full" variant="default">
-                        <Download className="size-4" /> 下载 PNG
+                        <Download className="size-4" /> {t('echarts.downloadPng')}
                       </Button>
                       <Button onClick={handleDownloadJSON} className="w-full" variant="outline">
-                        <Download className="size-4" /> 下载 JSON
+                        <Download className="size-4" /> {t('echarts.downloadJson')}
                       </Button>
                       <Button onClick={handleCopyOption} className="w-full" variant="outline">
-                        <Copy className="size-4" /> 复制 ECharts option
+                        <Copy className="size-4" /> {t('echarts.copyOption')}
                       </Button>
                     </div>
                   </AccordionContent>
@@ -636,37 +638,38 @@ interface SubEditorProps {
 
 // -------- Data editor (varies by chart type) --------
 function DataEditor({ config, patch, onRandom }: SubEditorProps & { onRandom: () => void }) {
-  const t = config.type
+  const t = useT()
+  const type = config.type
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-xs text-muted-foreground">
-          {t === 'pie' || t === 'funnel'
-            ? '编辑各项名称与数值，左侧为名称右侧为值。'
-            : t === 'radar'
-              ? '编辑维度（最大值）与每个系列的取值。'
-              : t === 'gauge'
-                ? '拖动滑块设定仪表盘当前值。'
-                : t === 'scatter'
-                  ? '编辑每个数据点的 (X, Y) 坐标。'
-                  : t === 'heatmap'
-                    ? '编辑矩阵：每行代表一个 Y 轴项，每列对应 X 轴的类别。'
-                    : '编辑类别与各系列数值，数值用英文逗号分隔。'}
+          {type === 'pie' || type === 'funnel'
+            ? 'Edit each item name and value — left is name, right is value.'
+            : type === 'radar'
+              ? 'Edit dimensions (max) and each series values.'
+              : type === 'gauge'
+                ? 'Drag the slider to set the current gauge value.'
+                : type === 'scatter'
+                  ? 'Edit the (X, Y) coordinates of each data point.'
+                  : type === 'heatmap'
+                    ? 'Edit the matrix: each row is a Y-axis item, each column an X-axis category.'
+                    : 'Edit categories and per-series values, comma-separated.'}
         </p>
         <Button size="sm" variant="secondary" onClick={onRandom} className="shrink-0">
-          <Shuffle className="size-3.5" /> 随机数据
+          <Shuffle className="size-3.5" /> {t('echarts.randomData')}
         </Button>
       </div>
 
-      {t === 'pie' || t === 'funnel' ? (
+      {type === 'pie' || type === 'funnel' ? (
         <SingleSeriesEditor config={config} patch={patch} />
-      ) : t === 'radar' ? (
+      ) : type === 'radar' ? (
         <RadarDataEditor config={config} patch={patch} />
-      ) : t === 'gauge' ? (
+      ) : type === 'gauge' ? (
         <GaugeDataEditor config={config} patch={patch} />
-      ) : t === 'scatter' ? (
+      ) : type === 'scatter' ? (
         <ScatterDataEditor config={config} patch={patch} />
-      ) : t === 'heatmap' ? (
+      ) : type === 'heatmap' ? (
         <CartesianDataEditor config={config} patch={patch} hideCategories />
       ) : (
         <CartesianDataEditor config={config} patch={patch} />
@@ -681,6 +684,7 @@ function CartesianDataEditor({
   patch,
   hideCategories,
 }: SubEditorProps & { hideCategories?: boolean }) {
+  const t = useT()
   const { categories, series_names, series_data } = config
 
   const updateSeriesName = (i: number, name: string) => {
@@ -700,14 +704,14 @@ function CartesianDataEditor({
     const len = categories.length || 1
     const newRow = Array.from({ length: len }, () => 0)
     patch({
-      series_names: [...series_names, `系列 ${series_names.length + 1}`],
+      series_names: [...series_names, `Series ${series_names.length + 1}`],
       series_data: [...series_data, newRow],
     })
   }
 
   const removeSeries = (i: number) => {
     if (series_names.length <= 1) {
-      toast.error('至少需要保留 1 个系列')
+      toast.error('Keep at least 1 series')
       return
     }
     patch({
@@ -720,7 +724,7 @@ function CartesianDataEditor({
     <div className="space-y-3">
       {!hideCategories && (
         <div className="space-y-1.5">
-          <Label>类别（X 轴，逗号分隔）</Label>
+          <Label>{t('echarts.categories')}</Label>
           <Input
             value={categories.join(', ')}
             onChange={(e) => {
@@ -730,27 +734,27 @@ function CartesianDataEditor({
                 .filter(Boolean)
               patch({ categories: arr })
             }}
-            placeholder="例如：Q1, Q2, Q3, Q4"
+            placeholder="e.g. Q1, Q2, Q3, Q4"
           />
           <p className="text-xs text-muted-foreground">
-            修改类别数量后，每个系列的数值数量会自动适配。
+            When the category count changes, each series values array auto-resizes.
           </p>
         </div>
       )}
 
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <Label>系列数据</Label>
+          <Label>{t('echarts.data')}</Label>
           <Button size="sm" variant="outline" onClick={addSeries}>
-            <Plus className="size-3.5" /> 添加系列
+            <Plus className="size-3.5" /> {t('echarts.addSeries')}
           </Button>
         </div>
         <div className="max-h-72 overflow-y-auto rounded-md border">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 sticky top-0">
               <tr>
-                <th className="px-2 py-1.5 text-left font-medium">系列名</th>
-                <th className="px-2 py-1.5 text-left font-medium">数值（逗号分隔）</th>
+                <th className="px-2 py-1.5 text-left font-medium">{t('echarts.seriesName')}</th>
+                <th className="px-2 py-1.5 text-left font-medium">{t('echarts.seriesValues')}</th>
                 <th className="w-10 px-2 py-1.5"></th>
               </tr>
             </thead>
@@ -777,7 +781,7 @@ function CartesianDataEditor({
                       variant="ghost"
                       className="size-8 text-muted-foreground hover:text-destructive"
                       onClick={() => removeSeries(i)}
-                      aria-label="删除该系列"
+                      aria-label={t('echarts.removeSeries')}
                     >
                       <Trash2 className="size-3.5" />
                     </Button>
@@ -789,7 +793,7 @@ function CartesianDataEditor({
         </div>
         {!hideCategories && (
           <p className="text-xs text-muted-foreground">
-            提示：类别对应 X 轴，例如季度或月份；系列对应不同的数据线/柱。
+            Tip: categories are on the X-axis (quarters, months); series are different bars/lines.
           </p>
         )}
       </div>
@@ -799,6 +803,7 @@ function CartesianDataEditor({
 
 // Pie / funnel editor
 function SingleSeriesEditor({ config, patch }: SubEditorProps) {
+  const t = useT()
   const data = config.single_series_data ?? []
   const update = (i: number, key: 'name' | 'value', val: string) => {
     const next = data.map((d, idx) =>
@@ -810,11 +815,11 @@ function SingleSeriesEditor({ config, patch }: SubEditorProps) {
   }
   const add = () =>
     patch({
-      single_series_data: [...data, { name: `项 ${data.length + 1}`, value: 100 }],
+      single_series_data: [...data, { name: `Item ${data.length + 1}`, value: 100 }],
     })
   const remove = (i: number) => {
     if (data.length <= 2) {
-      toast.error('至少需要保留 2 项')
+      toast.error('Keep at least 2 items')
       return
     }
     patch({ single_series_data: data.filter((_, idx) => idx !== i) })
@@ -822,17 +827,17 @@ function SingleSeriesEditor({ config, patch }: SubEditorProps) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <Label>数据项</Label>
+        <Label>{t('echarts.data')}</Label>
         <Button size="sm" variant="outline" onClick={add}>
-          <Plus className="size-3.5" /> 添加项
+          <Plus className="size-3.5" /> {t('echarts.addItem')}
         </Button>
       </div>
       <div className="max-h-72 overflow-y-auto rounded-md border">
         <table className="w-full text-sm">
           <thead className="bg-muted/50 sticky top-0">
             <tr>
-              <th className="px-2 py-1.5 text-left font-medium">名称</th>
-              <th className="px-2 py-1.5 text-left font-medium">数值</th>
+              <th className="px-2 py-1.5 text-left font-medium">{t('echarts.itemName')}</th>
+              <th className="px-2 py-1.5 text-left font-medium">{t('echarts.itemValue')}</th>
               <th className="w-10 px-2 py-1.5"></th>
             </tr>
           </thead>
@@ -860,7 +865,7 @@ function SingleSeriesEditor({ config, patch }: SubEditorProps) {
                     variant="ghost"
                     className="size-8 text-muted-foreground hover:text-destructive"
                     onClick={() => remove(i)}
-                    aria-label="删除该项"
+                    aria-label={t('actions.delete')}
                   >
                     <Trash2 className="size-3.5" />
                   </Button>
@@ -876,6 +881,7 @@ function SingleSeriesEditor({ config, patch }: SubEditorProps) {
 
 // Radar editor
 function RadarDataEditor({ config, patch }: SubEditorProps) {
+  const t = useT()
   const indicators = config.radar_indicators ?? []
   const { series_names, series_data } = config
 
@@ -889,12 +895,12 @@ function RadarDataEditor({ config, patch }: SubEditorProps) {
     })
   const addIndicator = () =>
     patch({
-      radar_indicators: [...indicators, { name: `维度 ${indicators.length + 1}`, max: 100 }],
+      radar_indicators: [...indicators, { name: `Dimension ${indicators.length + 1}`, max: 100 }],
       series_data: series_data.map((row) => [...row, 0]),
     })
   const removeIndicator = (i: number) => {
     if (indicators.length <= 3) {
-      toast.error('雷达图至少需要 3 个维度')
+      toast.error('Radar needs at least 3 dimensions')
       return
     }
     patch({
@@ -907,17 +913,17 @@ function RadarDataEditor({ config, patch }: SubEditorProps) {
     <div className="space-y-3">
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <Label>维度（指标）</Label>
+          <Label>Dimensions (Indicators)</Label>
           <Button size="sm" variant="outline" onClick={addIndicator}>
-            <Plus className="size-3.5" /> 添加维度
+            <Plus className="size-3.5" /> Add dimension
           </Button>
         </div>
         <div className="max-h-44 overflow-y-auto rounded-md border">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 sticky top-0">
               <tr>
-                <th className="px-2 py-1.5 text-left font-medium">维度名</th>
-                <th className="px-2 py-1.5 text-left font-medium">最大值</th>
+                <th className="px-2 py-1.5 text-left font-medium">Dimension</th>
+                <th className="px-2 py-1.5 text-left font-medium">Max</th>
                 <th className="w-10 px-2 py-1.5"></th>
               </tr>
             </thead>
@@ -945,7 +951,7 @@ function RadarDataEditor({ config, patch }: SubEditorProps) {
                       variant="ghost"
                       className="size-8 text-muted-foreground hover:text-destructive"
                       onClick={() => removeIndicator(i)}
-                      aria-label="删除该维度"
+                      aria-label={t('actions.delete')}
                     >
                       <Trash2 className="size-3.5" />
                     </Button>
@@ -958,13 +964,13 @@ function RadarDataEditor({ config, patch }: SubEditorProps) {
       </div>
 
       <div className="space-y-1.5">
-        <Label>各系列取值（按维度顺序，逗号分隔）</Label>
+        <Label>Series values (in dimension order, comma-separated)</Label>
         <div className="max-h-44 overflow-y-auto rounded-md border">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 sticky top-0">
               <tr>
-                <th className="px-2 py-1.5 text-left font-medium">系列名</th>
-                <th className="px-2 py-1.5 text-left font-medium">取值</th>
+                <th className="px-2 py-1.5 text-left font-medium">{t('echarts.seriesName')}</th>
+                <th className="px-2 py-1.5 text-left font-medium">Values</th>
               </tr>
             </thead>
             <tbody>
@@ -1015,7 +1021,7 @@ function GaugeDataEditor({ config, patch }: SubEditorProps) {
     <div className="space-y-3">
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <Label>当前值</Label>
+          <Label>Current value</Label>
           <span className="text-sm font-medium tabular-nums">{value}</span>
         </div>
         <Slider
@@ -1027,14 +1033,14 @@ function GaugeDataEditor({ config, patch }: SubEditorProps) {
         />
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="gauge-max">最大值</Label>
+        <Label htmlFor="gauge-max">Max</Label>
         <Input
           id="gauge-max"
           type="number"
           value={max}
           onChange={(e) => patch({ gauge_max: Number(e.target.value) || 0 })}
         />
-        <p className="text-xs text-muted-foreground">仪表盘刻度从 0 到最大值，通常设为 100 表示百分比。</p>
+        <p className="text-xs text-muted-foreground">Gauge scale goes from 0 to max — usually 100 for percentage.</p>
       </div>
     </div>
   )
@@ -1042,6 +1048,7 @@ function GaugeDataEditor({ config, patch }: SubEditorProps) {
 
 // Scatter editor
 function ScatterDataEditor({ config, patch }: SubEditorProps) {
+  const t = useT()
   const data = config.scatter_data ?? []
   const update = (i: number, axis: 0 | 1, val: string) => {
     const n = Number(val)
@@ -1054,7 +1061,7 @@ function ScatterDataEditor({ config, patch }: SubEditorProps) {
     patch({ scatter_data: [...data, [Math.floor(Math.random() * 200) + 100, Math.floor(Math.random() * 60) + 40]] })
   const remove = (i: number) => {
     if (data.length <= 1) {
-      toast.error('至少需要保留 1 个数据点')
+      toast.error('Keep at least 1 data point')
       return
     }
     patch({ scatter_data: data.filter((_, idx) => idx !== i) })
@@ -1062,9 +1069,9 @@ function ScatterDataEditor({ config, patch }: SubEditorProps) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <Label>数据点</Label>
+        <Label>Data points</Label>
         <Button size="sm" variant="outline" onClick={add}>
-          <Plus className="size-3.5" /> 添加点
+          <Plus className="size-3.5" /> Add point
         </Button>
       </div>
       <div className="max-h-72 overflow-y-auto rounded-md border">
@@ -1101,7 +1108,7 @@ function ScatterDataEditor({ config, patch }: SubEditorProps) {
                     variant="ghost"
                     className="size-8 text-muted-foreground hover:text-destructive"
                     onClick={() => remove(i)}
-                    aria-label="删除该点"
+                    aria-label={t('actions.delete')}
                   >
                     <Trash2 className="size-3.5" />
                   </Button>
@@ -1146,63 +1153,64 @@ function StyleToggle({
 
 // Style editor
 function StyleEditor({ config, patch }: SubEditorProps) {
-  const t = config.type
-  const isBar = t === 'bar'
-  const isLine = t === 'line'
+  const t = useT()
+  const type = config.type
+  const isBar = type === 'bar'
+  const isLine = type === 'line'
 
   return (
     <div className="space-y-4">
       <StyleToggle
         id="legend"
-        label="显示图例"
+        label={t('echarts.legend')}
         checked={config.legend}
         onChange={(v) => patch({ legend: v })}
-        hint="在底部展示各系列的颜色说明。"
+        hint="Show color legend for each series at the bottom."
       />
       <StyleToggle
         id="stack"
-        label="堆叠"
+        label={t('echarts.stack')}
         checked={config.stack}
         onChange={(v) => patch({ stack: v })}
         disabled={!isBar && !isLine}
-        hint={isBar || isLine ? '将多系列堆叠展示总量。' : '仅柱状图 / 折线图可用。'}
+        hint={isBar || isLine ? 'Stack multiple series to show totals.' : 'Only available for bar / line charts.'}
       />
       <StyleToggle
         id="smooth"
-        label="平滑曲线"
+        label={t('echarts.smooth')}
         checked={config.smooth}
         onChange={(v) => patch({ smooth: v })}
         disabled={!isLine}
-        hint={isLine ? '折线变成圆滑曲线。' : '仅折线图可用。'}
+        hint={isLine ? 'Smooth the line into a curve.' : 'Only available for line charts.'}
       />
       <StyleToggle
         id="horizontal"
-        label="横向显示"
+        label={t('echarts.horizontal')}
         checked={config.horizontal}
         onChange={(v) => patch({ horizontal: v })}
         disabled={!isBar}
-        hint={isBar ? '将 X/Y 轴对调，柱子变为横向。' : '仅柱状图可用。'}
+        hint={isBar ? 'Swap X/Y axes to make bars horizontal.' : 'Only available for bar charts.'}
       />
       <StyleToggle
         id="label"
-        label="显示数值标签"
+        label={t('echarts.showLabel')}
         checked={config.showLabel}
         onChange={(v) => patch({ showLabel: v })}
-        hint="在数据点上直接显示数值。"
+        hint="Show values directly on data points."
       />
       <StyleToggle
         id="toolbox"
-        label="显示工具栏"
+        label={t('echarts.showToolbox')}
         checked={config.showToolbox}
         onChange={(v) => patch({ showToolbox: v })}
-        hint="右上角悬浮工具：保存图片、数据视图等。"
+        hint="Floating toolbar (top-right): save image, data view, etc."
       />
 
       <div className="space-y-1.5">
-        <Label htmlFor="theme">主题</Label>
+        <Label htmlFor="theme">{t('echarts.theme')}</Label>
         <Select value={config.theme} onValueChange={(v) => patch({ theme: v })}>
           <SelectTrigger id="theme" className="w-full">
-            <SelectValue placeholder="选择主题" />
+            <SelectValue placeholder="Select theme" />
           </SelectTrigger>
           <SelectContent>
             {THEME_OPTIONS.map((o) => (
@@ -1213,7 +1221,7 @@ function StyleEditor({ config, patch }: SubEditorProps) {
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">
-          切换主题会重新初始化图表实例以套用主题样式。
+          Switching theme re-initializes the chart instance to apply theme styles.
         </p>
       </div>
     </div>
