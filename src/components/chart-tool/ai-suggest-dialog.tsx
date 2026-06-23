@@ -195,12 +195,26 @@ export function AISuggestDialog({ open, onOpenChange, engine, onApply }: Props) 
       toast.error(t('aiDialog.enterPrompt'))
       return
     }
+
+    // Read license key + email from localStorage (same keys as note app)
+    const licenseKey = typeof localStorage !== 'undefined' ? localStorage.getItem('licenseKey') : null
+    const licenseEmail = typeof localStorage !== 'undefined' ? localStorage.getItem('licenseEmail') : null
+
+    if (!licenseKey || !licenseEmail) {
+      toast.error(locale.startsWith('zh') ? 'AI 功能需要 Pro 授权，请先验证 License。' : 'AI features require a Pro license. Please verify your license first.')
+      return
+    }
+
     setLoading(true)
     setSuggestion(null)
     try {
       const res = await fetch('/api/ai/suggest', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-license-key': licenseKey,
+          'x-license-email': licenseEmail,
+        },
         body: JSON.stringify({ prompt, engine, locale, imageDataUrl }),
       })
       if (!res.ok) {

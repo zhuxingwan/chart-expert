@@ -1,17 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import ZAI from 'z-ai-web-dev-sdk'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 interface SuggestBody {
-  /** Optional hint about which engine to use. If omitted, AI picks freely. */
   engine?: 'echarts' | 'mermaid' | 'infographic'
-  /** The user's natural-language prompt. */
   prompt: string
-  /** BCP-47 locale code (e.g. 'en', 'zh', 'ja'). Defaults to 'en'. */
   locale?: string
-  /** Optional uploaded image as a data URL (base64). The AI will analyze it. */
   imageDataUrl?: string
 }
 
@@ -22,7 +17,7 @@ Based on the user's natural-language description (and optionally an uploaded ref
 2. Pick the most suitable template within that library
 3. Generate a ready-to-use configuration object
 
-CRITICAL — Data Extraction: The user's prompt often contains REAL data and content (numbers, percentages, labels, events, dates, names, relationships). You MUST extract and use this data EXACTLY as provided. Do NOT invent or replace user-provided data with your own. If the user says "In 2020, Asia-Pacific accounted for 60%", then the chart MUST contain a 2020 entry with value 60 and label "Asia-Pacific". Parse all numbers, percentages, dates, names, and relationships from the text and map them into the chart's data structure.
+CRITICAL — Data Extraction: The user's prompt often contains REAL data and content (numbers, percentages, labels, events, dates, names, relationships). You MUST extract and use this data EXACTLY as provided. Do NOT invent or replace user-provided data with your own.
 
 You MUST respond with valid JSON only — no markdown fences, no extra prose.
 
@@ -34,214 +29,262 @@ Output schema:
   "config": { ...engine-specific configuration, see below... }
 }
 
-IMPORTANT — Language: The user specifies a locale (BCP-47 code). You MUST generate ALL text content (recommendedTypeName, reason, chart titles, labels, descriptions, mermaid node text, etc.) in the SAME language as the user's locale. For example:
-- locale "en" → all text in English
-- locale "zh" or "zh-CN" → all text in Simplified Chinese
-- locale "ja" → all text in Japanese
-- locale "es" → all text in Spanish
-If the user's prompt is in a different language than the locale, follow the LOCALE for the output language. However, if the user's prompt contains proper nouns or entity names in a specific language, keep those names as-is (e.g. company names, product names).
+IMPORTANT — Language: The user specifies a locale (BCP-47 code). You MUST generate ALL text content in the SAME language as the user's locale.
 
 === How to pick the engine ===
-- Use "echarts" for: numerical data trends, comparisons between quantitative categories, proportions of measurable parts, distributions of values, single-metric gauges, heatmaps, candlestick/financial charts, box plots, treemaps, sunburst, sankey, graph networks, parallel coordinates. Think: numbers + axes.
-- Use "mermaid" for: code-like diagrams with logical flow — flowcharts, sequence diagrams between actors, state machines, ER diagrams, class diagrams, git branches, gantt charts, user journeys, mindmaps, timelines. Think: structured logic with text labels.
-- Use "infographic" for: visually rich presentations of qualitative content — step lists, roadmaps, mind maps, comparison cards, org trees, relationship circles, decorative timelines. Think: presentation-ready visuals with cards/illustrations.
+- Use "echarts" for: numerical data trends, comparisons, proportions, distributions, gauges, heatmaps, candlestick, boxplot, graph, sankey, treemap, sunburst, parallel, themeRiver.
+- Use "mermaid" for: flowcharts, sequence diagrams, state machines, ER diagrams, class diagrams, git branches, gantt, journey, mindmap, pie, timeline.
+- Use "infographic" for: step lists, roadmaps, mind maps, comparison cards, org trees, relationship circles, decorative timelines.
 
-=== Data extraction examples ===
-Example 1: "In 2020, Asia-Pacific 60%, Europe 15%, North America 25%. In 2021, Asia-Pacific 50%, Europe 25%, North America 25%."
-→ engine: echarts, type: bar (stacked or grouped), categories: ["2020", "2021"], series_names: ["Asia-Pacific", "Europe", "North America"], series_data: [[60,50],[15,25],[25,25]]
+=== ECharts config ===
+type: bar|line|pie|scatter|radar|funnel|gauge|heatmap|candlestick|boxplot|graph|sankey|treemap|sunburst|parallel|themeRiver
+{ "title": {"text":"","subtext":""}, "type":"", "theme":"default|dark|vintage|macarons", "legend":true, "categories":[], "series_names":[], "series_data":[[]], "stack":false, "smooth":false, "horizontal":false, "showLabel":true, "showToolbox":true, "single_series_data":[{"name":"","value":0}], "radar_indicators":[{"name":"","max":100}], "gauge_value":0, "gauge_max":100, "scatter_data":[[0,0]], "candlestick_data":[[0,0,0,0]], "boxplot_data":[[0,0,0,0,0]], "graph_nodes":[{"id":"","name":"","category":0}], "graph_links":[{"source":"","target":""}], "sankey_nodes":[{"name":""}], "sankey_links":[{"source":"","target":"","value":0}], "sunburst_data":[{"name":"","value":0}], "parallel_data":[[]], "parallel_dims":[], "themeriver_data":[["","",0]] }
 
-Example 2: "Step 1: Registration. Step 2: Email verification. Step 3: Profile setup. Step 4: First purchase."
-→ engine: infographic, template: sequence-timeline-simple, lists: [{label:"Step 1: Registration"},{label:"Step 2: Email verification"},...]
+=== Mermaid config ===
+{ "type":"flowchart|sequence|class|state|er|gantt|journey|mindmap|pie|gitgraph|timeline", "code":"", "theme":"default|dark|forest|neutral|base", "background":"#ffffff" }
 
-Example 3: "User → Frontend → Backend → Database"
-→ engine: mermaid, type: sequence, code with participants User, Frontend, Backend, Database
-
-=== ECharts config schema (engine: "echarts") ===
-Pick a "type" from: bar, line, pie, scatter, radar, funnel, gauge, heatmap, candlestick, boxplot, graph, sankey, treemap, sunburst, parallel, themeRiver
-{
-  "title": { "text": "string", "subtext": "string" },
-  "type": "<bar|line|pie|scatter|radar|funnel|gauge|heatmap|candlestick|boxplot|graph|sankey|treemap|sunburst|parallel|themeRiver>",
-  "theme": "default" | "dark" | "vintage" | "macarons",
-  "legend": true,
-  "categories": ["string", ...],
-  "series_names": ["string", ...],
-  "series_data": [[number,...], ...],
-  "stack": false, "smooth": false, "horizontal": false,
-  "showLabel": true, "showToolbox": true,
-  "single_series_data": [{"name":"string","value":0}],
-  "radar_indicators": [{"name":"string","max":100}],
-  "gauge_value": 0, "gauge_max": 100,
-  "scatter_data": [[x,y], ...],
-  "candlestick_data": [[open,close,low,high], ...],
-  "boxplot_data": [[min,Q1,median,Q3,max], ...],
-  "graph_nodes": [{"id":"string","name":"string","category":0}],
-  "graph_links": [{"source":"string","target":"string"}],
-  "sankey_nodes": [{"name":"string"}],
-  "sankey_links": [{"source":"string","target":"string","value":0}],
-  "sunburst_data": [{"name":"string","value":0,"children":[...]}],
-  "parallel_data": [[number,...], ...],
-  "parallel_dims": ["string", ...],
-  "themeriver_data": [["date","name",value], ...]
-}
-
-=== Mermaid config schema (engine: "mermaid") ===
-Pick a "type" from: flowchart, sequence, class, state, er, gantt, journey, mindmap, pie, gitgraph, timeline
-{
-  "type": "<flowchart|sequence|class|state|er|gantt|journey|mindmap|pie|gitgraph|timeline>",
-  "code": "<complete, valid mermaid source code as a single string>",
-  "theme": "default" | "dark" | "forest" | "neutral" | "base",
-  "background": "#ffffff"
-}
-
-=== Infographic config schema (engine: "infographic") ===
-Pick a "template" id from the curated list below. Match the user's intent to the closest template.
-Popular templates (use these when in doubt):
-- list-row-simple-horizontal-arrow, list-grid-compact-card, list-grid-badge-card, list-pyramid-badge-card, list-sector-simple
-- sequence-timeline-simple, sequence-timeline-done-list, sequence-steps-badge-card, sequence-snake-steps-compact-card, sequence-roadmap-vertical-badge-card, sequence-circular-simple, sequence-funnel-simple, sequence-pyramid-simple, sequence-interaction-default-badge-card
-- compare-binary-horizontal-simple-vs, compare-binary-horizontal-compact-card-arrow, compare-hierarchy-left-right-circle-node-pill-badge, compare-swot, compare-quadrant-simple-illus
-- hierarchy-tree-tech-style-capsule-item, hierarchy-tree-tech-style-compact-card, hierarchy-tree-distributed-origin-capsule-item, hierarchy-tree-lr-tech-style-capsule-item
-- relation-network-simple-circle-node, relation-circle-icon-badge, relation-dagre-flow-tb-compact-card, relation-dagre-flow-lr-compact-card, relation-dagre-flow-tb-animated-capsule
-- chart-pie-plain-text, chart-pie-donut-compact-card, chart-column-simple, chart-bar-plain-text, chart-line-plain-text, chart-wordcloud
-{
-  "type": "<template id>",
-  "template": "<same template id>",
-  "data": {
-    "title": { "text": "string", "subtext": "string" },
-    "lists": [ { "label": "string", "desc": "string", "value": 0, "icon": "emoji", "children": [ ...recursive... ] } ],
-    "nodes": [ { "id": "string", "label": "string", "group": "string" } ],
-    "edges": [ { "from": "string", "to": "string", "label": "string" } ]
-  },
-  "theme": "light" | "dark" | "hand-drawn",
-  "background": "#ffffff",
-  "width": 900,
-  "height": 600
-}
-Infographic data shape rules:
-- list / sequence / chart templates: use "lists" with flat items.
-- hierarchy templates: use "lists" with ONE root whose "children" form the tree.
-- relation templates: use "nodes" and "edges" (edges use "from"/"to" referencing node ids).
-- compare templates: use "lists" with 2 (binary) or 4 (quadrant) top-level groups, each with "children".
-- "icon" can be a single emoji or short keyword.
+=== Infographic config ===
+template: list-row-simple-horizontal-arrow, list-grid-compact-card, sequence-timeline-simple, sequence-steps-badge-card, compare-binary-horizontal-simple-vs, compare-swot, hierarchy-tree-tech-style-capsule-item, relation-network-simple-circle-node, relation-dagre-flow-tb-compact-card, chart-pie-plain-text, chart-wordcloud, etc.
+{ "type":"", "template":"", "data": {"title":{"text":"","subtext":""}, "lists":[{"label":"","desc":"","value":0,"icon":"","children":[]}], "nodes":[{"id":"","label":"","group":""}], "edges":[{"from":"","to":"","label":""}]}, "theme":"light|dark|hand-drawn", "background":"#ffffff", "width":900, "height":600 }
 
 === Universal rules ===
-- EXTRACT all concrete data (numbers, percentages, dates, labels, names, relationships) from the user's prompt and use it EXACTLY. Do NOT invent data when the user provides it.
-- If the user does NOT provide specific data, generate realistic sample data based on the description.
+- EXTRACT all concrete data from the user's prompt and use it EXACTLY.
+- If no specific data provided, generate realistic sample data.
 - Generate ALL text content in the user's locale language.
 - For mermaid, write complete, syntactically-valid code.
-- Always include a title in the user's language.
 - Output STRICT JSON only.`
+
+// ─── Domain Signature (matches note app's signedFetch) ──────────────────
+
+async function generateRequestSignature(method: string, path: string, timestamp: number): Promise<string> {
+  const domain = 'noterich.com'
+  const key = `${domain}::noterich_sig_v1`
+  const payload = `${method.toUpperCase()}|${path}|${timestamp}`
+
+  const encoder = new TextEncoder()
+  const keyData = encoder.encode(key)
+  const payloadData = encoder.encode(payload)
+
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+  )
+  const signature = await crypto.subtle.sign('HMAC', cryptoKey, payloadData)
+
+  return Buffer.from(signature).toString('base64')
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+async function signedFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  const parsed = new URL(url)
+  let path = parsed.pathname + parsed.search
+  const pathParam = parsed.searchParams.get('path')
+  if (pathParam) {
+    path = pathParam
+  }
+
+  const timestamp = Date.now()
+  const signature = await generateRequestSignature(options.method || 'GET', path, timestamp)
+
+  const headers = new Headers(options.headers)
+  headers.set('X-Request-Sig', signature)
+  headers.set('X-Request-Ts', timestamp.toString())
+  headers.set('X-Request-Dom', Buffer.from('noterich.com').toString('base64'))
+
+  return fetch(url, { ...options, headers })
+}
+
+// ─── Compression (matches note app's compressToFile) ─────────────────────
+
+async function compressPayload(data: string): Promise<FormData> {
+  const encoder = new TextEncoder()
+  const input = encoder.encode(data)
+
+  try {
+    const cs = new CompressionStream('gzip')
+    const writer = cs.writable.getWriter()
+    writer.write(input)
+    writer.close()
+    const compressed = await new Response(cs.readable).arrayBuffer()
+    const file = new File([compressed], 'payload.gz', { type: 'application/gzip' })
+    const formData = new FormData()
+    formData.append('payload', file)
+    return formData
+  } catch {
+    // Fallback: no compression
+    const formData = new FormData()
+    formData.append('payload', new File([input], 'payload.json', { type: 'application/json' }))
+    return formData
+  }
+}
+
+// ─── License decryption (matches note app) ───────────────────────────────
+
+const IV_LENGTH = 16
+
+async function deriveKeyFromParams(password: string, salt: string): Promise<ArrayBuffer> {
+  const combined = password + salt
+  let hash = 0
+  for (let i = 0; i < combined.length; i++) {
+    const char = combined.charCodeAt(i)
+    hash = (hash << 5) - hash + char
+    hash |= 0
+  }
+  const keyBytes = new Uint8Array(32)
+  for (let i = 0; i < 32; i++) {
+    keyBytes[i] = (hash >> ((i % 4) * 8)) & 0xff
+  }
+  return keyBytes.buffer
+}
+
+function getDeriveSalt(): string {
+  const WEBICON_PATH_D = 'M22.266 3.834a12.7 12.7 0 0 1 3.194.319c10.765 2.446 7.71 15.16 7.951 23.149.02.66.055 1.165.414 1.737 1.484 1.192 3.724-.94 4.96-1.82.047 3.194.432 7.023-1.783 9.62-2.9 3.401-9.023 2.953-12.214.162-5.819-5.09-3.274-14.17-3.848-20.956-.14-.903-.248-2.55-1.277-2.806-2.546.55-1.905 9.046-1.903 11.107l-.004 14.444q-6.539.047-13.076-.021c-.035-1.486-.04-3.02-.02-4.507.13-10.036-.195-20.16.03-30.187l8.263-.016c1.381 0 3.457-.06 4.765.04.073.233.077.34.1.58.87-.008 2.717-.729 4.448-.845m-4.58 3.315c-.025.82-.23 4.093.1 4.614 2.211-.717 4-.498 4.702 2.144 1.861 6.998-2.623 17.779 4.738 22.513 1.653.982 4.264 1.003 6.168.59 2.914-1.129 3.355-3.198 3.507-6.033-2.127.555-4.656.681-5.183-2.042-1.344-6.942 2.66-16.998-4.075-21.94-1.598-1.1-4.356-1.376-6.326-1.125-1.497.216-2.325.434-3.63 1.28'
+  return WEBICON_PATH_D.slice(0, 50)
+}
+
+async function decryptLicense(encryptedData: Uint8Array, key: ArrayBuffer): Promise<any> {
+  const keyMaterial = new Uint8Array(key)
+  for (const ivLen of [16, 12, 0, 8, 4, 20, 24]) {
+    if (ivLen >= encryptedData.length) continue
+    const ciphertext = encryptedData.slice(ivLen)
+    const decryptedBuffer = new Uint8Array(ciphertext.length)
+    for (let i = 0; i < ciphertext.length; i++) {
+      decryptedBuffer[i] = ciphertext[i] ^ keyMaterial[i % keyMaterial.length]
+    }
+    const jsonString = new TextDecoder().decode(decryptedBuffer)
+    try {
+      const parsed = JSON.parse(jsonString)
+      if (parsed && typeof parsed === 'object' && parsed.user && parsed.expiry && parsed.type) {
+        return parsed
+      }
+    } catch {}
+  }
+  throw new Error('Decryption failed')
+}
+
+async function validateLicenseKey(key: string, email: string): Promise<boolean> {
+  try {
+    const binaryString = Buffer.from(key, 'base64').toString('binary')
+    const bytes = new Uint8Array(binaryString.length)
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i)
+    }
+    const derivedKey = await deriveKeyFromParams('noterich.com', getDeriveSalt())
+    const decryptedData = await decryptLicense(bytes, derivedKey)
+    if (decryptedData.user !== email) return false
+    if (Date.now() > decryptedData.expiry) return false
+    if (decryptedData.type !== 'pro') return false
+    return true
+  } catch {
+    return false
+  }
+}
+
+// ─── Main API handler ────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as SuggestBody
     if (!body.prompt && !body.imageDataUrl) {
-      return NextResponse.json(
-        { error: 'prompt or imageDataUrl is required' },
-        { status: 400 },
-      )
+      return NextResponse.json({ error: 'prompt or imageDataUrl is required' }, { status: 400 })
+    }
+
+    // ─── License check ───────────────────────────────────────────────────
+    const licenseKey = req.headers.get('x-license-key')
+    const licenseEmail = req.headers.get('x-license-email')
+    if (!licenseKey || !licenseEmail) {
+      return NextResponse.json({ error: 'License required' }, { status: 403 })
+    }
+    const isValid = await validateLicenseKey(licenseKey, licenseEmail)
+    if (!isValid) {
+      return NextResponse.json({ error: 'Invalid or expired license' }, { status: 403 })
     }
 
     const locale = body.locale ?? 'en'
-    const zai = await ZAI.create()
+    const promptText = body.prompt?.trim() || 'Please analyze the uploaded image and create the most appropriate chart.'
 
-    // Build the user message content
-    const promptText = body.prompt?.trim() || 'Please analyze the uploaded image and create the most appropriate chart/diagram based on what you observe.'
-    const userHint = body.engine
-      ? `Locale: ${locale}\nUser hinted engine: ${body.engine} (you may still override if a different library is clearly better).\nUser request: ${promptText}`
-      : `Locale: ${locale}\nUser request: ${promptText}`
-
-    let raw: string
-
-    // If an image is provided, use the vision API; otherwise use regular chat
+    // Build messages
+    const messageContent: unknown[] = []
     if (body.imageDataUrl) {
-      const response = await zai.chat.completions.createVision({
-        messages: [
-          { role: 'assistant', content: SYSTEM_PROMPT },
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: userHint },
-              {
-                type: 'image_url',
-                image_url: { url: body.imageDataUrl },
-              },
-            ],
-          },
-        ],
-        thinking: { type: 'disabled' },
-      })
-      raw = response.choices[0]?.message?.content ?? ''
-    } else {
-      // Text-only request
-      const completion = await zai.chat.completions.create({
-        messages: [
-          { role: 'assistant', content: SYSTEM_PROMPT },
-          { role: 'user', content: userHint },
-        ],
-        thinking: { type: 'disabled' },
-      })
-      raw = completion.choices[0]?.message?.content ?? ''
+      messageContent.push({ image_url: { url: body.imageDataUrl }, type: 'image_url' })
     }
+    messageContent.push({ text: `Locale: ${locale}\nUser request: ${promptText}`, type: 'text' })
+
+    const messages = [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: messageContent },
+    ]
+
+    const payload = {
+      max_tokens: 4096,
+      messages,
+      stream: false,
+      temperature: 0.7,
+      top_p: 0.95,
+    }
+
+    const payloadJson = JSON.stringify(payload)
+
+    // Try compressed, fall back to raw JSON
+    let fetchBody: BodyInit
+    let fetchHeaders: Record<string, string> = {}
+
+    try {
+      const formData = await compressPayload(payloadJson)
+      fetchBody = formData
+    } catch {
+      fetchBody = payloadJson
+      fetchHeaders['Content-Type'] = 'application/json'
+    }
+
+    const apiUrl = 'https://www.noterich.com/api.php?api=general&path=/v1/chat/completions'
+    const response = await signedFetch(apiUrl, {
+      body: fetchBody,
+      headers: fetchHeaders,
+      method: 'POST',
+    })
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => 'Unknown error')
+      return NextResponse.json({ error: `AI API error: ${response.status} ${errText}` }, { status: 502 })
+    }
+
+    const data = await response.json()
+    const raw = data.choices?.[0]?.message?.content ?? ''
 
     return parseAndCalibrate(raw, body.engine)
   } catch (e) {
-    return NextResponse.json(
-      { error: (e as Error).message },
-      { status: 500 },
-    )
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 })
   }
 }
 
-/**
- * Parse the AI's raw response, then calibrate/validate the config.
- * If the config is invalid or missing critical fields, fall back to a
- * safe default template rather than crashing the editor.
- */
 function parseAndCalibrate(raw: string, engineHint?: string) {
-  // Strip code fences if present
-  const cleaned = raw
-    .replace(/^```(?:json)?/i, '')
-    .replace(/```$/i, '')
-    .trim()
+  const cleaned = raw.replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim()
 
   let parsed: unknown
   try {
     parsed = JSON.parse(cleaned)
   } catch {
-    return NextResponse.json(
-      { error: 'AI returned malformed JSON', raw: cleaned },
-      { status: 502 },
-    )
+    return NextResponse.json({ error: 'AI returned malformed JSON', raw: cleaned }, { status: 502 })
   }
 
-  const result = parsed as {
-    engine?: string
-    recommendedTypeName?: string
-    reason?: string
-    config?: unknown
-  }
+  const result = parsed as { engine?: string; recommendedTypeName?: string; reason?: string; config?: unknown }
 
-  // ---- Calibration: validate and fix the engine ----
   const validEngines = ['echarts', 'mermaid', 'infographic']
   let engine = result.engine
   if (!engine || !validEngines.includes(engine)) {
     engine = engineHint ?? 'echarts'
   }
 
-  // ---- Calibration: validate and fix the config ----
   let config = result.config
   let calibrationNote: string | undefined
 
   if (!config || typeof config !== 'object') {
-    // Config is missing or invalid — fall back to a safe default
     config = getSafeDefault(engine)
     calibrationNote = 'AI config was missing; a default template was applied.'
   } else {
     const calibrated = calibrateConfig(engine, config as Record<string, unknown>)
     config = calibrated.config
-    if (calibrated.fixed) {
-      calibrationNote = calibrated.note
-    }
+    if (calibrated.fixed) calibrationNote = calibrated.note
   }
 
   return NextResponse.json({
@@ -255,136 +298,33 @@ function parseAndCalibrate(raw: string, engineHint?: string) {
   })
 }
 
-/**
- * Validate and calibrate a config object for the given engine.
- * Returns the fixed config and a note describing what was corrected.
- */
-function calibrateConfig(
-  engine: string,
-  config: Record<string, unknown>,
-): { config: unknown; fixed: boolean; note?: string } {
+function calibrateConfig(engine: string, config: Record<string, unknown>): { config: unknown; fixed: boolean; note?: string } {
   const notes: string[] = []
-
   if (engine === 'echarts') {
-    // Ensure required fields exist
-    if (!config.type || typeof config.type !== 'string') {
-      config.type = 'bar'
-      notes.push('chart type')
-    }
-    if (!config.title || typeof config.title !== 'object') {
-      config.title = { text: '', subtext: '' }
-    }
-    // Ensure arrays exist
+    if (!config.type || typeof config.type !== 'string') { config.type = 'bar'; notes.push('chart type') }
+    if (!config.title || typeof config.title !== 'object') config.title = { text: '', subtext: '' }
     if (!Array.isArray(config.categories)) config.categories = []
     if (!Array.isArray(config.series_names)) config.series_names = []
     if (!Array.isArray(config.series_data)) config.series_data = []
-    // For pie/funnel, ensure single_series_data
-    if ((config.type === 'pie' || config.type === 'funnel') && !Array.isArray(config.single_series_data)) {
-      config.single_series_data = []
-    }
-    // For radar, ensure radar_indicators
-    if (config.type === 'radar' && !Array.isArray(config.radar_indicators)) {
-      config.radar_indicators = []
-    }
-    // For scatter, ensure scatter_data
-    if (config.type === 'scatter' && !Array.isArray(config.scatter_data)) {
-      config.scatter_data = []
-    }
-    // For gauge, ensure gauge_value
-    if (config.type === 'gauge' && typeof config.gauge_value !== 'number') {
-      config.gauge_value = 0
-      config.gauge_max = 100
-    }
   } else if (engine === 'mermaid') {
-    if (!config.type || typeof config.type !== 'string') {
-      config.type = 'flowchart'
-      notes.push('diagram type')
-    }
-    if (!config.code || typeof config.code !== 'string') {
-      // Missing code — provide a minimal valid mermaid stub
-      config.code = 'flowchart TD\n    A([Start]) --> B([End])'
-      notes.push('mermaid code')
-    }
-    if (!config.theme || typeof config.theme !== 'string') {
-      config.theme = 'default'
-    }
-    if (!config.background || typeof config.background !== 'string') {
-      config.background = '#ffffff'
-    }
+    if (!config.type || typeof config.type !== 'string') { config.type = 'flowchart'; notes.push('diagram type') }
+    if (!config.code || typeof config.code !== 'string') { config.code = 'flowchart TD\n    A([Start]) --> B([End])'; notes.push('mermaid code') }
+    if (!config.theme) config.theme = 'default'
+    if (!config.background) config.background = '#ffffff'
   } else if (engine === 'infographic') {
-    if (!config.template || typeof config.template !== 'string') {
-      config.template = 'list-grid-compact-card'
-      config.type = config.template
-      notes.push('template id')
-    }
-    // Ensure type matches template
+    if (!config.template || typeof config.template !== 'string') { config.template = 'list-grid-compact-card'; config.type = config.template; notes.push('template id') }
     config.type = config.template
-    if (!config.data || typeof config.data !== 'object') {
-      config.data = { title: { text: '' }, lists: [] }
-      notes.push('data')
-    } else {
-      const data = config.data as Record<string, unknown>
-      if (!data.lists && !data.nodes) {
-        data.lists = []
-      }
-    }
+    if (!config.data || typeof config.data !== 'object') { config.data = { title: { text: '' }, lists: [] }; notes.push('data') }
     if (!config.theme) config.theme = 'light'
     if (!config.background) config.background = '#ffffff'
     if (typeof config.width !== 'number') config.width = 900
     if (typeof config.height !== 'number') config.height = 600
   }
-
-  const fixed = notes.length > 0
-  return {
-    config,
-    fixed,
-    note: fixed ? `Calibrated missing fields: ${notes.join(', ')}.` : undefined,
-  }
+  return { config, fixed: notes.length > 0, note: notes.length > 0 ? `Calibrated: ${notes.join(', ')}` : undefined }
 }
 
-/**
- * Generate a safe default config for fallback when the AI output is unusable.
- */
 function getSafeDefault(engine: string): unknown {
-  if (engine === 'mermaid') {
-    return {
-      type: 'flowchart',
-      code: 'flowchart TD\n    A([Start]) --> B{Decision}\n    B -->|Yes| C[Action]\n    B -->|No| D[End]\n    C --> D',
-      theme: 'default',
-      background: '#ffffff',
-    }
-  }
-  if (engine === 'infographic') {
-    return {
-      type: 'list-grid-compact-card',
-      template: 'list-grid-compact-card',
-      data: {
-        title: { text: '', subtext: '' },
-        lists: [
-          { label: 'Item 1', desc: '', value: 50 },
-          { label: 'Item 2', desc: '', value: 50 },
-          { label: 'Item 3', desc: '', value: 50 },
-        ],
-      },
-      theme: 'light',
-      background: '#ffffff',
-      width: 900,
-      height: 600,
-    }
-  }
-  // echarts default
-  return {
-    title: { text: '', subtext: '' },
-    type: 'bar',
-    theme: 'default',
-    legend: true,
-    categories: ['A', 'B', 'C', 'D'],
-    series_names: ['Series 1'],
-    series_data: [[10, 20, 30, 40]],
-    stack: false,
-    smooth: false,
-    horizontal: false,
-    showLabel: true,
-    showToolbox: true,
-  }
+  if (engine === 'mermaid') return { type: 'flowchart', code: 'flowchart TD\n    A([Start]) --> B{Decision}\n    B -->|Yes| C[Action]\n    B -->|No| D[End]\n    C --> D', theme: 'default', background: '#ffffff' }
+  if (engine === 'infographic') return { type: 'list-grid-compact-card', template: 'list-grid-compact-card', data: { title: { text: '' }, lists: [{ label: 'Item 1', desc: '', value: 50 }, { label: 'Item 2', desc: '', value: 50 }, { label: 'Item 3', desc: '', value: 50 }] }, theme: 'light', background: '#ffffff', width: 900, height: 600 }
+  return { title: { text: '', subtext: '' }, type: 'bar', theme: 'default', legend: true, categories: ['A', 'B', 'C', 'D'], series_names: ['Series 1'], series_data: [[10, 20, 30, 40]], stack: false, smooth: false, horizontal: false, showLabel: true, showToolbox: true }
 }

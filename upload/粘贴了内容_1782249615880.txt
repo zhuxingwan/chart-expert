@@ -1,0 +1,2727 @@
+
+下面是我笔记app中ai部分的代码。
+我们的信息图专家ai接口应该复用我已部署的通用ai接口。
+/**
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ *
+ * AI Generated Content Plugin for Lexical Editor - INCREMENTAL RENDERING OPTIMIZED
+ * ✅ BLOCKS DIFF: Compare blocks to dynamically add/remove/update nodes
+ * ✅ STRICT ALIGNMENT: Ensure nodes and blocks are strictly aligned by index
+ * ✅ CONTENT HASH CACHE: Skip re-render when content unchanged
+ * ✅ BATCH UPDATES: Group DOM operations for better performance
+ * ✅ PROMPT LENGTH MANAGEMENT: Prevent context window overflow with smart truncation
+ * ✅ CANCELLATION SUPPORT: RAG and streaming both support AbortSignal for immediate stop
+ * ✅ TEXTRANK-HYBRID: New strategy combining keyword seeds + global sentence graph
+ */
+
+import type { JSX, RefObject } from "react";
+
+import { $createCodeNode, $isCodeNode } from "@lexical/code";
+import { $generateNodesFromDOM } from "@lexical/html";
+import { $convertFromMarkdownString} from "@lexical/markdown";
+import {
+  $addUpdateTag,
+  $createParagraphNode,
+  $createRangeSelection,
+  $createTextNode,
+  $getNodeByKey,
+  $getRoot,
+  $getSelection,
+  $isElementNode,
+  $isParagraphNode,
+  $isRangeSelection,
+  $isTextNode,
+  $setSelection,
+  CAN_UNDO_COMMAND,
+  ElementNode,
+  HISTORIC_TAG,
+  HISTORY_MERGE_TAG,
+  HISTORY_PUSH_TAG,
+  LexicalEditor,
+  LexicalNode,
+  ParagraphNode,
+  SKIP_DOM_SELECTION_TAG,
+  SKIP_SCROLL_INTO_VIEW_TAG,
+  TextNode,
+} from "lexical";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+
+import { useLicense } from "../../context/LicenseContext";
+import {
+  inlineMixedMarkdown,
+  parseMixedBlocks,
+} from "../ActionsPlugin/actionsUtils";
+import {
+  getAllNotesWithContent,
+  searchWithScroll,
+  workspaceRouter,
+} from "../ActionsPlugin/db";
+import { $createCollapsibleContainerNode } from "../CollapsiblePlugin/CollapsibleContainerNode";
+import { $createCollapsibleContentNode } from "../CollapsiblePlugin/CollapsibleContentNode";
+import { $createCollapsibleTitleNode } from "../CollapsiblePlugin/CollapsibleTitleNode";
+import { PLAYGROUND_TRANSFORMERS } from "../MarkdownTransformers";
+import { $setStyleProperty, getStyleObjectDirect } from "../styleState";
+import { Note, SearchResult } from "./types";
+
+const docTokenMemoryCache = new Map<string, string[]>();
+const textSegmentCache = new Map<string, string[]>();
+const CACHE_LIMIT = 100;
+// ============ 🔐 Simple Domain Signature (Header-Based) ============
+// ============ 🔐 Domain Signature Helper ============
+async function generateRequestSignature(method: string, path: string, timestamp: number): Promise<string> {
+  const domain = window.location.hostname;
+  const key = `${domain}::noterich_sig_v1`;
+  const payload = `${method.toUpperCase()}|${path}|${timestamp}`;
+  
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(key);
+  const payloadData = encoder.encode(payload);
+  
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+  );
+  const signature = await crypto.subtle.sign('HMAC', cryptoKey, payloadData);
+  
+  return btoa(String.fromCharCode(...new Uint8Array(signature)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function signedFetch(url: string, options: RequestInit = {}) {
+  const parsed = new URL(url, window.location.origin);
+  
+  // 🔧 Extract path parameter from query string (matching PHP logic)
+  let path = parsed.pathname + parsed.search;
+  const pathParam = parsed.searchParams.get('path');
+  if (pathParam) {
+    path = pathParam; // Use the inner path, not the full URL
+  }
+  
+  const timestamp = Date.now();
+  
+  const signature = await generateRequestSignature(
+    options.method || 'GET', path, timestamp
+  );
+  
+  const headers = new Headers(options.headers);
+  headers.set('X-Request-Sig', signature);
+  headers.set('X-Request-Ts', timestamp.toString());
+  headers.set('X-Request-Dom', btoa(window.location.hostname));
+  
+  return fetch(url, { ...options, headers });
+}
+
+
+function getTextCacheKey(text: string, granularity: string): string {
+  const head = text.slice(0, 50);
+  const tail = text.slice(-50);
+  return `${granularity}:${text.length}:${head}|||${tail}`;
+}
+
+function segmentText(
+  text: string,
+  granularity: "word" | "sentence" = "word",
+): string[] {
+  const cacheKey = getTextCacheKey(text, granularity);
+  if (textSegmentCache.has(cacheKey)) {
+    return textSegmentCache.get(cacheKey)!;
+  }
+
+  let result: string[];
+  if (!Intl.Segmenter) {
+    result = text
+      .split(granularity === "sentence" ? /[.!?。！？\n]+/ : /\s+/)
+      .filter(Boolean);
+  } else {
+    const segmenter = new Intl.Segmenter(undefined, { granularity });
+    result = Array.from(segmenter.segment(text), (s) => s.segment.trim()).filter(Boolean);
+  }
+
+  if (textSegmentCache.size >= CACHE_LIMIT) {
+    textSegmentCache.delete(textSegmentCache.keys().next().value);
+  }
+  textSegmentCache.set(cacheKey, result);
+  return result;
+}
+
+async function getDocTokensCached(noteId: string, fallbackText: string): Promise<string[]> {
+  if (docTokenMemoryCache.has(noteId)) {
+    return docTokenMemoryCache.get(noteId)!;
+  }
+
+  let tokens: string[];
+  try {
+    const ws = workspaceRouter.getCurrentWorkspaceId();
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const req = indexedDB.open(`noterich_search_index_${ws}`, 4);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+
+    if (db.objectStoreNames.contains("note_index_docs")) {
+      const result = await new Promise<any>((resolve) => {
+        const tx = db.transaction("note_index_docs", "readonly");
+        const query = tx.objectStore("note_index_docs").get(String(noteId));
+        query.onsuccess = () => resolve(query.result);
+        query.onerror = () => resolve(null);
+      });
+      db.close();
+
+      if (result?.doc?.content) {
+        tokens = result.doc.content.split(" ").filter(Boolean);
+      } else {
+        tokens = segmentText(fallbackText, "word");
+      }
+    } else {
+      db.close();
+      tokens = segmentText(fallbackText, "word");
+    }
+  } catch (e) {
+    tokens = segmentText(fallbackText, "word");
+  }
+
+  if (docTokenMemoryCache.size >= CACHE_LIMIT) {
+    docTokenMemoryCache.delete(docTokenMemoryCache.keys().next().value);
+  }
+  docTokenMemoryCache.set(noteId, tokens);
+  return tokens;
+}
+
+// ============ Types ============
+export type AIBackend = "general" | "ocr";
+export type ParsedBlock = ReturnType<typeof parseMixedBlocks>[number];
+
+// 🔹 新增 textrank-hybrid 策略
+export type RagStrategy = "weighted" | "global" | "perWord" | "fusion";
+export type TextrankMode = "chunked" | "fast" | "original";
+
+export type RagConfig = {
+  enabled: boolean;
+  strategy: RagStrategy;
+  candidateLimit: number;
+  topKResults: number;
+  topKWords: number;
+  contextSentences: number;
+  textrankMode: TextrankMode;
+  minWordLen: number;
+  // 🔹 Textrank-Hybrid 专用参数
+  textrankAlpha?: number; // 关键词种子权重系数 (0~1), 默认 0.6
+  textrankIterations?: number; // 迭代次数, 默认 20
+  textrankDamping?: number; // 阻尼系数, 默认 0.85
+  textrankWindowSize?: number; // 句子共现窗口大小, 默认 2
+  fusionAlpha?: number;
+};
+
+export type ApiWordResult = { word: string; score: number };
+export type ApiChunkResult = { text: string; score: number };
+export type ApiCacheStats = { hits: number; misses: number };
+
+export type ApiWordsResponse = {
+  results: ApiWordResult[];
+  cache_stats?: ApiCacheStats;
+  meta?: { total_words: number; processing_time_ms: number };
+};
+
+export type ApiChunksResponse = {
+  results: ApiChunkResult[];
+  cache_stats?: ApiCacheStats;
+  meta?: { total_chunks: number; processing_time_ms: number };
+};
+
+export type RagRetrievalResult = {
+  relatedWords: Array<{ word: string; score: number }>;
+  relatedDocs: Array<{
+    docId: string;
+    title: string;
+    fullText: string;
+    paragraphs: Array<{
+      paragraphId: string;
+      text: string;
+      startInDoc: number;
+      endInDoc: number;
+      hitSentences: string[];
+      maxScore: number;
+      paragraphIndex: number;
+    }>;
+    matchedSentenceTexts: string[];
+    matchedRanges: Array<{ start: number; end: number }>;
+    docContext: {
+      foreground: string[];
+      background: string[];
+      _meta?: {
+        minStart: number;
+        maxEnd: number;
+        beforeLen: number;
+        afterLen: number;
+        expanded?: boolean;
+        error?: string;
+      };
+    };
+    maxScore: number;
+  }>;
+  strategy: RagStrategy;
+  question: string;
+  meta: {
+    totalDocs: number;
+    totalChunks: number;
+    totalWords: number;
+    textrankMode: TextrankMode;
+    contextType: "document-level";
+    paragraphsOrdered: true;
+    sortKeys: string[];
+    retrievalStats: {
+      totalTime: number;
+      apiWordsTime: number;
+      apiChunksTime: number;
+      cacheHits: number;
+      cacheMisses: number;
+      candidateWords: number;
+      topWordsReturned: number;
+      candidateChunks: number;
+      finalChunks: number;
+      finalParagraphs: number;
+      finalDocs: number;
+      textrankGraphNodes?: number; // 🔹 调试用
+      textrankIterations?: number;
+    };
+  };
+};
+
+type AIStreamOptions = {
+  backend?: AIBackend;
+  prompt: string;
+  image?: File | string;
+  onChunk: (text: string) => void;
+  onThought?: (thought: string, isComplete: boolean) => void;
+  onComplete: () => void;
+  onError: (error: Error) => void;
+  signal?: AbortSignal;
+  temperature?: number;
+  top_p?: number; // ← Add this
+  maxTokens?: number;
+};
+
+type ThoughtState = {
+  buffer: string;
+  inThink: boolean;
+};
+
+const BACKEND_CONFIG: Record<
+  AIBackend,
+  { port: number; maxTokens: number; contextWindow: number }
+> = {
+  general: { contextWindow: 10240, maxTokens: 40960, port: 8112 },
+  ocr: { contextWindow: 7680, maxTokens: 4096, port: 8113 },
+};
+
+// ============ Constants ============
+const TOP_KEYWORDS = 20;
+const CONTEXT_SENTENCES = 3;
+
+async function decodePayload<T>(encoded: string): Promise<T> {
+  try {
+    const binary = atob(encoded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    if (typeof DecompressionStream !== "undefined") {
+      const ds = new DecompressionStream("gzip");
+      const writer = ds.writable.getWriter();
+      writer.write(bytes);
+      writer.close();
+      const decompressed = await new Response(ds.readable).arrayBuffer();
+      const text = new TextDecoder().decode(decompressed);
+      return JSON.parse(text) as T;
+    } else {
+      console.warn("⚠️ DecompressionStream not supported, trying raw JSON");
+      return JSON.parse(encoded) as T;
+    }
+  } catch (e) {
+    console.error("❌ decodePayload failed:", e);
+    throw new Error(`Failed to decode payload: ${e}`);
+  }
+}
+
+async function compressToFile(data: unknown, filename: string): Promise<File> {
+  const json = typeof data === "string" ? data : JSON.stringify(data);
+  const encoder = new TextEncoder();
+  const input = encoder.encode(json);
+
+  if (typeof CompressionStream !== "undefined") {
+    try {
+      const cs = new CompressionStream("gzip");
+      const writer = cs.writable.getWriter();
+      writer.write(input);
+      writer.close();
+      const compressed = await new Response(cs.readable).arrayBuffer();
+      return new File([compressed], filename, { type: "application/gzip" });
+    } catch (e) {
+      console.warn("⚠️ CompressionStream failed, fallback to raw", e);
+    }
+  }
+  // Fallback: 不压缩直接返回
+  return new File([input], filename, { type: "application/json" });
+}
+
+// 🔹 新增：文件上传的 API 请求函数
+async function apiFileRequest<T>(
+  endpoint: string, 
+  files: Record<string, File>, 
+  formFields?: Record<string, string | number>
+): Promise<T> {
+  const baseUrl = "https://www.noterich.com/";
+  const url = `https://www.noterich.com/api.php?api=rag&path=${endpoint}`;
+
+  const formData = new FormData();
+  for (const [key, file] of Object.entries(files)) {
+    formData.append(key, file, file.name);
+  }
+  if (formFields) {
+    for (const [key, value] of Object.entries(formFields)) {
+      formData.append(key, String(value));
+    }
+  }
+
+  // 🔐 使用 signedFetch 自动添加签名头
+  const response = await signedFetch(url, {
+    body: formData,
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => "");
+    let errDetail = `HTTP ${response.status}`;
+    try {
+      const errJson = JSON.parse(errText);
+      if (errJson.detail) {
+        errDetail = Array.isArray(errJson.detail)
+          ? errJson.detail.map((d: any) => d.msg || d).join("; ")
+          : errJson.detail;
+      }
+    } catch (_) {}
+    throw new Error(errDetail);
+  }
+  return await response.json();
+}
+
+function quickContentHash(block: ParsedBlock): string {
+  const sample = `${block.type}|${block.leadingNewlines}|${block.content.slice(0, 400)}|${block.content.length}|${block.content.slice(-100)}`;
+  let h = 2166136261;
+  for (let i = 0; i < sample.length; i++) {
+    h ^= sample.charCodeAt(i);
+    h += (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24);
+    h >>>= 0;
+  }
+  return h.toString(36);
+}
+
+function $safeEditorUpdate(editor: LexicalEditor, callback: () => void) {
+  editor.update(
+    () => {
+      $addUpdateTag(SKIP_DOM_SELECTION_TAG);
+      try {
+        callback();
+      } catch (error) {
+        console.error("[Lexical AI Safe Update Error]", error);
+        const sel = $getSelection();
+        if (!sel) {
+          $getRoot().selectEnd();
+        }
+      }
+    },
+    { tag: HISTORY_MERGE_TAG },
+  );
+}
+
+async function fileToBase64(file: File | string): Promise<string> {
+  if (typeof file === "string") {return file;}
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function parseThoughtChunk(raw: string, state: ThoughtState) {
+  const { buffer, inThink } = state;
+  const combined = buffer + raw;
+  let content = ""; let thought = ""; let isComplete = false; let newBuffer = ""; let newInThink = inThink;
+
+  if (!inThink) {
+    const startIdx = combined.indexOf("[think]");
+    if (startIdx !== -1) {
+      content += combined.slice(0, startIdx);
+      const rest = combined.slice(startIdx + 7);
+      const endIdx = rest.indexOf("[/think]");
+      if (endIdx !== -1) {
+        thought = rest.slice(0, endIdx).trim();
+        content += rest.slice(endIdx + 8);
+        isComplete = true;
+      } else {
+        newInThink = true;
+        newBuffer = rest;
+        thought = rest.trim();
+      }
+    } else {
+      content = combined;
+    }
+  } else {
+    const endIdx = combined.indexOf("[/think]");
+    if (endIdx !== -1) {
+      thought = combined.slice(0, endIdx).trim();
+      content = combined.slice(endIdx + 8);
+      newInThink = false;
+      isComplete = true;
+    } else {
+      newBuffer = combined;
+      thought = combined.trim();
+    }
+  }
+  return { buffer: newBuffer, content, inThink: newInThink, isComplete, thought };
+}
+
+function $cleanImageDivs(html: string): string {
+  return html.replace(/<img[^>]*>/g, "");
+}
+
+async function $processBboxImages(
+  html: string,
+  image: HTMLImageElement,
+  bboxCache: Map<string, string>,
+): Promise<string> {
+  let processed = html;
+  const regex = /<div\b[^>]*?\bclass="[^"]*\bimage\b[^"]*"[^>]*?\bdata-bbox="([\d.,\s]+)"[^>]*>([\s\S]*?)<\/div>/gi;
+  const matches = Array.from(processed.matchAll(regex));
+
+  for (const [fullMatch, bboxStr] of matches) {
+    try {
+      if (bboxCache.has(bboxStr)) {
+        processed = processed.replace(fullMatch, `<img src="${bboxCache.get(bboxStr)!}" style="max-width:100%;display:block;" />`);
+        continue;
+      }
+      const [x1, y1, x2, y2] = bboxStr.split(",").map(Number);
+      const { naturalWidth: w, naturalHeight: h } = image;
+      const px1 = (x1 / 1000) * w; const py1 = (y1 / 1000) * h;
+      const px2 = (x2 / 1000) * w; const py2 = (y2 / 1000) * h;
+      const cw = px2 - px1; const ch = py2 - py1;
+      if (cw <= 0 || ch <= 0) {continue;}
+      const canvas = document.createElement("canvas");
+      canvas.width = cw; canvas.height = ch;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {continue;}
+      ctx.drawImage(image, px1, py1, cw, ch, 0, 0, cw, ch);
+      const base64 = canvas.toDataURL("image/png");
+      bboxCache.set(bboxStr, base64);
+      processed = processed.replace(fullMatch, `<img src="${base64}" style="max-width:100%;display:block;" />`);
+    } catch (e) { console.warn("OCR bbox processing failed", e); }
+  }
+  return processed;
+}
+
+function $replaceSmiles(html: string): string {
+  if (html.includes("[smiles]") && html.includes("[/smiles]")) {return html;}
+  const mathBlocks: string[] = [];
+  html = html.replace(/\$\$[\s\S]*?\$\$/g, (m) => { mathBlocks.push(m); return `@@M${mathBlocks.length - 1}@@`; });
+  html = html.replace(/\$[^$]+\$/g, (m) => { mathBlocks.push(m); return `@@M${mathBlocks.length - 1}@@`; });
+  html = html.replace(/<smiles>([\s\S]*?)<\/smiles>/g, (_, s) => `$\\text{[smiles]${s}[/smiles]}$ `);
+  mathBlocks.forEach((block, i) => {
+    const replaced = block.replace(/<smiles>([\s\S]*?)<\/smiles>/g, (_, s) => `\\text{[smiles]${s}[/smiles]}`);
+    html = html.replace(`@@M${i}@@`, replaced);
+  });
+  return html;
+}
+
+type HtmlPreprocessor = (html: string, context?: { image?: HTMLImageElement; bboxCache?: Map<string, string> }) => Promise<string> | string;
+const HTML_PREPROCESSORS: Record<AIBackend, HtmlPreprocessor> = {
+  general: (html) => { let p = $cleanImageDivs(html); p = p.replace(/<\/?div[^>]*>/g, ""); return $replaceSmiles(p); },
+  ocr: async (html, { image, bboxCache }) => {
+    let p = $cleanImageDivs(html);
+    if (image && bboxCache) {p = await $processBboxImages(p, image, bboxCache);}
+    p = p.replace(/<\/?div[^>]*>/g, "");
+    return $replaceSmiles(p);
+  },
+};
+
+async function streamAIResponse({ backend = "general", prompt, image, onChunk, onThought, onComplete, onError, signal, temperature = 0, maxTokens }: AIStreamOptions) {
+  const config = BACKEND_CONFIG[backend];
+  const effectiveMaxTokens = maxTokens ?? config.maxTokens;
+  try {
+    let messageContent: unknown = prompt;
+   
+    const isRagPrompt = prompt.startsWith('{') && prompt.includes('"user"') && prompt.includes('"question"');
+    
+    if (image) {
+      const imageUrl = await fileToBase64(image);
+      
+      if (backend === "ocr") {
+        // OCR 模式：原有逻辑保持不变
+       
+        messageContent = [
+          { image_url: { url: imageUrl }, type: "image_url" }
+        ];
+      } 
+      else if (backend === "general" && !isRagPrompt) {
+        // 🔹 General + 图片 + 非RAG：支持多模态
+       const generalPrompt = prompt?.trim() ? prompt : ``;
+           if (generalPrompt) {
+              messageContent = [
+                { image_url: { url: imageUrl }, type: "image_url" },
+                { text: generalPrompt, type: "text" }
+              ];
+            } else {
+              messageContent = [
+                { image_url: { url: imageUrl }, type: "image_url" },
+              ];
+            }
+      }
+      else if (backend === "general" && isRagPrompt) {
+        // 🔹 General + 图片 + RAG：将图片作为额外上下文注入
+        // 方案：解析 RAG JSON，添加 image_context 字段
+        try {
+            const generalPrompt = prompt?.trim() ? prompt : "";
+            if (generalPrompt) {
+              messageContent = [
+                { image_url: { url: imageUrl }, type: "image_url" },
+                { text: generalPrompt, type: "text" }
+              ];
+            } else {
+              messageContent = [
+                { image_url: { url: imageUrl }, type: "image_url" },
+              ];
+            }
+        } catch (e) {
+          console.warn("⚠️ Failed to inject image into RAG prompt, falling back to text-only", e);
+          messageContent = prompt; // 降级为纯文本
+        }
+      }
+    }
+    // 🔹 构建 messages 数组，backend === "general" 时注入系统提示词
+    const messages: Array<{ role: string; content: unknown }> = [];
+    
+    if (backend === "general" && !isRagPrompt) {
+      // 注入系统提示词
+      messages.push({
+        role: "system",
+        content: `You are the intelligent AI note assistant for NoteRich.com. Please strictly follow all the rules below when generating content:
+
+1. Always respond in the user's language. If the user's language cannot be identified, respond in English.
+2. You may use code blocks such as \`\`\`html\`\`\`, \`\`\`svg\`\`\`, \`\`\`mermaid\`\`\`, \`\`\`echarts\`\`\` for assistance. All content inside code blocks must fully comply with the corresponding official syntax.
+3. When writing \`\`\`html\`\`\` code, you are allowed to use mature third-party JS and CSS libraries to simplify code. All HTML designs must be fully responsive for different screen sizes.
+4. Present complex tables with native HTML table tags directly. **Do not wrap tables inside any code blocks**; the front-end will parse and render them automatically.
+5. All outputs must conform to the **GitHub Flavored Markdown (GFM)** specification.
+6. Keep your content concise, well-structured, readable and neatly organized visually.`
+      });
+    }
+    
+    // 添加用户消息
+    messages.push({ role: "user", content: messageContent });
+    
+    const payload = { 
+      max_tokens: effectiveMaxTokens, 
+      messages, // ✅ 使用包含 system 消息的数组
+      stream: true,
+      temperature: backend === "ocr" ? 0.1 : 1.0, // ← OCR uses 0.1
+      top_p: backend === "ocr" ? 0.5 : 0.95, // ← OCR uses 0.5
+    };
+    
+    
+    
+    const payloadJson = JSON.stringify(payload);
+    let fetchBody: BodyInit;
+    let isMultipart = false;
+    
+    // 🔥 增加 try-catch 确保压缩失败时能安全 Fallback
+    try {
+      if (typeof CompressionStream !== "undefined") {
+        const payloadFile = await compressToFile(payloadJson, "payload.gz");
+        const formData = new FormData();
+        formData.append("payload", payloadFile); 
+        fetchBody = formData;
+        isMultipart = true;
+      } else {
+        fetchBody = payloadJson;
+      }
+    } catch (e) {
+      console.warn("⚠️ Compression failed, fallback to raw JSON", e);
+      fetchBody = payloadJson;
+    }
+
+    // 构建请求头
+    const fetchHeaders: Record<string, string> = {};
+    if (!isMultipart) {
+      fetchHeaders["Content-Type"] = "application/json";
+    }
+    // ⚠️ 注意：如果是 multipart，绝对不要手动设置 Content-Type，让浏览器自动添加 boundary
+
+    // 🔐 使用 signedFetch 自动添加签名头
+    const response = await signedFetch(
+      `https://www.noterich.com/api.php?api=${backend}&path=/v1/chat/completions`, 
+      {
+        body: fetchBody,
+        headers: fetchHeaders, 
+        method: "POST", 
+        signal,
+      }
+    );
+    if (!response.ok || !response.body) {throw new Error(`HTTP error! status: ${response.status}`);}
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    const thoughtState: ThoughtState = { buffer: "", inThink: false };
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {break;}
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data: ")) {continue;}
+        const data = trimmed.slice(6).trim();
+        if (data === "[DONE]") {continue;}
+        try {
+          const parsed = JSON.parse(data);
+          const rawContent = parsed.choices?.[0]?.delta?.content;
+          if (typeof rawContent !== "string") {continue;}
+          const res = parseThoughtChunk(rawContent, thoughtState);
+          thoughtState.buffer = res.buffer; thoughtState.inThink = res.inThink;
+          res.content && onChunk(res.content);
+          res.thought && onThought?.(res.thought, res.isComplete);
+        } catch {}
+      }
+    }
+    if (buffer.trim()) {
+      const trimmed = buffer.trim();
+      if (trimmed.startsWith("data: ")) {
+        const data = trimmed.slice(6).trim();
+        if (data !== "[DONE]") {
+          try {
+            const parsed = JSON.parse(data);
+            const rawContent = parsed.choices?.[0]?.delta?.content;
+            if (typeof rawContent === "string") {
+              const res = parseThoughtChunk(rawContent, thoughtState);
+              res.content && onChunk(res.content);
+              res.thought && onThought?.(res.thought, res.isComplete);
+            }
+          } catch (e) { console.warn("Final buffer parse error", e); }
+        }
+      }
+    }
+    onComplete();
+  } catch (error) {
+    if ((error as Error).name !== "AbortError") {
+      onError(error instanceof Error ? error : new Error(String(error)));
+    }
+  }
+}
+
+async function getExifOrientation(buffer: ArrayBuffer): Promise<number> {
+  const view = new DataView(buffer);
+  if (view.getUint16(0, false) !== 0xffd8) {return 1;}
+  const length = view.byteLength;
+  let offset = 2;
+  while (offset < length) {
+    const marker = view.getUint16(offset, false);
+    offset += 2;
+    if (marker === 0xffe1) {
+      if (view.getUint32((offset += 2), false) !== 0x45786966) {return 1;}
+      const little = view.getUint16((offset += 6), false) === 0x4949;
+      offset += view.getUint32(offset + 4, little);
+      const tags = view.getUint16(offset, little);
+      offset += 2;
+      for (let i = 0; i < tags; i++) {
+        if (view.getUint16(offset + i * 12, little) === 0x0112) {
+          return view.getUint16(offset + i * 12 + 8, little);
+        }
+      }
+    } else if ((marker & 0xff00) !== 0xff00) { break; } else { offset += view.getUint16(offset, false); }
+  }
+  return 1;
+}
+
+async function processImageForOCR(file: File): Promise<{ dataUrl: string; img: HTMLImageElement }> {
+  const headerBuffer = await file.slice(0, 128 * 1024).arrayBuffer();
+  const orientation = await getExifOrientation(headerBuffer);
+  const img = new Image();
+  const objectUrl = URL.createObjectURL(file);
+  await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = objectUrl; });
+  URL.revokeObjectURL(objectUrl);
+  const naturalW = img.naturalWidth; const naturalH = img.naturalHeight;
+  let effectiveW = naturalW; let effectiveH = naturalH;
+  if (orientation > 4) {[effectiveW, effectiveH] = [effectiveH, effectiveW];}
+  const maxDim = 1536;
+  const scale = Math.min(1, maxDim / Math.max(effectiveW, effectiveH));
+  const targetWidth = effectiveW * scale; const targetHeight = effectiveH * scale;
+  const canvas = document.createElement("canvas");
+  canvas.width = targetWidth; canvas.height = targetHeight;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {throw new Error("Canvas context not available");}
+  ctx.save(); ctx.translate(targetWidth / 2, targetHeight / 2);
+  switch (orientation) {
+    case 2: ctx.scale(-1, 1); break; case 3: ctx.rotate(Math.PI); break;
+    case 4: ctx.rotate(Math.PI); ctx.scale(-1, 1); break;
+    case 5: ctx.rotate(Math.PI / 2); ctx.scale(-1, 1); break;
+    case 6: ctx.rotate(Math.PI / 2); break;
+    case 7: ctx.rotate(-Math.PI / 2); ctx.scale(-1, 1); break;
+    case 8: ctx.rotate(-Math.PI / 2); break;
+  }
+  ctx.scale(scale, scale); ctx.drawImage(img, -naturalW / 2, -naturalH / 2); ctx.restore();
+  const dataUrl = canvas.toDataURL("image/png", 0.9);
+  const processedImg = new Image();
+  await new Promise((resolve, reject) => { processedImg.onload = resolve; processedImg.onerror = reject; processedImg.src = dataUrl; });
+  return { dataUrl, img: processedImg };
+}
+
+// ============ 🔽 RAG Core Algorithms ============
+function normalizeContent(text: string): string { if (!text) {return "";} return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n"); }
+function normalizeWords(words: string[]): string[] {
+  return words.map((w) => w.toLowerCase()).filter((w) => {
+    if (!/\p{L}/u.test(w)) {return false;}
+    if (/^[\p{P}\p{S}]+$/u.test(w)) {return false;}
+    if (w.length < 2) {return false;}
+    return true;
+  });
+}
+function filterByFrequency(words: string[], minFreq = 2): string[] {
+  const freq = new Map<string, number>();
+  for (const w of words) {freq.set(w, (freq.get(w) || 0) + 1);}
+  return words.filter((w) => (freq.get(w) || 0) >= minFreq);
+}
+function uniqueWords(words: string[]): string[] {
+  const seen = new Set<string>();
+  return words.filter((w) => { const key = w?.toLowerCase(); if (!key || seen.has(key)) {return false;} seen.add(key); return true; });
+}
+function normalizeAndIndexWords(words: string[]) {
+  const normalized: string[] = []; const indexMap = new Map<string, number>();
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i].toLowerCase();
+    if (!/\p{L}/u.test(w) || /^[\p{P}\p{S}]+$/u.test(w) || w.length < 2) {continue;}
+    if (!indexMap.has(w)) { indexMap.set(w, normalized.length); normalized.push(w); }
+  }
+  return { indexMap, normalized };
+}
+
+function buildGraphFast(words: string[], windowSize = 4) {
+  const { normalized, indexMap } = normalizeAndIndexWords(words);
+  const n = normalized.length;
+  if (n === 0) {return { degrees: new Map<string, number>(), graph: new Map<string, Set<string>>(), nodeOrder: [] as string[] };}
+  const adj = new Array(n).fill(null).map(() => new Set<number>());
+  const degrees = new Uint32Array(n);
+  for (let i = 0; i < n; i++) {
+    const end = Math.min(i + windowSize, n);
+    for (let j = i + 1; j < end; j++) {
+      if (normalized[i] === normalized[j]) {continue;}
+      if (!adj[i].has(j)) { adj[i].add(j); adj[j].add(i); degrees[i]++; degrees[j]++; }
+    }
+  }
+  const graph = new Map<string, Set<string>>();
+  for (let i = 0; i < n; i++) {
+    const neighbors = new Set<string>();
+    for (const nb of adj[i]) {neighbors.add(normalized[nb]);}
+    graph.set(normalized[i], neighbors);
+  }
+  const degreeMap = new Map<string, number>();
+  for (let i = 0; i < n; i++) {degreeMap.set(normalized[i], degrees[i]);}
+  return { degrees: degreeMap, graph, nodeOrder: normalized };
+}
+// ============ 原有 Textrank 函数（供 extractKeywords 等复用） ============
+function textRankFast(
+  graph: Map<string, Set<string>>,
+  degrees: Map<string, number>,
+  nodeOrder: string[],
+  iterations = 30,
+  d = 0.85,
+  threshold = 1e-4,
+) {
+  const n = nodeOrder.length;
+  if (n === 0) {return {};}
+
+  const scores = new Float32Array(n).fill(1);
+  const next = new Float32Array(n);
+  const nodeIdx = new Map(nodeOrder.map((w, i) => [w, i]));
+
+  // 构建入边列表（用于迭代更新）
+  const inbound = new Array(n)
+    .fill(null)
+    .map(() => [] as Array<{ from: number; weight: number }>);
+    
+  for (let i = 0; i < n; i++) {
+    const word = nodeOrder[i];
+    const deg = degrees.get(word) || 1;
+    const weight = d / deg;
+    for (const neighbor of graph.get(word) || []) {
+      const j = nodeIdx.get(neighbor);
+      if (j !== undefined) {
+        inbound[j].push({ from: i, weight });
+      }
+    }
+  }
+
+  // 迭代计算 PageRank
+  for (let iter = 0; iter < iterations; iter++) {
+    let maxDiff = 0;
+    for (let i = 0; i < n; i++) {
+      let sum = 0;
+      for (const { from, weight } of inbound[i]) {
+        sum += scores[from] * weight;
+      }
+      next[i] = 1 - d + sum;
+      const diff = Math.abs(next[i] - scores[i]);
+      if (diff > maxDiff) {maxDiff = diff;}
+    }
+    if (maxDiff < threshold) {break;}
+    for (let i = 0; i < n; i++) {scores[i] = next[i];}
+  }
+
+  const result: Record<string, number> = {};
+  for (let i = 0; i < n; i++) {
+    result[nodeOrder[i]] = scores[i];
+  }
+  return result;
+}
+// 🔹 支持种子权重的 Textrank 变体
+function textRankFastWithSeeds(
+  graph: Map<string, Set<string>>,
+  degrees: Map<string, number>,
+  nodeOrder: string[],
+  seedScores: number[], // 每个节点的初始权重（关键词匹配度）
+  iterations = 20,
+  d = 0.85,
+  threshold = 1e-4,
+) {
+  const n = nodeOrder.length;
+  if (n === 0) {return {};}
+  const scores = new Float32Array(n);
+  // 用种子分数初始化
+  for (let i = 0; i < n; i++) {scores[i] = seedScores[i] > 0 ? seedScores[i] : 0.1;}
+  const next = new Float32Array(n);
+  const nodeIdx = new Map(nodeOrder.map((w, i) => [w, i]));
+  const inbound = new Array(n).fill(null).map(() => [] as Array<{ from: number; weight: number }>);
+  for (let i = 0; i < n; i++) {
+    const word = nodeOrder[i];
+    const deg = degrees.get(word) || 1;
+    const weight = d / deg;
+    for (const neighbor of graph.get(word) || []) {
+      const j = nodeIdx.get(neighbor);
+      if (j !== undefined) {inbound[j].push({ from: i, weight });}
+    }
+  }
+  for (let iter = 0; iter < iterations; iter++) {
+    let maxDiff = 0;
+    for (let i = 0; i < n; i++) {
+      let sum = 0;
+      for (const { from, weight } of inbound[i]) {sum += scores[from] * weight;}
+      next[i] = (1 - d) * (seedScores[i] > 0 ? seedScores[i] : 0.1) + sum;
+      const diff = Math.abs(next[i] - scores[i]);
+      if (diff > maxDiff) {maxDiff = diff;}
+    }
+    if (maxDiff < threshold) {break;}
+    for (let i = 0; i < n; i++) {scores[i] = next[i];}
+  }
+  const result: Record<string, number> = {};
+  for (let i = 0; i < n; i++) {result[nodeOrder[i]] = scores[i];}
+  return result;
+}
+
+function extract2GramsFast(words: string[], scores: Record<string, number>) {
+  const phrases: Record<string, number> = {};
+  const pairCount = new Map<string, number>();
+  for (let i = 0; i < words.length - 1; i++) {
+    const key = words[i] + " " + words[i + 1];
+    pairCount.set(key, (pairCount.get(key) || 0) + 1);
+  }
+  for (let i = 0; i < words.length - 1; i++) {
+    const w1 = words[i]; const w2 = words[i + 1]; const key = w1 + " " + w2;
+    const freq = pairCount.get(key) || 0;
+    if (freq >= 2 && (scores[w1] || 0) > 0.8 && (scores[w2] || 0) > 0.8) {
+      phrases[key] = (phrases[key] || 0) + (scores[w1] || 0) + (scores[w2] || 0);
+    }
+  }
+  return phrases;
+}
+
+function extractKeywords(text: string, topK = TOP_KEYWORDS, minFreq = 1): string[] {
+  let words = segmentText(text, "word");
+  words = normalizeWords(words);
+  if (minFreq > 1) {words = filterByFrequency(words, minFreq);}
+  if (words.length === 0) {return [];}
+  const { graph, degrees, nodeOrder } = buildGraphFast(words);
+  if (nodeOrder.length === 0) {return [];}
+  const scores = textRankFast(graph, degrees, nodeOrder);
+  const phrases = extract2GramsFast(words, scores);
+  const merged = [...Object.entries(phrases).map(([k, v]) => [k, v] as [string, number]), ...Object.entries(scores).map(([k, v]) => [k, v] as [string, number])];
+  return merged.sort((a, b) => b[1] - a[1]).slice(0, topK).map(([word]) => word);
+}
+
+function extractKeywordsChunked(text: string, topK: number, minFreq: number, chunkSize = 5000): string[] {
+  const chunks: string[] = [];
+  for (let i = 0; i < text.length; i += chunkSize) {
+    let end = Math.min(i + chunkSize, text.length);
+    if (end < text.length) {
+      const boundary = text.slice(end - 200, end + 200).search(/[。！？.\n]/);
+      if (boundary > 50) {end = end - 200 + boundary + 1;}
+    }
+    chunks.push(text.slice(i, end));
+  }
+  const allKeywords = chunks.flatMap((c) => extractKeywords(c, topK * 2, minFreq));
+  const freqMap = new Map<string, number>();
+  for (const kw of allKeywords) {freqMap.set(kw, (freqMap.get(kw) || 0) + 1);}
+  return Array.from(freqMap.entries()).sort((a, b) => b[1] - a[1]).slice(0, topK).map(([kw]) => kw);
+}
+
+function extractKeywordsAdaptive(text: string, topK = TOP_KEYWORDS, minFreq = 1, mode: TextrankMode = "fast"): string[] {
+  if (mode === "chunked" && text.length > 50000) {return extractKeywordsChunked(text, topK, minFreq);}
+  if (mode === "original") {
+    let words = segmentText(text, "word");
+    words = normalizeWords(words);
+    if (minFreq > 1) {words = filterByFrequency(words, minFreq);}
+    if (words.length === 0) {return [];}
+    const { graph, degrees, nodeOrder } = buildGraphFast(words);
+    if (nodeOrder.length === 0) {return [];}
+    const scores = textRankFast(graph, degrees, nodeOrder);
+    const phrases = extract2GramsFast(words, scores);
+    const merged = [...Object.entries(phrases).map(([k, v]) => [k, v] as [string, number]), ...Object.entries(scores).map(([k, v]) => [k, v] as [string, number])];
+    return merged.sort((a, b) => b[1] - a[1]).slice(0, topK).map(([word]) => word);
+  }
+  return extractKeywords(text, topK, minFreq);
+}
+
+function extractSummarySentences(text: string, topN = CONTEXT_SENTENCES): string[] {
+  const sentences = segmentText(text, "sentence").filter((s) => s.length > 10);
+  if (sentences.length <= topN) {return sentences;}
+  const words = normalizeWords(segmentText(text, "word"));
+  if (words.length < 10) {return sentences.slice(0, topN);}
+  const { graph, degrees, nodeOrder } = buildGraphFast(words);
+  if (nodeOrder.length === 0) {return sentences.slice(0, topN);}
+  const wordScores = textRankFast(graph, degrees, nodeOrder);
+  const sentenceScores = sentences.map((s, idx) => {
+    const sWords = normalizeWords(segmentText(s, "word"));
+    const score = sWords.reduce((sum, w) => sum + (wordScores[w] || 0), 0) / Math.max(sWords.length, 1);
+    return { idx, score, sentence: s };
+  });
+  return sentenceScores.sort((a, b) => b.score - a.score || a.idx - b.idx).slice(0, topN).map((x) => x.sentence);
+}
+
+function extractSummarySentencesAdaptive(text: string, topN = CONTEXT_SENTENCES, mode: TextrankMode = "fast"): string[] {
+  try {
+    if (mode === "original") {
+      const sentences = segmentText(text, "sentence").filter((s) => s.length > 10);
+      if (sentences.length <= topN) {return sentences;}
+      const words = normalizeWords(segmentText(text, "word"));
+      if (words.length < 10) {return sentences.slice(0, topN);}
+      const { graph, degrees, nodeOrder } = buildGraphFast(words);
+      if (nodeOrder.length === 0) {return sentences.slice(0, topN);}
+      const wordScores = textRankFast(graph, degrees, nodeOrder);
+      const sentenceScores = sentences.map((s) => {
+        const sWords = normalizeWords(segmentText(s, "word"));
+        const score = sWords.reduce((sum, w) => sum + (wordScores[w] || 0), 0) / Math.max(sWords.length, 1);
+        return { score, sentence: s };
+      });
+      const result = sentenceScores.sort((a, b) => b.score - a.score).slice(0, topN).map((x) => x.sentence);
+      if (result.length === 0 && text?.length > 0) {return segmentText(text, "sentence").filter((s) => s.length > 5).slice(0, topN);}
+      return result;
+    }
+    const result = extractSummarySentences(text, topN);
+    if (result.length === 0 && text?.length > 0) {return segmentText(text, "sentence").filter((s) => s.length > 5).slice(0, topN);}
+    return result;
+  } catch (e) {
+    console.warn("⚠️ extractSummarySentencesAdaptive error:", e);
+    return segmentText(text || "", "sentence").filter((s) => s.length > 5).slice(0, topN);
+  }
+}
+
+function splitContentWithMetadata(content: string): Array<{
+  id: string; sentenceId: string; paragraphId: string; paragraphText: string;
+  paragraphStartInDoc: number; paragraphEndInDoc: number; text: string;
+  sentenceStartInPara: number; sentenceEndInPara: number;
+  sentenceStartInDoc: number; sentenceEndInDoc: number;
+  paragraphIndex: number; sentenceIndex: number;
+}> {
+  if (!Intl.Segmenter) {throw new Error("Browser does not support Intl.Segmenter");}
+  const normalized = normalizeContent(content);
+  if (!normalized) {return [];}
+  const chunks: any[] = [];
+  let paraIndex = 0;
+  const paragraphs = normalized.split("\n").map((p) => p.trim()).filter((p) => p.length > 0);
+  let currentPos = 0;
+  for (const paraText of paragraphs) {
+    if (!paraText) {continue;}
+    const paraStart = normalized.indexOf(paraText, currentPos);
+    const paraEnd = paraStart + paraText.length;
+    currentPos = paraEnd;
+    const paragraphId = `para_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const segmenter = new Intl.Segmenter(undefined, { granularity: "sentence" });
+    const sentences = Array.from(segmenter.segment(paraText), (s) => s.segment?.trim()).filter((s) => s?.length > 0);
+    let sentCharOffset = 0;
+    for (let sIdx = 0; sIdx < sentences.length; sIdx++) {
+      const sentence = sentences[sIdx];
+      if (!sentence) {continue;}
+      const sentenceId = `s_${paraIndex}_${sIdx}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+      let sentStartInPara = paraText.indexOf(sentence, sentCharOffset);
+      if (sentStartInPara === -1) {sentStartInPara = sentCharOffset;}
+      const sentEndInPara = sentStartInPara + sentence.length;
+      sentCharOffset = Math.max(sentCharOffset, sentEndInPara);
+      const sentStartInDoc = paraStart + sentStartInPara;
+      const sentEndInDoc = paraStart + sentEndInPara;
+      chunks.push({
+        id: `chunk_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        paragraphEndInDoc: paraEnd, paragraphId, paragraphIndex: paraIndex + 1,
+        paragraphStartInDoc: paraStart, paragraphText: paraText,
+        sentenceEndInDoc: sentEndInDoc, sentenceEndInPara: sentEndInPara,
+        sentenceId, sentenceIndex: sIdx + 1,
+        sentenceStartInDoc: sentStartInDoc, sentenceStartInPara: sentStartInPara, text: sentence,
+      });
+    }
+    paraIndex++;
+  }
+  return chunks;
+}
+
+function extractDocumentContext(fullText: string, matchedRanges: Array<{ start: number; end: number }>, contextCount = CONTEXT_SENTENCES): { foreground: string[]; background: string[]; _meta?: any } {
+  const normalizedFullText = normalizeContent(fullText);
+  if (!normalizedFullText || normalizedFullText.length === 0) {return { _meta: { error: "empty fullText" }, background: [], foreground: [] };}
+  if (!matchedRanges || matchedRanges.length === 0) {return { _meta: { error: "no matchedRanges" }, background: [], foreground: [] };}
+  const validStarts = matchedRanges.map((r) => r?.start).filter((n) => n !== undefined && n !== null && typeof n === "number" && isFinite(n));
+  const validEnds = matchedRanges.map((r) => r?.end).filter((n) => n !== undefined && n !== null && typeof n === "number" && isFinite(n));
+  if (validStarts.length === 0 || validEnds.length === 0) {return { _meta: { error: "invalid ranges" }, background: [], foreground: [] };}
+  const minStart = Math.min(...validStarts); const maxEnd = Math.max(...validEnds);
+  const safeMinStart = Math.max(0, Math.min(minStart, normalizedFullText.length));
+  const safeMaxEnd = Math.max(0, Math.min(maxEnd, normalizedFullText.length));
+  let beforeText = normalizedFullText.substring(0, safeMinStart);
+  const afterText = normalizedFullText.substring(safeMaxEnd);
+  if ((!beforeText || beforeText.trim().length === 0) && minStart > 0) {
+    const expandSize = Math.min(500, minStart);
+    const expandStart = Math.max(0, minStart - expandSize);
+    beforeText = normalizedFullText.substring(expandStart, minStart);
+  }
+  if (!beforeText || beforeText.trim().length < 20) {
+    const fallbackLen = Math.min(300, normalizedFullText.length);
+    beforeText = normalizedFullText.substring(0, fallbackLen);
+  }
+  const textrankMode: TextrankMode = "fast";
+  const foreground = extractSummarySentencesAdaptive(beforeText, contextCount, textrankMode);
+  const background = extractSummarySentencesAdaptive(afterText, contextCount, textrankMode);
+  return { _meta: { afterLen: afterText.length, beforeLen: beforeText.length, expanded: beforeText.length > 0 && safeMinStart === 0 && minStart > 0, maxEnd: safeMaxEnd, minStart: safeMinStart }, background, foreground };
+}
+
+function filterWordsByFrequency(words: string[], fullText: string, maxDictSize = 100000, middleRatio = 0.5): string[] {
+  if (words.length <= maxDictSize) {return words;}
+  const targetSet = new Set(words.map((w) => w.toLowerCase()));
+  const freqMap = new Map<string, number>();
+  const segmenter = new Intl.Segmenter(undefined, { granularity: "word" });
+  const safeText = fullText.replace(/\S{64,}/g, " ");
+  for (const { segment } of segmenter.segment(safeText)) {
+    const w = segment.trim().toLowerCase();
+    if (w.length >= 1 && targetSet.has(w)) {freqMap.set(w, (freqMap.get(w) || 0) + 1);}
+  }
+  const sorted = Array.from(freqMap.entries()).sort((a, b) => b[1] - a[1]);
+  const trim = Math.floor((sorted.length * (1 - middleRatio)) / 2);
+  const filtered = sorted.slice(trim, sorted.length - trim || undefined).slice(0, maxDictSize).map(([word]) => word);
+  return filtered;
+}
+
+function extractNoteContent(editorState: any): string {
+  if (!editorState?.root?.children) {return "";}
+  const paragraphs: string[] = [];
+  for (const topLevelNode of editorState.root.children) {
+    const textParts: string[] = [];
+    const collectText = (node: any): void => {
+      if (!node || typeof node !== "object") {return;}
+      if (node.type === "linebreak") { textParts.push("\n"); }
+      if (typeof node.text === "string") {
+        let text = node.text;
+        if (node.type === "hashtag" && text.startsWith("#")) {text = "tag:" + text.slice(1);}
+        textParts.push(text); return;
+      }
+      if (node.type === "equation") { 
+          textParts.push(node.contentType+": " + node.equation.replace(/\n/g, "\\n")+ "\n"); return; 
+      }
+      if (node.type === "attachment" && node.fileName) { textParts.push("attachment:" + node.fileName + "\n"); return; }
+      if (Array.isArray(node.children)) {
+        if (node.type === "table" || node.type === "code" || node.type === "list" || node.type === "collapsible-container" || node.type === "tablerow") { textParts.push("\n"); } else { textParts.push(" "); }
+        for (const child of node.children) {collectText(child);}
+      }
+    };
+    collectText(topLevelNode);
+    if (textParts.length > 0) {paragraphs.push(textParts.join(" "));}
+  }
+  return paragraphs.join("\n");
+}
+
+// 🔹 辅助函数：判断是否为特殊笔记 (代码/文本文件)
+const isSpecialNote = (title: string): boolean => {
+    if (!title) {return false;}
+    // 匹配常见的代码或纯文本后缀
+    return /\.(prompt|skill)$/i.test(title);
+}
+
+async function retrieveLocalContextRag(
+  question: string,
+  config: RagConfig,
+  allNotes: Note[],
+  onProgress?: (msg: string) => void,
+  signal?: AbortSignal,
+  checkProFeature?: (s: string) => boolean,
+): Promise<RagRetrievalResult | null> {
+  if (!question.trim() || !config.enabled) {return null;}
+  if (signal?.aborted) {throw new DOMException('Aborted', 'AbortError');}
+
+  const startTime = performance.now();
+  const workspaceId = workspaceRouter.getCurrentWorkspaceId();
+  const retrievalStats: RagRetrievalResult["meta"]["retrievalStats"] = {
+    apiChunksTime: 0, apiWordsTime: 0, cacheHits: 0, cacheMisses: 0,
+    candidateChunks: 0, candidateWords: 0, finalChunks: 0, finalDocs: 0,
+    finalParagraphs: 0, topWordsReturned: 0, totalTime: 0,
+  };
+
+  const showProgress = (msg: string) => onProgress?.(msg);
+
+  try {
+    // 🔹 1. 预处理：收集所有 chunks 和 words
+    const allChunks: Array<any & { docId: string; title: string; createdAt: string }> = [];
+    const allWordsSet = new Set<string>();
+
+    for (const note of allNotes) {
+      if (signal?.aborted) {throw new DOMException('Aborted', 'AbortError');}
+      if (note.isDeleted || note.isDraft) {continue;}
+      const contentText = note.content?.editorState
+        ? extractNoteContent(note.content.editorState)
+        : (note.title || "") + " " + (note.content?.plainText || "");
+      const chunks = splitContentWithMetadata(contentText);
+      chunks.forEach((c) => {
+        allChunks.push({ ...c, createdAt: note.createdAt || "", docId: note.id, title: note.title || "Untitled" });
+      });
+      const words = uniqueWords(await getDocTokensCached(note.id, contentText));
+      words.forEach((w) => {
+        const trimmed = w.trim();
+        if (trimmed.length > 0 && trimmed.length < 64 && isNaN(Number(trimmed))) {allWordsSet.add(w);}
+      });
+    }
+    
+    const uniqueWordsList = Array.from(allWordsSet);
+    retrievalStats.candidateWords = uniqueWordsList.length;
+    
+    // 🔹 2. 词频过滤 + 问题词注入
+    const MAX_DICT_SIZE = 100000; const MIDDLE_RATIO = 0.9;
+    const fullText = allNotes.map((n) => {
+      const c = n.content?.editorState ? extractNoteContent(n.content.editorState) : "";
+      return (n.title || "") + " " + c;
+    }).join("\n");
+    const finalWordsList = filterWordsByFrequency(uniqueWordsList, fullText, MAX_DICT_SIZE, MIDDLE_RATIO);
+    const questionWords = uniqueWords(segmentText(question, "word"));
+    questionWords.forEach((w) => { if (w.length < 64) {finalWordsList.push(w);} });
+    if (uniqueWordsList.length > 20000) {
+      if (typeof checkProFeature !== 'function' || !checkProFeature("Big knowledge base access")) {
+        {throw new DOMException('Aborted', 'AbortError');}
+        return null;
+      }
+    }
+    if (allChunks.length === 0 || finalWordsList.length === 0) {return null;}
+
+    // 🔹 3. 获取关键词（API 或 fallback）
+    let topWords: Array<{ word: string; score: number }> = [];
+
+    try {
+      if (signal?.aborted) {throw new DOMException('Aborted', 'AbortError');}
+      showProgress("Loading knowledge...");
+      const wordsFile = await compressToFile(finalWordsList, "words.gz");
+      const questionFile = await compressToFile(question, "question.gz");
+      
+      const wordsRes = await apiFileRequest<{ results_encoded: string; cache_stats?: ApiCacheStats; meta?: { total_words: number; processing_time_ms: number } }>(
+        "/api/noterich/ragl1",
+        { w: wordsFile, q: questionFile },
+        { t: config.topKWords }
+      );
+      const decodedResults = await decodePayload<ApiWordResult[]>(wordsRes.results_encoded);
+      topWords = decodedResults.map((w) => ({ score: w.score, word: w.word }));
+      retrievalStats.apiWordsTime = wordsRes.meta?.processing_time_ms || 0;
+      retrievalStats.cacheHits = wordsRes.cache_stats?.hits || 0;
+      retrievalStats.cacheMisses = wordsRes.cache_stats?.misses || 0;
+      //showProgress(`✅ Retrieved ${topWords.length} keywords`);
+      showProgress("✅ Loading knowledge...");
+    } catch (apiErr) {
+      if ((apiErr as Error).name === 'AbortError') {throw apiErr;}
+      //console.warn("⚠️ API /words failed, fallback to frontend TextRank", apiErr);
+      //showProgress("⚠️ Backend unavailable, using frontend fallback");
+      topWords = extractKeywordsAdaptive(question, config.topKWords, config.minWordLen, config.textrankMode).map((word) => ({ score: 1.0, word }));
+    }
+    retrievalStats.topWordsReturned = topWords.length;
+
+    // 🔹 4. 根据策略获取候选 chunks
+    let candidateChunks: typeof allChunks = [];
+
+    if (config.strategy === "fusion") {
+      // ═══════════════════════════════════════════════════════
+      // 🔹 FUSION 策略：Cascade Weighted → Textrank → Union
+      // ═══════════════════════════════════════════════════════
+      //showProgress("Running Fusion retrieval (Cascade: Weighted→Textrank)...");
+      showProgress("Thinking...");
+      const PRE_FILTER_K = 500;
+
+      const sentences = allChunks
+        .filter(c => c?.id && c?.text?.trim())
+        .map(c => ({ 
+          chunk: c, 
+          docId: c.docId, 
+          id: c.id, 
+          text: c.text,
+          textLower: c.text.toLowerCase() // CASE-INSENSITIVE: 预计算小写版本
+        }));
+
+      if (sentences.length === 0) {
+        //showProgress("⚠️ No valid sentences, fallback to weighted");
+        config.strategy = "weighted";
+      } else {
+        try {
+          const questionWordSet = new Set(
+            extractKeywordsAdaptive(question, config.topKWords, 1, config.textrankMode)
+              .map(k => k.toLowerCase())
+          );
+          const totalChunks = allChunks.length;
+
+          // ── 阶段一：Weighted 全局打分 (API语义分 × IDF) ──
+          const weightedScoreMap = new Map<string, number>();
+          for (const { word, score: apiScore } of topWords) {
+            const wordLower = word.toLowerCase();
+            const matched = sentences.filter(s => s.textLower.includes(wordLower));
+            if (!matched.length) {continue;}
+
+            const normApi = 0.1 + 0.9 * Math.min(1.0, Math.max(0.0, apiScore));
+            const idf = Math.log(1 + totalChunks / matched.length);
+            const weight = normApi * idf;
+
+            for (const s of matched) {
+              weightedScoreMap.set(s.id, (weightedScoreMap.get(s.id) || 0) + weight);
+            }
+          }
+
+          // 提取 Weighted Top 500
+          const weightedSorted = Array.from(weightedScoreMap.entries()).sort((a, b) => b[1] - a[1]);
+          const weightedTop500 = weightedSorted.slice(0, PRE_FILTER_K);
+          const weightedTop500Ids = new Set(weightedTop500.map(e => e[0]));
+
+          let finalCandidateIds: Set<string>;
+
+          // ── 阶段二：级联重排（仅当 Weighted Top 500 > candidateLimit）─
+          if (weightedTop500Ids.size > config.candidateLimit) {
+            //showProgress(`Textrank re-ranking on Weighted Top ${weightedTop500Ids.size}...`);
+            showProgress("Thinking...");
+            const textrankSentences = sentences.filter(s => weightedTop500Ids.has(s.id));
+            const textrankScoreMap = new Map<string, number>();
+            const { textrankAlpha = 0.6, textrankDamping = 0.85, textrankIterations = 20 } = config;
+
+            // 按文档分组建图
+            const docGroups = new Map<string, typeof textrankSentences>();
+            for (const s of textrankSentences) {
+              if (!docGroups.has(s.docId)) {docGroups.set(s.docId, []);}
+              docGroups.get(s.docId)!.push(s);
+            }
+
+            for (const group of docGroups.values()) {
+              if (group.length < 2) {
+                const s = group[0];
+                const words = normalizeWords(segmentText(s.text, "word")).map(w => w.toLowerCase());
+                const matched = words.filter(w => questionWordSet.has(w)).length;
+                textrankScoreMap.set(s.id, matched > 0 ? matched / Math.max(words.length, 1) : 0.02);
+                continue;
+              }
+
+              const nodeOrder = group.map(s => s.id);
+              const graph = new Map<string, Set<string>>();
+              const degrees = new Map<string, number>();
+              const seedScores: number[] = [];
+
+              for (let i = 0; i < group.length; i++) {
+                const s1 = group[i];
+                graph.set(s1.id, new Set()); degrees.set(s1.id, 0);
+                const w1 = normalizeWords(segmentText(s1.text, "word")).map(w => w.toLowerCase());
+                const m1 = w1.filter(w => questionWordSet.has(w)).length;
+                seedScores.push(m1 > 0 ? m1 / Math.max(w1.length, 1) : 0.02);
+
+                for (let j = Math.max(0, i - 2); j <= Math.min(group.length - 1, i + 2); j++) {
+                  if (i === j) {continue;}
+                  const s2 = group[j];
+                  const w2 = normalizeWords(segmentText(s2.text, "word")).map(w => w.toLowerCase());
+                  if (w1.some(w => w2.includes(w))) {
+                    graph.get(s1.id)!.add(s2.id);
+                    degrees.set(s1.id, (degrees.get(s1.id) || 0) + 1);
+                  }
+                }
+              }
+
+              // PageRank 迭代
+              const n = nodeOrder.length;
+              const scores = new Float32Array(seedScores);
+              const next = new Float32Array(n);
+              const nodeIdx = new Map(nodeOrder.map((w, i) => [w, i]));
+              const inbound = Array.from({ length: n }, () => [] as { from: number; w: number }[]);
+
+              for (let i = 0; i < n; i++) {
+                const deg = degrees.get(nodeOrder[i]) || 1;
+                const weight = textrankDamping / deg;
+                for (const nb of graph.get(nodeOrder[i]) || []) {
+                  const j = nodeIdx.get(nb);
+                  if (j !== undefined) {inbound[j].push({ from: i, w: weight });}
+                }
+              }
+
+              let iter = 0;
+              while (iter < textrankIterations) {
+                let maxDiff = 0;
+                for (let i = 0; i < n; i++) {
+                  let sum = 0;
+                  for (const { from, w } of inbound[i]) {sum += scores[from] * w;}
+                  next[i] = (1 - textrankDamping) * seedScores[i] + sum;
+                  maxDiff = Math.max(maxDiff, Math.abs(next[i] - scores[i]));
+                }
+                if (maxDiff < 1e-4) {break;}
+                scores.set(next); iter++;
+              }
+
+              // 融合得分
+              for (let i = 0; i < n; i++) {
+                const trScore = scores[i] || 0;
+                textrankScoreMap.set(nodeOrder[i], textrankAlpha * seedScores[i] + (1 - textrankAlpha) * trScore);
+              }
+            }
+
+            // 归一化 Textrank 分数 [0.5, 0.98]
+            if (textrankScoreMap.size > 0) {
+              let minS = Infinity; let maxS = -Infinity;
+              for (const v of textrankScoreMap.values()) { if (v < minS) {minS = v;} if (v > maxS) {maxS = v;} }
+              if (maxS > minS) {
+                const range = 0.48; const inv = maxS - minS;
+                textrankScoreMap.forEach((v, k) => textrankScoreMap.set(k, ((v - minS) / inv) * range + 0.5));
+              }
+            }
+            
+            // 各自取 Top K 并取并集
+            const textrankSorted = Array.from(textrankScoreMap.entries()).sort((a, b) => b[1] - a[1]);
+            const textrankTopKIds = new Set(textrankSorted.slice(0, config.candidateLimit).map(e => e[0]));
+            const weightedTopKIds = new Set(weightedSorted.slice(0, config.candidateLimit).map(e => e[0]));
+            
+            finalCandidateIds = new Set([...weightedTopKIds, ...textrankTopKIds]);
+            console.log(`✅ Cascade Union: ${finalCandidateIds.size} candidates`);
+          } else {
+            // 未超限，直接使用 Weighted Top 500
+            finalCandidateIds = weightedTop500Ids;
+            console.log(`✅ Weighted direct pass: ${finalCandidateIds.size} candidates`);
+          }
+
+          // ── 阶段三：映射回 Chunk 对象 ──
+          const chunkMap = new Map(sentences.map(s => [s.id, s.chunk]));
+          candidateChunks = Array.from(finalCandidateIds)
+            .map(id => chunkMap.get(id))
+            .filter(Boolean) as typeof allChunks;
+
+        } catch (err) {
+          console.warn("⚠️ Fusion fallback due to error:", err);
+          //showProgress("⚠️ Fusion failed, fallback to weighted");
+          // Fallback to weighted strategy
+          config.strategy = "weighted";
+        }
+      }
+    }
+
+    // 🔹 如果 fusion 失败 fallback 到 weighted，或其他策略，执行通用候选收集
+    if (config.strategy !== "fusion" || candidateChunks.length === 0) {
+      // 构建 word -> chunks 映射（用于非 fusion 策略）
+      const wordChunksMap = new Map<string, typeof allChunks>();
+      for (const { word } of topWords) {
+        if (signal?.aborted) {throw new DOMException('Aborted', 'AbortError');}
+        const matched = allChunks.filter((c) => c.text?.toLowerCase().includes(word.toLowerCase()));
+        if (matched.length > 0) {wordChunksMap.set(word, matched);}
+      }
+
+      const perWordLimit = Math.ceil(config.candidateLimit / config.topKWords);
+
+      switch (config.strategy) {
+        case "global": {
+          const freqMap = new Map<string, number>();
+          for (const chunks of wordChunksMap.values()) {
+            for (const chunk of chunks) {
+              if (chunk?.id) {freqMap.set(chunk.id, (freqMap.get(chunk.id) || 0) + 1);}
+            }
+          }
+          candidateChunks = Array.from(freqMap.entries()).sort((a, b) => b[1] - a[1]).slice(0, config.candidateLimit).map(([key]) => {
+            for (const list of wordChunksMap.values()) {
+              const found = list?.find((c) => c?.id === key);
+              if (found) {return found;}
+            }
+          }).filter(Boolean);
+          break;
+        }
+        case "perWord": {
+          const result = new Map<string, (typeof allChunks)[0]>();
+          for (const chunks of wordChunksMap.values()) {
+            for (const chunk of (chunks || []).slice(0, perWordLimit)) {
+              if (chunk?.id && !result.has(chunk.id)) {
+                result.set(chunk.id, chunk);
+              }
+              if (result.size >= config.candidateLimit) {break;}
+            }
+            if (result.size >= config.candidateLimit) {break;}
+          }
+          candidateChunks = Array.from(result.values()).slice(0, config.candidateLimit);
+          break;
+        }
+        case "weighted":
+        default: {
+          const chunkScoreMap = new Map<string, { chunk: any; score: number }>();
+          const totalChunks = allChunks.length;
+
+          for (const { word, score: apiScore } of topWords) {
+            const matchedChunks = wordChunksMap.get(word) || [];
+            if (matchedChunks.length === 0) {continue;}
+
+            const normApiScore = 0.1 + 0.9 * Math.min(1.0, Math.max(0.0, apiScore));
+            const df = matchedChunks.length;
+            const idf = Math.log(1 + totalChunks / df);
+
+            for (const chunk of matchedChunks) {
+              const weight = normApiScore * idf;
+              const prev = chunkScoreMap.get(chunk.id) || { chunk, score: 0 };
+              chunkScoreMap.set(chunk.id, { chunk, score: prev.score + weight });
+            }
+          }
+
+          candidateChunks = Array.from(chunkScoreMap.values())
+            .sort((a, b) => b.score - a.score)
+            .slice(0, config.candidateLimit)
+            .map((x) => x.chunk);
+          break;
+        }
+      }
+    }
+
+    retrievalStats.candidateChunks = config.candidateLimit;
+
+    // 🔹 5. API 精排 + 段落聚合（所有策略共用）
+    let finalChunks: Array<{ chunk: (typeof allChunks)[0]; score: number; matchedWords: string[] }> = [];
+
+    try {
+      if (signal?.aborted) {throw new DOMException('Aborted', 'AbortError');}
+      //showProgress("Re-ranking chunks via backend...");
+      showProgress("Thinking...");
+      const chunkTexts = candidateChunks.map((c) => `${c.title}: ${c.text}`);
+      const chunksFile = await compressToFile(chunkTexts, "chunks.gz");
+      const questionFile2 = await compressToFile(question, "question.gz");
+      const chunksRes = await apiFileRequest<{ results_encoded: string; meta?: { total_chunks: number; processing_time_ms: number } }>(
+        "/api/noterich/ragl2",
+        { c: chunksFile, q: questionFile2 },
+        { t: chunkTexts.length }
+      );
+      const decodedChunks = await decodePayload<ApiChunkResult[]>(chunksRes.results_encoded);
+
+      // 🔹 Bonus result 处理
+      let bonusResult: ApiChunkResult | null = null;
+      for (const result of decodedChunks) {
+        if (result.text.includes(".prompt:") && result.score > 0.85) {
+          bonusResult = result;
+          break;
+        }
+      }
+
+      finalChunks = decodedChunks.map((r, i) => ({
+        chunk: candidateChunks.find((c) => `${c.title}: ${c.text}` === r.text) || candidateChunks[i],
+        matchedWords: topWords.filter((w) => candidateChunks[i]?.text?.toLowerCase().includes(w.word.toLowerCase())).map((w) => w.word),
+        score: r.score,
+      })).sort((a, b) => b.score - a.score); // ✅ 关键：按 score 降序，为动态组装做准备
+
+      // 🔹 Bonus chunk 特殊处理：如果存在高置信度 bonus，手动提到最前
+      let bonusIndex = -1;
+      for (let i = 0; i < finalChunks.length; i++) {
+        const item = finalChunks[i];
+        if (item.chunk?.text?.includes(".prompt:") && item.score > 0.85) {
+          bonusIndex = i;
+          break;
+        }
+      }
+      if (bonusIndex > 0) {
+        const bonusItem = finalChunks.splice(bonusIndex, 1)[0];
+        finalChunks.unshift(bonusItem); // 提到数组最前，确保优先组装
+        console.log(`🎯 Bonus chunk promoted to top: "${bonusItem.chunk?.title}" (score: ${bonusItem.score})`);
+      }
+      
+      retrievalStats.apiChunksTime = chunksRes.meta?.processing_time_ms || 0;
+      console.log(`✅ Re-ranked ${finalChunks.length} chunks`);
+    } catch (apiErr) {
+      if ((apiErr as Error).name === 'AbortError') {throw apiErr;}
+      console.warn("⚠️ API /chunks failed, fallback to frontend scoring", apiErr);
+      // ⚠️ 注意：fallback 时需要 wordChunksMap，但 fusion 分支可能未构建它
+      // 如果 fusion 成功，这里不会执行；如果 fusion 失败 fallback 到 weighted，wordChunksMap 已构建
+      const wordChunksMap = new Map<string, typeof allChunks>();
+      for (const { word } of topWords) {
+        const matched = allChunks.filter((c) => c.text?.toLowerCase().includes(word.toLowerCase()));
+        if (matched.length > 0) {wordChunksMap.set(word, matched);}
+      }
+
+      
+
+      finalChunks = candidateChunks.map((chunk) => {
+        let score = 0;
+        const matchedWords: string[] = [];
+        for (const { word, score: wordScore } of topWords) {
+          if (chunk.text?.toLowerCase().includes(word.toLowerCase())) {
+            matchedWords.push(word);
+            score += wordScore * (1 / Math.max(wordChunksMap.get(word)?.length || 1, 1));
+          }
+        }
+        return { chunk, matchedWords, score };
+      }).sort((a, b) => b.score - a.score).slice(0, config.topKResults);
+    }
+
+    // 🔹 6. 段落聚合 + 文档上下文提取
+    const paragraphMap = new Map<string, any>();
+    let accumulatedTokens = 0;
+    const TOKEN_LIMIT = 7000; // 🔹 可配置：总 token 预算
+    const CONFIDENCE_THRESHOLD = 0.8; // 🔹 可配置：最低置信度阈值
+    console.log(finalChunks)
+    for (const item of finalChunks) {
+      if (signal?.aborted) {throw new DOMException('Aborted', 'AbortError');}
+      
+      // ⏹️ 停止条件 1: 置信度低于阈值（由于已排序，后续都会更低，可直接 break）
+      if ((item.score ?? 0) < CONFIDENCE_THRESHOLD) {
+        console.log(`⏹️ Assembly stopped: chunk score ${item.score?.toFixed(3)} < threshold ${CONFIDENCE_THRESHOLD}`);
+        console.log(item);
+        break;
+      }
+      
+      // ⏹️ 停止条件 2: 累计 tokens 超限
+      
+     
+      
+      
+      // ✅ 通过检查，继续组装
+      const chunk = item?.chunk;
+      if (!chunk?.paragraphId) {continue;}
+      
+      const paraId = chunk.paragraphId;
+      if (!paragraphMap.has(paraId)) {
+        console.log(chunk.docId)
+        const paraStart = chunk.paragraphStartInDoc ?? 0;
+        const paraEnd = chunk.paragraphEndInDoc ?? paraStart + (chunk.paragraphText?.length || 0);
+        
+        const srcDoc = allNotes.find((d) => d.id === chunk.docId);
+        const isspecialnote = isSpecialNote(chunk.title)
+        if (isspecialnote) {
+            const thisfullText = srcDoc?.content?.editorState? extractNoteContent(srcDoc.content.editorState): "";
+            const chunkTokens = estimateTokenCount(thisfullText); 
+            if (accumulatedTokens + chunkTokens > TOKEN_LIMIT) {
+              console.log(`⏹️ Assembly stopped: accumulated tokens ${accumulatedTokens + chunkTokens} > limit ${TOKEN_LIMIT}`);
+              break;
+            } else {
+              accumulatedTokens += chunkTokens; // 🔹 累加已处理 tokens
+            }
+        } else {
+          const chunkText = chunk.paragraphText || "";
+          const chunkTokens = estimateTokenCount(chunkText); 
+          if (accumulatedTokens + chunkTokens > TOKEN_LIMIT) {
+            console.log(`⏹️ Assembly stopped: accumulated tokens ${accumulatedTokens + chunkTokens} > limit ${TOKEN_LIMIT}`);
+            break;
+          } else {
+              accumulatedTokens += chunkTokens; // 🔹 累加已处理 tokens
+          }
+        }
+        
+        paragraphMap.set(paraId, {
+          createdAt: chunk.createdAt, docId: chunk.docId, endInDoc: paraEnd,
+          hitSentences: [], matchedWords: new Set(), maxScore: 0,
+          paragraphId: paraId, paragraphIndex: chunk.paragraphIndex || 0,
+          startInDoc: paraStart, text: chunk.paragraphText || "", title: chunk.title,
+        });
+        
+      }
+      const para = paragraphMap.get(paraId)!;
+      para.maxScore = Math.max(para.maxScore, item.score || 0);
+      para.hitSentences.push(chunk.text);
+      item.matchedWords.forEach((w) => para.matchedWords.add(w));
+      
+      
+    }
+
+    // 🔹 更新 stats 记录实际组装数量
+    retrievalStats.finalChunks = Array.from(paragraphMap.values()).length;
+
+    const docMap = new Map<string, any>();
+    for (const para of paragraphMap.values()) {
+      if (signal?.aborted) {throw new DOMException('Aborted', 'AbortError');}
+      if (!docMap.has(para.docId)) {
+        docMap.set(para.docId, {
+          createdAt: para.createdAt, docId: para.docId, fullText: "",
+          matchedRanges: [], matchedSentenceTexts: [], maxScore: 0,
+          paragraphs: [], title: para.title,
+        });
+      }
+      const doc = docMap.get(para.docId)!;
+      doc.maxScore = Math.max(doc.maxScore, para.maxScore);
+      doc.paragraphs.push(para);
+      para.hitSentences.forEach((s) => doc.matchedSentenceTexts.push(s));
+      doc.matchedRanges.push({ end: para.endInDoc, start: para.startInDoc });
+    }
+
+    for (const doc of docMap.values()) {
+      if (signal?.aborted) {throw new DOMException('Aborted', 'AbortError');}
+      doc.paragraphs.sort((a: any, b: any) => {
+        const startDiff = (a.startInDoc ?? 0) - (b.startInDoc ?? 0);
+        if (startDiff !== 0) {return startDiff;}
+        const idxDiff = (a.paragraphIndex ?? 0) - (b.paragraphIndex ?? 0);
+        if (idxDiff !== 0) {return idxDiff;}
+        return (a.paragraphId || "").localeCompare(b.paragraphId || "");
+      });
+      doc.matchedRanges.sort((a: any, b: any) => a.start - b.start);
+    }
+
+    for (const doc of docMap.values()) {
+      if (signal?.aborted) {throw new DOMException('Aborted', 'AbortError');}
+      const srcDoc = allNotes.find((d) => d.id === doc.docId);
+      doc.fullText = srcDoc?.content?.editorState
+        ? extractNoteContent(srcDoc.content.editorState)
+        : doc.paragraphs?.length > 0 ? doc.paragraphs.map((p: any) => p.text).join("\n") : "";
+      doc.matchedRanges = (doc.matchedRanges || []).filter((r: any) => r.start !== undefined && r.end !== undefined && isFinite(r.start) && isFinite(r.end));
+      doc.docContext = extractDocumentContext(doc.fullText || "", doc.matchedRanges || [], config.contextSentences);
+    }
+
+    const docResults = Array.from(docMap.values()).slice(0, config.topKResults);
+    retrievalStats.finalChunks = finalChunks.length;
+    retrievalStats.finalParagraphs = Array.from(paragraphMap.values()).length;
+    retrievalStats.finalDocs = docResults.length;
+    const totalTime = performance.now() - startTime;
+    retrievalStats.totalTime = totalTime;
+
+    return {
+      meta: {
+        contextType: "document-level", paragraphsOrdered: true, retrievalStats,
+        sortKeys: ["startInDoc", "paragraphIndex", "paragraphId"],
+        textrankMode: config.textrankMode, totalChunks: allChunks.length,
+        totalDocs: allNotes.filter((n) => !n.isDeleted && !n.isDraft).length,
+        totalWords: uniqueWordsList.length,
+      },
+      question, relatedDocs: docResults, relatedWords: topWords, strategy: config.strategy,
+    };
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') {throw err;}
+    console.warn("RAG retrieval failed:", err);
+    //showProgress("❌ RAG failed, using raw prompt");
+    return null;
+  }
+}
+
+// ============ ⚙️ RAG Config Constants ============
+const RAG_CONFIG = {
+  MAX_CITATIONS: 5, MAX_KEYWORDS: 20, MAX_PARAGRAPHS_PER_DOC: 50,
+  MAX_SENTENCE_LEN: 256, MAX_TEXT_LEN: 1024,
+  RELEVANCE_THRESHOLD_DEFAULT: 0.8, SAFETY_BUFFER_TOKENS: 1000,
+  TOKEN_BUFFER_RATIO: 0.9, TOKEN_ESTIMATE_RATIO: 3.5,
+} as const;
+
+function estimateTokenCount(text: string): number {
+  if (!text) {return 0;}
+  if (typeof Intl === "undefined" || !Intl.Segmenter) {
+    return Math.ceil(text.length / 2);
+  }
+  const segmenter = new Intl.Segmenter(undefined, { granularity: "word" });
+  let count = 0;
+  for (const seg of segmenter.segment(text)) {
+    // 过滤纯空白
+    if (seg.segment.trim().length > 0) {
+      count++;
+    }
+  }
+  return count;
+}
+
+function truncateByRelevance(text: string, question: string, maxLength: number): string {
+  if (text.length <= maxLength) {return text;}
+  const questionWords = new Set(normalizeWords(segmentText(question, "word")));
+  const textKeywords = extractKeywordsAdaptive(text, TOP_KEYWORDS, 5, "fast");
+  const sentences = segmentText(text, "sentence").map(s => s.trim()).filter(s => s.length > 0);
+  if (sentences.length === 0) {return text.substring(0, maxLength) + '…';}
+  const scored = sentences.map((sent, idx) => {
+    let score = 0;
+    const lower = sent.toLowerCase();
+    const words = new Set(normalizeWords(segmentText(sent, "word")));
+    for (const w of words) { if (questionWords.has(w)) {score += 2.0;} }
+    for (const kw of textKeywords) { if (lower.includes(kw.toLowerCase())) {score += 3.0;} }
+    score += 1 / (idx + 1);
+    return { len: sent.length, score, sent };
+  });
+  const selected = new Set<string>();
+  let totalLen = 0;
+  for (const { sent, len } of [...scored].sort((a, b) => b.score - a.score)) {
+    if (totalLen + len + 1 <= maxLength) { selected.add(sent); totalLen += len + 1; }
+  }
+  let result = sentences.filter(s => selected.has(s)).join(' ');
+  if (result.length > maxLength) {result = smartTrim(result, maxLength);}
+  return result + (result.length < text.length ? '…' : '');
+}
+
+function smartTrim(text: string, maxLen: number): string {
+  if (text.length <= maxLen) {return text;}
+  const trimmed = text.substring(0, maxLen);
+  const breaks = ['。', '，', '.', ',', '!', '！', '？', '?', ';', '；', ' ', '\n', '、'];
+  let cutPoint = trimmed.length;
+  for (let i = trimmed.length - 1; i >= Math.floor(trimmed.length * 0.7); i--) {
+    if (breaks.includes(trimmed[i])) { cutPoint = i + 1; break; }
+  }
+  return trimmed.substring(0, cutPoint).trim() + '…';
+}
+
+function generateRagPromptJson(question: string, ragResult: RagRetrievalResult, strategy: string, minRelevanceScore: number = RAG_CONFIG.RELEVANCE_THRESHOLD_DEFAULT): string {
+  const retrievalStats = ragResult.meta.retrievalStats;
+  const textrankMode = ragResult.meta.textrankMode;
+  
+  // 过滤并排序文档
+  const filteredDocs = (ragResult.relatedDocs || [])
+    .filter(doc => (doc.maxScore ?? 0) >= minRelevanceScore)
+    .sort((a, b) => (b.maxScore ?? 0) - (a.maxScore ?? 0));
+
+  if (filteredDocs.length < (ragResult.relatedDocs?.length || 0)) {
+    console.log(`🔽 RAG Prompt: Filtered ${(ragResult.relatedDocs?.length || 0) - filteredDocs.length} docs below threshold ${minRelevanceScore}. Keeping ${filteredDocs.length} docs.`);
+  }
+
+  if (filteredDocs.length === 0) {
+    console.warn('⚠️ All docs filtered out by relevance threshold, returning minimal prompt');
+    return JSON.stringify({
+      citationPolicy: { avoidCitationDump: true, maxCitations: RAG_CONFIG.MAX_CITATIONS, noCitationIfGeneralAnswer: true, onlyWhenUsed: true, preferMostRelevantOnly: true,noteTitleOnly: true },
+      meta: { contextEmpty: true, contextType: ragResult.meta.contextType, generatedAt: new Date().toISOString(), note: `No documents met relevance threshold ${minRelevanceScore}`, strategy: ragResult.strategy },
+      user: { notes: [], question, strategy: ragResult.strategy },
+    });
+  }
+
+  
+
+  const promptData = {
+    system:"You are NoteRich.com's AI note assistant. Please follow the prompts in the user notes.",
+    user: {
+      question,
+    },
+    Note: {
+      SearchResults:filteredDocs.map((doc, docIdx) => {
+        const title = doc.title || "";
+        
+        // 🔹 核心修改：针对特殊笔记直接返回 fullText
+        if (isSpecialNote(title)) {
+          return {
+            noteTitle: title, // 保留统计信息供参考
+            createdAt: doc.createdAt || "",
+            // 直接使用全文，不再提取 paragraphs 或 context
+            prompt: doc.fullText || "",        
+            id: doc.docId,        
+            relevanceScore: doc.maxScore ?? 0,
+          };
+        }
+
+        // 🔹 原有逻辑：普通笔记继续提取 matchedContext, matchedParagraphs, noteKeywords
+        const docKeywords = extractKeywordsAdaptive(doc.fullText || "", TOP_KEYWORDS, 1, textrankMode);
+        const docContext = doc.docContext || { _meta: {}, background: [], foreground: [] };
+        
+        const matchedParagraphs = (doc.paragraphs || [])
+          .sort((a, b) => (b.maxScore ?? 0) - (a.maxScore ?? 0))
+          .slice(0, RAG_CONFIG.MAX_PARAGRAPHS_PER_DOC)
+          .sort((a, b) => (a.paragraphIndex ?? 0) - (b.paragraphIndex ?? 0))
+          .map((para, paraIdx) => {
+            const rawText = (para.text ?? '').trim().replace(/\s+/g, ' ');
+            const selectedSentences = para.hitSentences;
+            const sentencesTotalLen = selectedSentences.reduce((sum, s) => sum + s.length, 0);
+            let finalText: string;
+            if (sentencesTotalLen > RAG_CONFIG.MAX_TEXT_LEN) {
+              finalText = truncateByRelevance(selectedSentences.join(' '), question, RAG_CONFIG.MAX_TEXT_LEN);
+            } else {
+              if (rawText.length <= RAG_CONFIG.MAX_TEXT_LEN) {
+                finalText = rawText;
+              } else {
+                finalText = truncateByRelevance(rawText, question, RAG_CONFIG.MAX_TEXT_LEN);
+              }
+            }
+            return { text: finalText, paragraphNum: para.paragraphIndex ?? paraIdx, };
+          });
+
+        return {
+          noteTitle: title,
+          id: doc.docId,
+          createdAt: doc.createdAt || "", 
+          matchedParagraphs, 
+          matchedContext: {
+            _meta: docContext._meta,
+            after_summary: (docContext.background || []).slice(0, 3).map(s => (s ?? '').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim().substring(0, RAG_CONFIG.MAX_SENTENCE_LEN)),
+            before_summary: (docContext.foreground || []).slice(0, 3).map(s => (s ?? '').replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim().substring(0, RAG_CONFIG.MAX_SENTENCE_LEN)),
+          },
+          noteKeywords: docKeywords.slice(0, RAG_CONFIG.MAX_KEYWORDS),
+          relevanceScore: doc.maxScore ?? 0,
+          stats: { hitSentences: doc.matchedSentenceTexts?.length || 0, totalParagraphs: doc.paragraphs?.length || 0 },
+          
+        };
+      })
+    },
+    
+    searchMeta: {
+      contextType: ragResult.meta.contextType, filteredByRelevance: true, generatedAt: new Date().toISOString(),
+      paragraphsOrdered: ragResult.meta.paragraphsOrdered,
+      recallStats: {
+        candidateChunks: retrievalStats.candidateChunks || 0, candidateWords: retrievalStats.candidateWords || 0,
+        finalChunks: retrievalStats.finalChunks || 0, finalDocs: filteredDocs.length,
+        finalParagraphs: filteredDocs.reduce((sum, d) => sum + (d.paragraphs?.length || 0), 0),
+        topWordsReturned: retrievalStats.topWordsReturned || 0,
+      },
+      relevanceThreshold: minRelevanceScore, totalChunks: ragResult.meta.totalChunks,
+      totalDocs: ragResult.meta.totalDocs, totalWords: ragResult.meta.totalWords,
+    },
+    citationPolicy: { avoidCitationDump: true, maxCitations: RAG_CONFIG.MAX_CITATIONS, noCitationIfGeneralAnswer: true, onlyWhenUsed: true, preferMostRelevantOnly: true ,noteTitleOnly: true},
+  };
+
+  console.log('🧩 RAG Prompt Data:', promptData);
+
+  return JSON.stringify(promptData);
+}
+
+function assembleSafeRagPrompt(question: string, ragResult: RagRetrievalResult | null, backend: AIBackend, strategy: string): {
+  prompt: string; wasTruncated: boolean; metrics: {
+    originalLength: number; finalLength: number; originalTokens: number; finalTokens: number;
+    contextWindow: number; usagePercentage: number; removedDocs?: number; removedParagraphs?: number;
+  };
+} {
+  const contextWindow = BACKEND_CONFIG[backend]?.contextWindow ?? 8192;
+  if (!ragResult) {
+    const simplePrompt = question;
+    const tokens = estimateTokenCount(simplePrompt);
+    return {
+      metrics: { contextWindow, finalLength: simplePrompt.length, finalTokens: tokens, originalLength: simplePrompt.length, originalTokens: tokens, usagePercentage: (tokens / contextWindow) * 100 },
+      prompt: simplePrompt, wasTruncated: false,
+    };
+  }
+  const fullPromptJson = generateRagPromptJson(question, ragResult, strategy);
+  const originalLength = fullPromptJson.length;
+  const originalTokens = estimateTokenCount(fullPromptJson);
+  return {
+    metrics: { contextWindow, finalLength: originalLength, finalTokens: originalTokens, originalLength, originalTokens, usagePercentage: (originalTokens / contextWindow) * 100 },
+    prompt: fullPromptJson, wasTruncated: false,
+  };
+}
+
+// ============ 🤖 AI Content Dialog ============
+export function InsertAIGeneratedContentDialog({ 
+    activeEditor, 
+    onClose, 
+    scrollContainerRef,
+    initialBackend = 'general', // ✅ 1. 新增 prop，默认值为 'general'
+    initialImage, // ✅ 新增：接收外部传入的图片
+    autoStart = false // ✅ 新增：是否自动开始扫描
+}: { 
+    activeEditor: LexicalEditor; 
+    onClose: () => void; 
+    scrollContainerRef?: RefObject<HTMLElement | null>;
+    initialBackend?: AIBackend; // ✅ 2. 新增类型定义
+    initialImage?: File;
+    autoStart?: boolean;
+}):JSX.Element {
+  const [prompt, setPrompt] = useState("");
+  const [backend, setBackend] = useState<AIBackend>(initialBackend);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [ragConfig, setRagConfig] = useState<RagConfig>({
+    candidateLimit: 200, contextSentences: 3, enabled: true, minWordLen: 1,
+    strategy: "fusion", textrankAlpha: 0.6, textrankDamping: 0.85, textrankIterations: 20,
+    textrankMode: "fast", textrankWindowSize: 2, topKResults: 20, topKWords: 30,
+  });
+  const [ragRetrievalState, setRagRetrievalState] = useState<{ status: "idle" | "retrieving" | "success" | "error"; result: RagRetrievalResult | null; error: string | null }>({ error: null, result: null, status: "idle" });
+  const [ragProgressMsg, setRagProgressMsg] = useState<string>("");
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const fullMarkdownRef = useRef("");
+  const rafRef = useRef<number | null>(null);
+  const scrollRafRef = useRef<number | null>(null);
+  const lastInsertedKeyRef = useRef<string | null>(null);
+  const blockNodeKeysRef = useRef<(string | null)[]>([]);
+  const nodeKeyToBlockIndexRef = useRef<Map<string, number>>(new Map());
+  const preprocessedBlocksCacheRef = useRef<ParsedBlock[]>([]);
+  const bboxCacheRef = useRef<Map<string, string>>(new Map());
+  const processedImageUrlRef = useRef<string | null>(null);
+  const autoScrollRef = useRef(true);
+  const scrollContainerElRef = useRef<HTMLElement | null>(null);
+  // 🔥 新增：标记是否已经执行过自动扫描，防止失败后无限重试
+  const hasAutoStartedRef = useRef(false); 
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const sourceImageRef = useRef<HTMLImageElement | null>(null);
+  const [thoughtContent, setThoughtContent] = useState("");
+  const [showThoughtModal, setShowThoughtModal] = useState(false);
+  const thoughtScrollRef = useRef<HTMLDivElement>(null);
+  const renderCacheRef = useRef<Map<string, { hash: string; timestamp: number }>>(new Map());
+  const lastRenderedContentRef = useRef<Map<string, string>>(new Map());
+  const {
+    userLicense,
+    setUserLicense,
+    isLicenseModalOpen,
+    setIsLicenseModalOpen,
+    openLicenseModal,
+    closeLicenseModal,
+    isPro,
+    refreshLicense,
+    checkProFeature,
+  } = useLicense();
+
+  const $safeClearNode = useCallback((node: ElementNode) => { while (node.getFirstChild()) {node.getFirstChild()?.remove();} }, []);
+  const $unescapeMarkdownSymbols = (text: string): string => text.replace(/\\([*_`~[\]()#+\-.!|{}])/g, "$1");
+  const $safeInsertAfterLast = useCallback((newNode: ElementNode | TextNode) => {
+    const lastKey = lastInsertedKeyRef.current;
+    if (lastKey) {
+      const anchor = $getNodeByKey(lastKey);
+      if (anchor?.isAttached() && !anchor.isInline()) { anchor.insertAfter(newNode); lastInsertedKeyRef.current = newNode.getKey(); return; }
+    }
+    $getRoot().append(newNode); lastInsertedKeyRef.current = newNode.getKey();
+  }, []);
+  
+  function getLastVisibleElement(root: Element): HTMLElement | null {
+      if (!root) { return null; }
+      
+      // 如果 root 没有子元素，检查 root 本身是否可见
+      if (!root.lastElementChild) {
+          return (root instanceof HTMLElement && 
+                  root.offsetParent !== null && 
+                  getComputedStyle(root).display !== 'none') 
+              ? root 
+              : null;
+      }
+      
+      const last = root.lastElementChild;
+      
+      // 如果最后一个子元素是隐藏的，遍历其前面的兄弟元素
+      if (last instanceof HTMLElement && 
+          (last.offsetParent === null || getComputedStyle(last).display === 'none')) {
+          
+          // ← 修复：遍历前一个兄弟元素，而不是递归相同的 root
+          let sibling = last.previousElementSibling;
+          while (sibling) {
+              if (sibling instanceof HTMLElement && 
+                  sibling.offsetParent !== null && 
+                  getComputedStyle(sibling).display !== 'none') {
+                  // 找到可见兄弟后，继续向下查找其子元素
+                  return getLastVisibleElement(sibling) || (sibling instanceof HTMLElement ? sibling : null);
+              }
+              sibling = sibling.previousElementSibling;
+          }
+          // 如果没有可见的兄弟元素，返回 null
+          return null;
+      }
+      
+      // 正常情况：递归进入最后一个子元素
+      return getLastVisibleElement(last) || (last instanceof HTMLElement ? last : null);
+  }
+  const $processTextNodesInNodes = useCallback((nodes: LexicalNode[]): LexicalNode[] => {
+    const result: LexicalNode[] = [];
+    for (const node of nodes) {
+      if ($isCodeNode(node)) { result.push(node); continue; }
+      if ($isTextNode(node)) {
+        const rawText = node.getTextContent();
+        if (!rawText.trim()) { result.push(node); continue; }
+        const originalFormat = node.getFormat(); const originalStyle = node.getStyle(); const originalDetail = node.getDetail(); const originalMode = node.getMode();
+        const container = $createParagraphNode();
+        $convertFromMarkdownString(inlineMixedMarkdown(rawText), PLAYGROUND_TRANSFORMERS, container, true);
+        const $inheritStyles = (currentNode: LexicalNode) => {
+          if ($isElementNode(currentNode)) {currentNode.getChildren().forEach($inheritStyles);}
+          else if ($isTextNode(currentNode)) {
+            currentNode.setFormat(currentNode.getFormat() | originalFormat);
+            const existingStyle = currentNode.getStyle();
+            currentNode.setStyle(originalStyle ? `${originalStyle};${existingStyle}` : existingStyle);
+            currentNode.setDetail(originalDetail); currentNode.setMode(originalMode);
+          }
+        };
+        if ($isParagraphNode(container.getChildren()[0])) {
+          container.getChildren()[0]?.getChildren().forEach($inheritStyles);
+          result.push(...(container.getChildren()[0]?.getChildren() || []));
+        } else {
+          container.getChildren().forEach($inheritStyles);
+          result.push(...(container.getChildren() || []));
+        }
+        continue;
+      }
+      if ($isElementNode(node)) {
+        const children = $processTextNodesInNodes(node.getChildren());
+        node.clear().append(...children); result.push(node); continue;
+      }
+      result.push(node);
+    }
+    return result;
+  }, []);
+
+  function wrapTextInParagraphs(html: string, options = {}) {
+    const { skipTags = ["DIV"], trimWhitespace = true } = options;
+    if (typeof document === "undefined") {throw new Error("DOM required");}
+    const container = document.createElement("div"); container.innerHTML = html;
+    function processNode(node: Node) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const parent = node.parentElement;
+        if (!parent || !skipTags.includes(parent.tagName)) {return;}
+        const rawText = node.nodeValue;
+        const text = trimWhitespace ? rawText.trim() : rawText;
+        if (!text) {return;}
+        const lines = text.split(/\r?\n/).map((t) => t.trim()).filter(Boolean);
+        if (lines.length === 0) {return;}
+        const fragment = document.createDocumentFragment();
+        lines.forEach((line) => { const p = document.createElement("p"); p.textContent = line; fragment.appendChild(p); });
+        parent.replaceChild(fragment, node);
+      } else if (node.nodeType === Node.ELEMENT_NODE) {Array.from(node.childNodes).forEach(processNode);}
+    }
+    processNode(container); return container.innerHTML;
+  }
+
+  function $handleDomBlock(editor: any, dom: Document) {
+    const details = dom.querySelector("details");
+    if (details) {
+      const summary = details.querySelector("summary");
+      const titleHTML = summary?.innerHTML?.trim() || summary?.textContent || "Details";
+      if (summary) {summary.remove();}
+      const contentHTML = details.innerHTML;
+      const container = $createCollapsibleContainerNode(true);
+      const title = $createCollapsibleTitleNode();
+      const titleDom = new DOMParser().parseFromString(wrapTextInParagraphs(titleHTML), "text/html");
+      let titleNodes = $generateNodesFromDOM(editor, titleDom);
+      titleNodes = $processTextNodesInNodes(titleNodes);
+      titleNodes.forEach((n) => title.append(n));
+      const contentNode = $createCollapsibleContentNode();
+      const blocks = parseMixedBlocks(contentHTML);
+      if (blocks.length === 0) { contentNode.append($createTextNode("\u200B")); }
+      for (const block of blocks) {
+        if (block.leadingNewlines > 0) {block.leadingNewlines=1; for (let i = 0; i < block.leadingNewlines - 1; i++) {contentNode.append($createParagraphNode());} }
+        if (block.type === "html") {
+          const contentDom = new DOMParser().parseFromString(wrapTextInParagraphs(contentHTML), "text/html");
+          let contentNodes = $generateNodesFromDOM(editor, contentDom);
+          contentNodes = $processTextNodesInNodes(contentNodes);
+          contentNodes.forEach((n) => contentNode.append(n));
+        } else {
+          const containertemp = $createParagraphNode();
+          $convertFromMarkdownString(inlineMixedMarkdown(block.content), PLAYGROUND_TRANSFORMERS, containertemp, true);
+          let child = containertemp.getFirstChild();
+          while (child) { const next = child.getNextSibling(); contentNode.append(child); child = next; }
+        }
+      }
+      container.append(title, contentNode); return [container];
+    }
+    let nodes = $generateNodesFromDOM(editor, dom);
+    nodes = $processTextNodesInNodes(nodes); return nodes;
+  }
+
+  function $preprocessParagraphContent(html: string): string {
+    const processed = html.replace(/<p>([\s\S]*?)<\/p>/gi, (match, content) => `<p>${content.replace(/\t/g, "&emsp;")}</p>`);
+    const tempDiv = document.createElement("div"); tempDiv.innerHTML = processed.trim();
+    const children = Array.from(tempDiv.children);
+    if (children.length === 1 && children[0].tagName.toLowerCase() === "p") {
+      const p = children[0] as HTMLParagraphElement;
+      const textLines = (p.textContent || "").split("\n").map((l) => l.trim()).filter(Boolean);
+      if (textLines.length > 1 && !/<(div|p|ul|ol|li|h[1-6]|blockquote|pre|table)/i.test(p.innerHTML)) {
+        return textLines.map((line) => `<p>${line.replace(/\t/g, "&emsp;")}</p>`).join("");
+      }
+    }
+    return processed;
+  }
+
+  function $stripHtmlTags(text: string): string { return text.replace(/<[^>]*>/g, "").trim(); }
+
+  const $__renderBlockToContainer = useCallback((container: ElementNode, block: ParsedBlock) => {
+    const nodeKey = container.getKey(); const newHash = quickContentHash(block);
+    const cached = renderCacheRef.current.get(nodeKey); const now = Date.now();
+    if (cached?.hash === newHash) { renderCacheRef.current.set(nodeKey, { ...cached, timestamp: now }); return; }
+    if (cached && block.type !== "html" && !/<[a-z]/i.test(block.content)) {
+      const lastContent = lastRenderedContentRef.current.get(nodeKey);
+      if (lastContent && block.content.startsWith(lastContent)) {
+        const firstChild = container.getFirstChild();
+        if ($isTextNode(firstChild)) { firstChild.setTextContent(block.content); renderCacheRef.current.set(nodeKey, { hash: newHash, timestamp: now }); lastRenderedContentRef.current.set(nodeKey, block.content); return; }
+      }
+    }
+    $safeClearNode(container); let targetNodes: LexicalNode[] = [];
+    try {
+      if (block.leadingNewlines > 0) {block.leadingNewlines=1; for (let i = 0; i < block.leadingNewlines - 1; i++) {container.append($createParagraphNode());} }
+      if (block.type === "html") {
+        
+        const hasCodeFence = /```/.test(block.content);
+        if (hasCodeFence) {
+          const unescaped = $unescapeMarkdownSymbols($stripHtmlTags(block.content));
+          const temp = $createParagraphNode();
+          $convertFromMarkdownString(inlineMixedMarkdown(unescaped), [...PLAYGROUND_TRANSFORMERS], temp, false);
+          targetNodes = temp.getChildren();
+        } else {
+          const processedContent = $preprocessParagraphContent(block.content);
+          const dom = new DOMParser().parseFromString(processedContent, "text/html");
+          targetNodes = $handleDomBlock(activeEditor, dom);
+          targetNodes = $processTextNodesInNodes(targetNodes);
+        }
+      } else {
+        const unescaped = $unescapeMarkdownSymbols(block.content);
+        const temp = $createParagraphNode();
+        $convertFromMarkdownString(inlineMixedMarkdown(unescaped), [...PLAYGROUND_TRANSFORMERS], temp, false);
+        targetNodes = temp.getChildren();
+      }
+      container.append(...targetNodes);
+    } catch (e) { console.warn("[Render Fallback]", e); container.append($createTextNode(block.content)); }
+    if (!container.getChildrenSize()) {container.append($createTextNode(""));}
+    renderCacheRef.current.set(nodeKey, { hash: newHash, timestamp: now });
+    lastRenderedContentRef.current.set(nodeKey, block.content);
+    activeEditor.update(() => { $addUpdateTag(SKIP_DOM_SELECTION_TAG); const key = container.getKey(); const size = container.getChildrenSize(); const selection = $createRangeSelection(); selection.anchor.set(key, size, "element"); selection.focus.set(key, size, "element"); $setSelection(selection); }, { tag: HISTORY_MERGE_TAG });
+  }, [activeEditor, $safeClearNode, $processTextNodesInNodes]);
+
+  const $createBlockNode = useCallback((blockIndex: number, block: ParsedBlock): string => {
+    const container = $createParagraphNode();
+    activeEditor.update(() => { $safeInsertAfterLast(container); $setStyleProperty(container, "margin", "10px 0px 10px 0px"); }, { tag: blockIndex === 0 ? HISTORY_PUSH_TAG : HISTORY_MERGE_TAG });
+    const key = container.getKey(); nodeKeyToBlockIndexRef.current.set(key, blockIndex);
+    $__renderBlockToContainer(container as ElementNode, block); return key;
+  }, [$safeInsertAfterLast, $__renderBlockToContainer]);
+
+  const $updateBlockNode = useCallback((nodeKey: string, block: ParsedBlock) => {
+    const container = $getNodeByKey(nodeKey);
+    if (container?.isAttached()) {$__renderBlockToContainer(container as ElementNode, block);}
+  }, [$__renderBlockToContainer]);
+
+  const scrollToActiveBlock = useCallback(() => {
+    if (!autoScrollRef.current) {return;}
+    const container = scrollContainerElRef.current;
+    if (!container) {return;}
+    const targetKey = lastInsertedKeyRef.current ?? blockNodeKeysRef.current.at(-1) ?? null;
+    if (!targetKey) {return;}
+    let el = null;
+
+
+
+    // 2. 无选区或获取失败时，回退到 targetKey
+    if (!el && targetKey) {
+      el = activeEditor.getElementByKey(targetKey);
+    }
+
+    if (!el) {return;}
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const target = getLastVisibleElement(el) || null;
+        if (!target) {return}
+        //target.scrollIntoView({ behavior: "smooth", block: "center" });
+        
+       
+
+
+
+        // 仅纵向平滑滚动，left 固定为当前水平位置
+        const rect = target.getBoundingClientRect();
+        // 目标Y：让元素底部贴视口底部
+        const targetY = window.scrollY + rect.bottom - window.innerHeight+100;
+
+        window.scrollTo({
+          top: targetY,
+          left: window.scrollX,
+          behavior: "smooth"
+        });
+      });
+    });
+  }, [activeEditor]);
+
+  const scheduleScroll = useCallback(() => {
+    if (scrollRafRef.current) {return;}
+    scrollRafRef.current = requestAnimationFrame(() => { scrollRafRef.current = null; scrollToActiveBlock(); });
+  }, [scrollToActiveBlock]);
+
+  const getScrollContainer = useCallback((): HTMLElement => {
+    if (scrollContainerRef?.current) {return scrollContainerRef.current;}
+    const root = activeEditor.getRootElement();
+    let el: HTMLElement | null = root?.closest("[data-lexical-editor]") || null;
+    while (el && el !== document.body) {
+      const style = window.getComputedStyle(el);
+      if ((style.overflowY === "auto" || style.overflowY === "scroll") && el.scrollHeight > el.clientHeight + 10) {return el;}
+      el = el.parentElement;
+    }
+    return root?.parentElement || document.documentElement;
+  }, [activeEditor, scrollContainerRef]);
+
+  const $preprocessHtmlContent = useCallback(async (html: string): Promise<string> => {
+    const processor = HTML_PREPROCESSORS[backend];
+    return processor(html, { bboxCache: backend === "ocr" ? bboxCacheRef.current : undefined, image: backend === "ocr" ? sourceImageRef.current : undefined }) as string;
+  }, [backend]);
+
+  const hasIncompleteHtmlTag = (text: string): boolean => /<[^>]*$/.test(text);
+
+  const $doRender = useCallback(async () => {
+    const fullText = fullMarkdownRef.current.replace(/\\\(/g, "$").replace(/\\\)/g, "$").replace(/\\\[/g, "$$$$").replace(/\\\]/g, "$$$$");
+    const safeText = hasIncompleteHtmlTag(fullText) ? fullText.replace(/<[^>]*$/, "") : fullText;
+    if (!safeText.trim()) {return;}
+    const markdown = safeText.replace(/<div[^>]*class="([^"]*)"[^>]*>([\s\S]*?)<\/div>/g, (_, cls, content) => {
+      if (!/^(code|pseudocode|chart|music)$/.test(cls)) {return _;}
+      const trimmed = content.trim();
+      return /^```[\s\S]*```$/.test(trimmed) ? trimmed : `\n\`\`\`plain\n${trimmed}\n\`\`\`\n`;
+    });
+    const rawBlocks = parseMixedBlocks(markdown);
+    console.log(rawBlocks);
+    const splitHtmlBlocks = (blocks: ParsedBlock[]): ParsedBlock[] => {
+      const result: ParsedBlock[] = [];
+      for (const block of blocks) {
+        if (block.type !== "html") { result.push(block); continue; }
+        try {
+          const wrapper = document.createElement("div"); wrapper.innerHTML = block.content;
+          const topNodes = Array.from(wrapper.childNodes).filter((n) => n.nodeType === 1 || (n.textContent?.trim() && n.nodeType === 3));
+          if (topNodes.length <= 1) { result.push(block); continue; }
+          topNodes.forEach((node, idx) => {
+            const html = node instanceof HTMLElement ? node.outerHTML : node.textContent?.trim() || "";
+            if (!html) {return;}
+            result.push({ ...block, content: html, leadingNewlines: idx === 0 ? block.leadingNewlines : 1 });
+          });
+        } catch { result.push(block); }
+      }
+      return result;
+    };
+    const splittedBlocks = splitHtmlBlocks(rawBlocks);
+    let finalBlocks = splittedBlocks;
+    try {
+      if (splittedBlocks.some((b) => b.type === "html")) {
+        finalBlocks = await Promise.all(splittedBlocks.map(async (b) => b.type === "html" ? { ...b, content: await $preprocessHtmlContent(b.content) } : b));
+      }
+    } catch { finalBlocks = splittedBlocks; }
+    $safeEditorUpdate(activeEditor, () => {
+      const keys = blockNodeKeysRef.current; const nodeKeyToBlockIndex = nodeKeyToBlockIndexRef.current;
+      if (keys.length > finalBlocks.length) {
+        for (let i = finalBlocks.length; i < keys.length; i++) {
+          const key = keys[i]; if (key) { const node = $getNodeByKey(key); if (node?.isAttached()) { node.remove(); nodeKeyToBlockIndex.delete(key); renderCacheRef.current.delete(key); lastRenderedContentRef.current.delete(key); } }
+        }
+        keys.length = finalBlocks.length;
+      }
+      while (keys.length < finalBlocks.length) {keys.push(null);}
+      finalBlocks.forEach((block, i) => {
+        const newHash = quickContentHash(block); const key = keys[i];
+        if (key) {
+          const cached = renderCacheRef.current.get(key);
+          if (cached?.hash !== newHash) { $updateBlockNode(key, block); renderCacheRef.current.set(key, { hash: newHash, timestamp: Date.now() }); }
+        } else { keys[i] = $createBlockNode(i, block); if (keys[i]) {renderCacheRef.current.set(keys[i]!, { hash: newHash, timestamp: Date.now() });} }
+        if (keys[i]) {nodeKeyToBlockIndex.set(keys[i]!, i);}
+      });
+    });
+    scheduleScroll();
+  }, [activeEditor, backend, $preprocessHtmlContent, $createBlockNode, $updateBlockNode, scheduleScroll, hasIncompleteHtmlTag]);
+
+  const $scheduleRender = useCallback(async (chunk: string, isFinal = false) => {
+    fullMarkdownRef.current += chunk;
+    if (isFinal) { if (rafRef.current) {cancelAnimationFrame(rafRef.current);} rafRef.current = null; await $doRender(); return; }
+    if (rafRef.current) {return;}
+    rafRef.current = requestAnimationFrame(() => { rafRef.current = null; $doRender(); });
+  }, [$doRender]);
+
+  const handleImageSelect = useCallback(async (file: File) => {
+    try {
+      const { dataUrl, img } = await processImageForOCR(file);
+      setSelectedImage(file); setImagePreview(dataUrl); processedImageUrlRef.current = dataUrl; sourceImageRef.current = img; bboxCacheRef.current.clear();
+    } catch (e) { console.error("Image processing failed", e); setError("Failed to process image"); }
+  }, []);
+
+  const handleImageRemove = useCallback(() => {
+    setSelectedImage(null); setImagePreview(null); processedImageUrlRef.current = null; sourceImageRef.current = null; bboxCacheRef.current.clear();
+  }, []);
+
+  const handleThoughtUpdate = useCallback((thought: string) => {
+    setThoughtContent(thought); setShowThoughtModal(true);
+    requestAnimationFrame(() => { const el = thoughtScrollRef.current; if (el) {el.scrollTop = el.scrollHeight;} });
+  }, []);
+
+
+
+
+  const $handleGenerate = useCallback(async () => {
+    if (backend === "general" && !ragConfig.enabled && prompt.length > 5000) {
+    setError("Input exceeds 10,000 characters. Please shorten it.");
+      return;
+    }
+    const canSubmit = backend === "general" 
+      ? (prompt.trim() || selectedImage) // general: 文本或图片至少一个
+      : selectedImage; // ocr: 必须有图片
+    if (!canSubmit || isGenerating) {return;}
+    const ac = new AbortController(); abortControllerRef.current = ac;
+    let enhancedPrompt = prompt;
+    if (ragConfig.enabled) {
+      setIsGenerating(true); setIsMinimized(true); setError(null);
+      setRagRetrievalState({ error: null, result: null, status: "retrieving" });
+      setRagProgressMsg("");
+      try {
+        const allNotes = await getAllNotesWithContent();
+        const workspaceNotes = allNotes.filter((n) => !n.isDeleted && !n.isDraft);
+        const ragResult = await retrieveLocalContextRag(prompt, ragConfig, workspaceNotes, (msg) => setRagProgressMsg(msg), ac.signal,checkProFeature);
+        if (ragResult) {
+          setRagRetrievalState({ error: null, result: ragResult, status: "success" });
+          const assembledPrompt = assembleSafeRagPrompt(prompt, ragResult, backend, ragConfig.strategy);
+          enhancedPrompt = assembledPrompt.prompt;
+          console.log("📊 Prompt Metrics:", assembledPrompt.metrics);
+          if (assembledPrompt.wasTruncated) {setRagProgressMsg(`⚠️ Context truncated: ${assembledPrompt.metrics.removedDocs} docs, ${assembledPrompt.metrics.removedParagraphs} paragraphs removed`);}
+        } else {
+          setRagRetrievalState({ error: "No relevant notes found", result: null, status: "error" });
+        }
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') {
+          console.log('🛑 RAG retrieval cancelled by user');
+          
+          activeEditor.update(() => {}, { tag: [HISTORY_PUSH_TAG] });
+          activeEditor.dispatchCommand(CAN_UNDO_COMMAND, true);
+          setIsGenerating(false); return;
+        }
+        setRagRetrievalState({ error: (err as Error).message, result: null, status: "error" });
+      }
+    }
+    activeEditor.getEditorState().read(() => {
+      const sel = $getSelection();
+      if ($isRangeSelection(sel) && sel.isCollapsed()) {
+        const node = $getNodeByKey(sel.anchor.key);
+        const parent = node?.isInline() ? node.getParent() : node;
+        lastInsertedKeyRef.current = parent?.getKey() ?? null;
+      } else { lastInsertedKeyRef.current = null; }
+    });
+    setIsGenerating(true); setIsMinimized(true); setError(null); fullMarkdownRef.current = "";
+    blockNodeKeysRef.current = []; nodeKeyToBlockIndexRef.current.clear(); preprocessedBlocksCacheRef.current = []; bboxCacheRef.current.clear();
+    renderCacheRef.current.clear(); lastRenderedContentRef.current.clear();
+    autoScrollRef.current = true; setThoughtContent(""); setShowThoughtModal(false);
+    streamAIResponse({
+      backend, image: selectedImage ? processedImageUrlRef.current || selectedImage : undefined,
+      onChunk: $scheduleRender, onComplete: () => {
+        $scheduleRender("", true);
+        const lastKey = blockNodeKeysRef.current.at(-1);
+        if (!lastKey) {return;}
+        requestAnimationFrame(() => {
+          activeEditor.focus();
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              const el = activeEditor.getElementByKey(lastKey);
+              const target = getLastVisibleElement(el) || el;
+              if (target) {
+                //target.scrollIntoView({ behavior: "smooth", block: "center" });
+                // 仅纵向平滑滚动，left 固定为当前水平位置
+                const rect = target.getBoundingClientRect();
+                // 目标Y：让元素底部贴视口底部
+                const targetY = window.scrollY + rect.bottom - window.innerHeight+100;
+
+                window.scrollTo({
+                  top: targetY,
+                  left: window.scrollX,
+                  behavior: "smooth"
+                });
+              }
+            });
+          });
+        });
+        
+        activeEditor.update(() => {}, { tag: [HISTORY_PUSH_TAG] });
+        activeEditor.dispatchCommand(CAN_UNDO_COMMAND, true);
+        lastInsertedKeyRef.current = null; nodeKeyToBlockIndexRef.current.clear();
+        setRagProgressMsg(""); onClose(); setIsGenerating(false);
+      },
+      onError: (err) => {
+        
+        activeEditor.update(() => {}, { tag: [HISTORY_PUSH_TAG] });
+        activeEditor.dispatchCommand(CAN_UNDO_COMMAND, true);
+        $scheduleRender("", true); setError(err.message); setRagProgressMsg(""); setIsGenerating(false);
+        abortControllerRef.current = null;
+      },
+      onThought: handleThoughtUpdate, prompt: enhancedPrompt, signal: ac.signal, temperature: 0,
+    });
+  }, [prompt, backend, selectedImage, isGenerating, ragConfig, $scheduleRender, handleThoughtUpdate, activeEditor, onClose]);
+
+  const $handleCancel = useCallback(() => {
+    abortControllerRef.current?.abort();
+    
+    activeEditor.update(() => {}, { tag: [HISTORY_PUSH_TAG] });
+    activeEditor.dispatchCommand(CAN_UNDO_COMMAND, true);
+    $scheduleRender("", true); setRagProgressMsg(""); setIsGenerating(false); onClose();
+  }, [onClose, $scheduleRender, activeEditor]);
+
+  const handleMinimizedPanelClick = useCallback(() => {}, []);
+
+  useEffect(() => { return () => { if (rafRef.current) {cancelAnimationFrame(rafRef.current);} if (scrollRafRef.current) {cancelAnimationFrame(scrollRafRef.current);} abortControllerRef.current?.abort(); }; }, []);
+
+  const scrollDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    const container = getScrollContainer();
+    scrollContainerElRef.current = container;
+
+    const scrollHandler = () => {
+      if (autoScrollRef.current) {
+        autoScrollRef.current = false;
+      }
+      if (scrollDebounceTimerRef.current) {
+        clearTimeout(scrollDebounceTimerRef.current);
+      }
+
+      scrollDebounceTimerRef.current = setTimeout(() => {
+        const lastKey = lastInsertedKeyRef.current;
+        if (!lastKey) {return;}
+
+        const targetEl = activeEditor.getElementByKey(lastKey);
+        if (!targetEl || !(targetEl instanceof HTMLElement)) {return;}
+
+        const targetELchild = getLastVisibleElement(targetEl) || targetEl;
+        if (!targetELchild) {return;}
+
+        const rect = targetELchild.getBoundingClientRect();
+        const safeTop = 40;
+        const safeBottom = window.innerHeight - 40;
+        // 只判断：元素底部是否在可视安全区域内
+        const bottomInView = rect.bottom >= safeTop && rect.bottom <= safeBottom;
+
+        if (bottomInView) {
+          autoScrollRef.current = true;
+        }
+      }, 100);
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", "Space"].includes(e.code)) {
+        scrollHandler();
+      }
+    };
+
+    window.addEventListener("wheel", scrollHandler, { passive: true });
+    window.addEventListener("touchmove", scrollHandler, { passive: true });
+    window.addEventListener("pointerdown", scrollHandler, { passive: true });
+    window.addEventListener("keydown", onKeyDown, { passive: true });
+
+    return () => {
+      if (scrollDebounceTimerRef.current) {
+        clearTimeout(scrollDebounceTimerRef.current);
+      }
+      window.removeEventListener("wheel", scrollHandler);
+      window.removeEventListener("touchmove", scrollHandler);
+      window.removeEventListener("pointerdown", scrollHandler);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [activeEditor, getScrollContainer]);
+
+  useEffect(() => {
+        if (initialImage) {
+            setBackend('ocr'); // 强制切换到 OCR 模式
+            handleImageSelect(initialImage); // 调用原有的图片处理逻辑
+        }
+  }, [initialImage]);
+
+    // ✅ 3. 监听图片加载完成，自动触发扫描
+ useEffect(() => {
+    // 🔥 核心修复：增加 !hasAutoStartedRef.current 判断，确保整个生命周期内只自动触发一次
+    if (autoStart && imagePreview && selectedImage && backend === 'ocr' && !isGenerating && !hasAutoStartedRef.current) {
+      
+      hasAutoStartedRef.current = true; // 标记已执行，即使后续 isGenerating 变回 false 也不会再触发
+      
+      const timer = setTimeout(() => {
+        $handleGenerate(); // 自动触发扫描
+      }, 500); 
+      
+      return () => clearTimeout(timer);
+    }
+  }, [autoStart, imagePreview, selectedImage, backend, isGenerating, $handleGenerate]);
+
+  const renderMinimizedPanel = () => (
+    <div className="ai-minimized-panel" onClick={handleMinimizedPanelClick} title="Click to view details">
+      <div className="minimized-content">
+        <span className="status-dot">●</span>
+        <span className="status-text" style={{ maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {thoughtContent ? "🧠 Thinking..." : ragConfig.enabled && ragRetrievalState.status === "retrieving" ? `🔍 ${ragProgressMsg || "Search..."}` : "✨ Generating..."}
+        </span>
+      </div>
+      <button className="stop-btn" onClick={(e) => { e.stopPropagation(); $handleCancel(); }} title="Stop generation">⏹</button>
+    </div>
+  );
+
+  const renderFullDialog = () => (
+    <div className="Modal__modal" tabIndex={-1}>
+      <h2 className="Modal__title">AI Assistant</h2>
+      <button className="Modal__closeButton" aria-label="Close modal" type="button" onClick={onClose} disabled={isGenerating}>×</button>
+      <div className="Modal__content">
+        <div className="ai-content-dialog">
+          <div className="dialog-body">
+            <div className="backend-selector">
+              <label><input type="radio" name="backend" value="general" checked={backend === "general"} onChange={() => setBackend("general")} disabled={isGenerating} /><span>General AI</span></label>
+              <label><input type="radio" name="backend" value="ocr" checked={backend === "ocr"} onChange={() => setBackend("ocr")} disabled={isGenerating} /><span>Note Scanner</span></label>
+            </div>
+            {backend === "ocr" && (
+              <div className="image-upload-section">
+                {!imagePreview ? (
+                  <label className="image-upload-placeholder">
+                    <input type="file" accept="image/*" onChange={(e) => e.target.files?.[0] && handleImageSelect(e.target.files[0])} disabled={isGenerating} className="hidden-input" />
+                    <div className="upload-icon">📷</div><span>Click or drag image to scan notes</span>
+                  </label>
+                ) : (
+                  <div className="image-preview-wrapper">
+                    <img src={imagePreview} alt="preview" className="image-preview" />
+                    <button className="remove-image" onClick={handleImageRemove} disabled={isGenerating}>×</button>
+                  </div>
+                )}
+                
+              </div>
+            )}
+            {backend === "general" && (
+              <>
+                <div style={{ position: "relative" }}>
+                  <textarea 
+                    className="prompt-input" 
+                    placeholder="Describe what content you want to generate..." 
+                    value={prompt} 
+                    onChange={(e) => setPrompt(e.target.value)} 
+                    disabled={isGenerating} 
+                    rows={3}
+                    maxLength={10000} // 🔹 硬性限制
+                    style={{ width: "100%", boxSizing: "border-box", resize: "vertical" }}
+                  />
+                  <div style={{ 
+                    textAlign: "right", fontSize: "12px", color: prompt.length >= 4500 ? "#ef4444" : "#64748b", 
+                    marginTop: "4px", paddingRight: "4px" 
+                  }}>
+                    {prompt.length} / 5000
+                  </div>
+                </div>
+                
+                {/* 🔹 新增：General 模式下的图片上传选项 */}
+                <div className="image-upload-section" style={{ marginTop: "12px" }}>
+                  {!imagePreview ? (
+                    <label className="image-upload-placeholder" style={{ 
+                      border: "2px dashed #cbd5e1", borderRadius: "8px", 
+                      padding: "16px", textAlign: "center", cursor: "pointer",
+                      display: "flex", flexDirection: "column", alignItems: "center", gap: "8px"
+                    }}>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={(e) => e.target.files?.[0] && handleImageSelect(e.target.files[0])} 
+                        disabled={isGenerating} 
+                        className="hidden-input" 
+                        style={{ display: "none" }}
+                      />
+                      <div style={{ fontSize: "24px" }}>📷</div>
+                      <span style={{ color: "#64748b", fontSize: "13px" }}>
+                        Optional: Attach image for reference
+                      </span>
+                    </label>
+                  ) : (
+                    <div className="image-preview-wrapper" style={{ 
+                      position: "relative", display: "inline-block", maxWidth: "200px" 
+                    }}>
+                      <img src={imagePreview} alt="preview" className="image-preview" 
+                        style={{ width: "100%", borderRadius: "6px", border: "1px solid #e2e8f0" }} 
+                      />
+                      <button 
+                        className="remove-image" 
+                        onClick={handleImageRemove} 
+                        disabled={isGenerating}
+                        style={{
+                          position: "absolute", top: "-8px", right: "-8px",
+                          background: "#ef4444", color: "white", border: "none",
+                          borderRadius: "50%", width: "24px", height: "24px",
+                          cursor: "pointer", fontSize: "16px", lineHeight: "1"
+                        }}
+                      >×</button>
+                    </div>
+                  )}
+                </div>
+                <div className="rag-mode-section" style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "6px", marginTop: "12px", padding: "10px" }}>
+                  <label style={{ alignItems: "center", cursor: "pointer", display: "flex", gap: "8px" }}>
+                    <input type="checkbox" checked={ragConfig.enabled} onChange={(e) => setRagConfig((prev) => ({ ...prev, enabled: e.target.checked }))} disabled={isGenerating} style={{ height: "16px", width: "16px" }} />
+                    <span style={{ color: "#334155", fontSize: "13px", fontWeight: 500 }}>🧠 Chat with Notes</span>
+                  </label>
+                  {ragConfig.enabled && !isGenerating && false && (
+                    <div style={{ display: "grid", gap: "8px", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", marginTop: "10px" }}>
+                      <div>
+                        <label style={{ color: "#64748b", display: "block", fontSize: "11px", marginBottom: "4px" }}>Strategy</label>
+                        <select value={ragConfig.strategy} onChange={(e) => setRagConfig((prev) => ({ ...prev, strategy: e.target.value as RagStrategy }))} style={{ border: "1px solid #cbd5e1", borderRadius: "4px", fontSize: "12px", padding: "6px", width: "100%" }}>
+                          <option value="fusion">🔹 Fusion</option>
+                          <option value="weighted">Weighted</option>
+                          <option value="global">Global Limit</option>
+                          <option value="perWord">Per-Word Limit</option>
+                          
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ color: "#64748b", display: "block", fontSize: "11px", marginBottom: "4px" }}>Candidate Limit</label>
+                        <input type="number" min="50" max="1000" step="50" value={ragConfig.candidateLimit} onChange={(e) => setRagConfig((prev) => ({ ...prev, candidateLimit: parseInt(e.target.value) || 500 }))} style={{ border: "1px solid #cbd5e1", borderRadius: "4px", fontSize: "12px", padding: "6px", width: "100%" }} />
+                      </div>
+                      <div>
+                        <label style={{ color: "#64748b", display: "block", fontSize: "11px", marginBottom: "4px" }}>Top Results</label>
+                        <input type="number" min="5" max="50" step="5" value={ragConfig.topKResults} onChange={(e) => setRagConfig((prev) => ({ ...prev, topKResults: parseInt(e.target.value) || 20 }))} style={{ border: "1px solid #cbd5e1", borderRadius: "4px", fontSize: "12px", padding: "6px", width: "100%" }} />
+                      </div>
+                      <div>
+                        <label style={{ color: "#64748b", display: "block", fontSize: "11px", marginBottom: "4px" }}>Top-K Words</label>
+                        <input type="number" min="10" max="100" value={ragConfig.topKWords} onChange={(e) => setRagConfig((prev) => ({ ...prev, topKWords: parseInt(e.target.value) || 30 }))} style={{ border: "1px solid #cbd5e1", borderRadius: "4px", fontSize: "12px", padding: "6px", width: "100%" }} />
+                      </div>
+                      <div>
+                        <label style={{ color: "#64748b", display: "block", fontSize: "11px", marginBottom: "4px" }}>Context Sentences</label>
+                        <input type="number" min="1" max="10" value={ragConfig.contextSentences} onChange={(e) => setRagConfig((prev) => ({ ...prev, contextSentences: parseInt(e.target.value) || 3 }))} style={{ border: "1px solid #cbd5e1", borderRadius: "4px", fontSize: "12px", padding: "6px", width: "100%" }} />
+                      </div>
+                      <div>
+                        <label style={{ color: "#64748b", display: "block", fontSize: "11px", marginBottom: "4px" }}>TextRank Mode</label>
+                        <select value={ragConfig.textrankMode} onChange={(e) => setRagConfig((prev) => ({ ...prev, textrankMode: e.target.value as TextrankMode }))} style={{ border: "1px solid #cbd5e1", borderRadius: "4px", fontSize: "12px", padding: "6px", width: "100%" }}>
+                          <option value="chunked">Chunked</option>
+                          <option value="fast">Fast</option>
+                          <option value="original">Original</option>
+                        </select>
+                      </div>
+                      {ragConfig.strategy === "textrank-hybrid" && (
+                        <>
+                          <div>
+                            <label style={{ color: "#64748b", display: "block", fontSize: "11px", marginBottom: "4px" }}>Alpha (KW Weight)</label>
+                            <input type="number" min="0" max="1" step="0.1" value={ragConfig.textrankAlpha} onChange={(e) => setRagConfig((prev) => ({ ...prev, textrankAlpha: parseFloat(e.target.value) || 0.6 }))} style={{ border: "1px solid #cbd5e1", borderRadius: "4px", fontSize: "12px", padding: "6px", width: "100%" }} />
+                          </div>
+                          <div>
+                            <label style={{ color: "#64748b", display: "block", fontSize: "11px", marginBottom: "4px" }}>Iterations</label>
+                            <input type="number" min="10" max="50" value={ragConfig.textrankIterations} onChange={(e) => setRagConfig((prev) => ({ ...prev, textrankIterations: parseInt(e.target.value) || 20 }))} style={{ border: "1px solid #cbd5e1", borderRadius: "4px", fontSize: "12px", padding: "6px", width: "100%" }} />
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  {ragConfig.enabled && isGenerating && ragRetrievalState.status !== "idle" && (
+                    <div style={{ color: "#64748b", fontSize: "12px", marginTop: "8px" }}>
+                      {ragRetrievalState.status === "retrieving" && `${ragProgressMsg || "Retrieving..."}`}
+                      {ragRetrievalState.status === "success" && ragRetrievalState.result && `✅ Retrieved ${ragRetrievalState.result.relatedDocs.length} docs | ${ragRetrievalState.result.relatedWords.length} keywords`}
+                      {ragRetrievalState.status === "error" && `⚠️ ${ragRetrievalState.error}`}
+                    </div>
+                  )}
+                </div>
+              </>
+              
+            )}
+            
+            {error && <div className="error-message">⚠️ {error}</div>}
+            <div className="dialog-actions">
+              {!isGenerating ? (
+                <>
+                  <button className="primary" onClick={$handleGenerate} 
+                    disabled={
+                      backend === "general" 
+                        ? !(prompt.trim() || selectedImage) // general: 文本或图片至少一个
+                        : !selectedImage // ocr: 必须有图片
+                    }
+                  >
+                    🚀 Generate
+                  </button>
+                  <button className="secondary" onClick={onClose}>Cancel</button>
+                </>
+              ) : (
+                <>
+                  <button className="warning" onClick={$handleCancel}>⏹ Stop</button>
+                  <span className="generating-indicator">● Generating...</span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const modalContent = (
+    <>
+      <div className={`Modal__overlay ${isGenerating && isMinimized ? "overlay-transparent" : ""}`} role="dialog" aria-modal="true">
+        {isGenerating && isMinimized ? renderMinimizedPanel() : renderFullDialog()}
+      </div>
+      {showThoughtModal && (
+        <div className="thought-modal-overlay" onClick={() => setShowThoughtModal(false)}>
+          <div className="thought-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="thought-modal-header"><span>🧠 Thinking Process</span><button className="close-modal" onClick={() => setShowThoughtModal(false)}>×</button></div>
+            <div className="thought-modal-content" ref={thoughtScrollRef}><pre>{thoughtContent}</pre></div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+
+  return createPortal(modalContent, document.body);
+}
