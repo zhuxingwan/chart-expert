@@ -218,25 +218,53 @@ export function InfographicEditor({ config, onChange, onTemplateChange, previewR
     setLocal((prev) => ({ ...prev, ...patch }))
   }, [])
 
+  const currentTemplate = React.useMemo(
+    () => TEMPLATE_REGISTRY.find((t) => t.id === local.template) ?? TEMPLATE_REGISTRY[0],
+    [local.template],
+  )
+
   const applyTemplate = React.useCallback((tpl: TemplateMeta) => {
-    setLocal((prev) => ({
-      ...prev,
-      type: tpl.id,
-      template: tpl.id,
-      data: defaultDataForShape(tpl.dataShape),
-    }))
+    setLocal((prev) => {
+      // Determine if the current data is compatible with the new template's data shape.
+      // If compatible (e.g. both are list-based), KEEP the existing data so the
+      // user's edits / AI-generated content are preserved across template switches.
+      // Only generate fresh default data when the shapes are incompatible.
+      const prevShape = currentTemplate?.dataShape
+      const newShape = tpl.dataShape
+      const sameShape = prevShape === newShape
+
+      // Even if shapes differ, some data can be adapted:
+      // list → sequence: lists array works for both
+      // sequence → list: lists array works for both
+      // list/sequence → chart: lists array works
+      // chart → list/sequence: lists array works
+      // hierarchy → hierarchy: tree structure works
+      // relation → relation: nodes/edges work
+      // compare → compare: groups work
+      let keepData = sameShape
+
+      if (!keepData) {
+        const flatShapes = ['list', 'sequence', 'chart']
+        if (flatShapes.includes(prevShape ?? '') && flatShapes.includes(newShape)) {
+          keepData = true
+        }
+      }
+
+      return {
+        ...prev,
+        type: tpl.id,
+        template: tpl.id,
+        // Keep existing data if compatible; otherwise use default for the new shape
+        data: keepData ? prev.data : defaultDataForShape(newShape),
+      }
+    })
     onTemplateChange?.('infographic:' + tpl.id)
     toast.success(
       t('infographic.applied', {
         name: getInfographicTemplateName(locale, tpl.id, tpl.name),
       }),
     )
-  }, [t, onTemplateChange, locale])
-
-  const currentTemplate = React.useMemo(
-    () => TEMPLATE_REGISTRY.find((t) => t.id === local.template) ?? TEMPLATE_REGISTRY[0],
-    [local.template],
-  )
+  }, [t, onTemplateChange, locale, currentTemplate])
 
   // Three panel contents are already factored into separate components —
   // render them in EITHER a mobile vertical tab layout OR a desktop
