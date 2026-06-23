@@ -542,9 +542,17 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
     const timer = setTimeout(() => {
       if (!engineRef.current || renderSeq.current !== seq) return
       try {
+        // Transform data for the engine: our config stores title as {text, subtext}
+        // but the @antv/infographic engine expects title as a string and desc as a string.
+        const engineData = { ...config.data }
+        if (config.data.title && typeof config.data.title === 'object') {
+          const t = config.data.title as { text?: string; subtext?: string }
+          engineData.title = t.text || ''
+          if (t.subtext) engineData.desc = t.subtext
+        }
         engineRef.current.render({
           template: config.template,
-          data: config.data,
+          data: engineData,
           theme: config.theme,
         })
         setError(null)
