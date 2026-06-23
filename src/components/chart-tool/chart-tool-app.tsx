@@ -100,6 +100,66 @@ function activateFromTemplateId(templateId: string): ActiveDoc | null {
   }
 }
 
+// ─── Generate markdown for postMessage (plugin mode) ─────────────────────
+
+function generateInfographicSyntax(config: InfographicConfig): string {
+  const lines: string[] = []
+  lines.push(`infographic ${config.template}`)
+  lines.push('data')
+  if (config.data.title?.text) {
+    lines.push('  title')
+    lines.push(`    text ${config.data.title.text}`)
+    if (config.data.title.subtext) {
+      lines.push(`    subtext ${config.data.title.subtext}`)
+    }
+  }
+  if (config.data.lists && config.data.lists.length > 0) {
+    lines.push('  lists')
+    for (const item of config.data.lists) {
+      const parts = [`- label ${item.label || ''}`]
+      if (item.desc) parts.push(`  desc ${item.desc}`)
+      if (item.value !== undefined) parts.push(`  value ${item.value}`)
+      if (item.icon) parts.push(`  icon ${item.icon}`)
+      lines.push(parts.join('\n'))
+    }
+  }
+  if (config.data.nodes && config.data.nodes.length > 0) {
+    lines.push('  nodes')
+    for (const node of config.data.nodes) {
+      lines.push(`    - id ${node.id}`)
+      lines.push(`      label ${node.label}`)
+      if (node.group) lines.push(`      group ${node.group}`)
+    }
+  }
+  if (config.data.edges && config.data.edges.length > 0) {
+    lines.push('  edges')
+    for (const edge of config.data.edges) {
+      lines.push(`    - from ${edge.from}`)
+      lines.push(`      to ${edge.to}`)
+      if (edge.label) lines.push(`      label ${edge.label}`)
+    }
+  }
+  return lines.join('\n')
+}
+
+function generateMarkdown(doc: ActiveDoc): string | null {
+  if (doc.engine === 'echarts' && doc.echarts) {
+    // ECharts: wrap the config JSON in ```echarts fences
+    // Build the option object (same as echarts-option-builder)
+    return '```echarts\n' + JSON.stringify(doc.echarts, null, 2) + '\n```'
+  }
+  if (doc.engine === 'mermaid' && doc.mermaid) {
+    // Mermaid: wrap the source code in ```mermaid fences
+    return '```mermaid\n' + doc.mermaid.code + '\n```'
+  }
+  if (doc.engine === 'infographic' && doc.infographic) {
+    // Infographic: generate syntax and wrap in ```infographic fences
+    const syntax = generateInfographicSyntax(doc.infographic)
+    return '```infographic\n' + syntax + '\n```'
+  }
+  return null
+}
+
 export function ChartToolApp() {
   const t = useT()
   const { locale } = useI18n()
@@ -251,6 +311,19 @@ export function ChartToolApp() {
               toast.error('Please select a template first')
               return
             }
+            // In plugin mode, generate markdown and postMessage to parent window
+            const isPlugin = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('plugin') === 'true'
+            if (isPlugin) {
+              const markdown = generateMarkdown(doc)
+              if (markdown) {
+                window.parent.postMessage(
+                  { type: 'noterich-chart-insert', markdown },
+                  '*',
+                )
+                toast.success(locale.startsWith('zh') ? '已插入到笔记' : 'Inserted to note')
+              }
+            }
+            // Also open the save dialog (normal save flow)
             setSaveOpen(true)
           }}
           onLoad={() => setLoadOpen(true)}
