@@ -129,3 +129,30 @@ Stage Summary:
 - ✅ Mermaid editor verified in browser: flowchart template loaded, SVG rendered.
 - ✅ Unified UX: users see ONE tool ("图表制作工坊") with a single template gallery; the library is chosen automatically per template and hidden entirely.
 - ⚠️ Known sandbox limitation: the headless `agent-browser` Chrome process and the Next.js dev compiler compete for the 8GB cgroup memory budget; rapid interactions that trigger on-demand chunk compilation can crash the dev server. In a normal host environment this does not occur. All editors compile and render correctly when chunks are pre-warmed.
+
+---
+Task ID: REFACTOR-INDEXEDDB
+Agent: main
+Task: Refactor from Prisma/SQLite to pure-frontend IndexedDB storage (per user request — "should be a lightweight frontend app")
+
+Work Log:
+- Removed `/api/charts` routes (GET/POST/PUT/DELETE) entirely — no longer needed.
+- Removed the default `/api/route.ts` placeholder.
+- Removed the `Chart` model from `prisma/schema.prisma` (kept User/Post for the scaffold; added a comment noting chart storage moved to IndexedDB).
+- Rewrote `src/lib/chart/storage.ts` to use IndexedDB directly (DB name `chart-workshop`, store `charts` with `id` keyPath + `engine`/`updatedAt` indexes). All CRUD ops (`listCharts`, `saveChart`, `updateChart`, `deleteChart`, `getChart`) now hit IndexedDB — zero network requests.
+- Updated `SavedChart` type: `createdAt`/`updatedAt` changed from `string` to `number` (timestamps) for efficient IndexedDB indexing.
+- Simplified `next.config.ts`: removed `serverExternalPackages` (no longer needed since nothing imports the heavy libs server-side); kept only the client-side `webpack.externals` for echarts/mermaid/@antv/infographic → CDN globals.
+- Fixed `allowedDevOrigins` — the previous `["*"]` wildcard doesn't work in Next.js; replaced with explicit origin list (127.0.0.1, localhost, ports 81/3000, and the sandbox network IP 21.0.12.71). This resolved the "Blocked cross-origin request from 127.0.0.1 to /_next/*" errors that caused ChunkLoadError.
+- Fixed the CDN URL for @antv/infographic: the package.json `jsdelivr` field points to `dist/infographic.umd.min.js` which 404s on jsdelivr; the actual file is `dist/infographic.min.js`. Also fixed the global name: the UMD bundle exposes `window.AntVInfographic` (not `window.Infographic`), with the class at `window.AntVInfographic.Infographic`.
+- Restarted dev server with double-fork daemonization to fully detach from the shell process group (prevents agent-browser's Chrome from killing it via shared process group signals).
+
+Stage Summary:
+- ✅ Pure frontend architecture: IndexedDB for storage, CDN for viz libs, only `/api/ai/suggest` remains server-side (z-ai-web-dev-sdk must be backend).
+- ✅ `bun run lint` passes with 0 errors.
+- ✅ Dev server stable (survives browser open + template selection + save/load).
+- ✅ ECharts editor verified: bar-chart template loads, canvas renders, config panel (title/data/style) functional.
+- ✅ Mermaid editor verified: flowchart template loads, SVG renders.
+- ✅ Infographic editor verified: timeline template loads, SVG renders, config panel functional.
+- ✅ IndexedDB save/load verified: saved "测试柱状图", confirmed "charts in DB: 1", "我的图表" dialog shows the saved chart with thumbnail.
+- ✅ Template picker: 161 templates across 10 purpose categories, search works.
+- ✅ The "Retrying 1/3..." Prisma timeout messages are gone (no more DB connection attempts during compilation).

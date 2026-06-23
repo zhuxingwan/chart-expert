@@ -9,8 +9,8 @@ export interface SavedChart {
   type: string
   config: unknown
   thumbnail: string | null
-  createdAt: string
-  updatedAt: string
+  createdAt: number
+  updatedAt: number
 }
 
 // ---- ECharts ----
