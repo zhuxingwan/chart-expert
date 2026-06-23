@@ -203,36 +203,55 @@ export function groupTemplatesByCategory() {
   return groups
 }
 
-/** Default sample data per data shape, so a freshly-picked template isn't empty */
+/** Default sample data per data shape — based on official @antv/infographic datasets */
 export function defaultDataForShape(
   shape: TemplateMeta['dataShape']
 ): import('@/types/chart').InfographicData {
   if (shape === 'relation') {
     return {
-      title: { text: 'Team Structure', subtext: 'Key roles and connections' },
+      title: { text: 'Subsidiary Profit Analysis', subtext: 'Financial performance by region' },
       nodes: [
-        { id: 'n1', label: 'PM', group: 'Core' },
-        { id: 'n2', label: 'Designer', group: 'Design' },
-        { id: 'n3', label: 'Engineer', group: 'Dev' },
-        { id: 'n4', label: 'QA', group: 'Dev' },
+        { id: 'hq', label: 'Headquarters', group: 'Core' },
+        { id: 'north', label: 'North Branch', group: 'Regional' },
+        { id: 'east', label: 'East Branch', group: 'Regional' },
+        { id: 'south', label: 'South Branch', group: 'Regional' },
+        { id: 'rd', label: 'R&D Center', group: 'Support' },
+        { id: 'supply', label: 'Supply Chain', group: 'Support' },
       ],
       edges: [
-        { from: 'n1', to: 'n2', label: 'leads' },
-        { from: 'n1', to: 'n3', label: 'leads' },
-        { from: 'n3', to: 'n4', label: 'tests' },
+        { from: 'hq', to: 'north', label: 'manages' },
+        { from: 'hq', to: 'east', label: 'manages' },
+        { from: 'hq', to: 'south', label: 'manages' },
+        { from: 'hq', to: 'rd', label: 'oversees' },
+        { from: 'hq', to: 'supply', label: 'oversees' },
+        { from: 'rd', to: 'east', label: 'supports' },
       ],
     }
   }
   if (shape === 'hierarchy') {
     return {
-      title: { text: 'Product Team', subtext: 'Organization overview' },
+      title: { text: 'User Research', subtext: 'Understanding user needs and pain points' },
       lists: [
         {
-          label: 'Product Lead',
-          desc: 'Overall strategy',
+          label: 'User Research',
+          desc: 'Core objective',
           children: [
-            { label: 'Design', desc: 'UI/UX & brand' },
-            { label: 'Engineering', desc: 'Build & deploy', children: [{ label: 'Frontend' }, { label: 'Backend' }] },
+            {
+              label: 'Why use the platform',
+              desc: 'Motivation analysis',
+              children: [
+                { label: 'Discovery channels', desc: 'How users find us' },
+                { label: 'Key attractions', desc: 'What draws users in' },
+              ],
+            },
+            {
+              label: 'Usage scenarios',
+              desc: 'Context analysis',
+              children: [
+                { label: 'Trigger events', desc: 'When users engage' },
+                { label: 'Feature usage', desc: 'Which features are used' },
+              ],
+            },
           ],
         },
       ],
@@ -240,21 +259,31 @@ export function defaultDataForShape(
   }
   if (shape === 'compare') {
     return {
-      title: { text: 'Plan A vs Plan B', subtext: 'Feature comparison' },
+      title: { text: 'Pros & Cons', subtext: 'Current strengths and weaknesses' },
       lists: [
-        { label: 'Plan A', desc: 'Fast launch', children: [{ label: 'Quick setup' }, { label: 'Lower cost' }, { label: 'Limited scale' }] },
-        { label: 'Plan B', desc: 'Full feature', children: [{ label: 'Scalable' }, { label: 'Custom design' }, { label: 'Higher cost' }] },
+        { label: 'Strengths', desc: 'Competitive advantages', children: [
+          { label: 'Strong R&D', desc: 'Tech leadership, self-innovation' },
+          { label: 'High retention', desc: '60%+ repurchase rate' },
+          { label: 'Service quality', desc: 'Fast response, high satisfaction' },
+        ]},
+        { label: 'Weaknesses', desc: 'Areas to improve', children: [
+          { label: 'Low brand awareness', desc: 'Marketing needs boost' },
+          { label: 'Limited channels', desc: 'Online presence incomplete' },
+          { label: 'High operating cost', desc: 'Above industry average' },
+        ]},
       ],
     }
   }
-  // list / chart
+  // list / chart — based on official LIST dataset
   return {
-    title: { text: 'Key Metrics', subtext: 'Q4 performance highlights' },
+    title: { text: 'Core Strengths', subtext: 'Key advantages across dimensions' },
     lists: [
-      { label: 'Revenue', desc: 'Total income', value: 92, icon: 'growth' },
-      { label: 'Users', desc: 'Active monthly', value: 78, icon: 'user' },
-      { label: 'Retention', desc: 'Monthly rate', value: 65, icon: 'repeat' },
-      { label: 'NPS Score', desc: 'Customer rating', value: 54, icon: 'star' },
+      { label: 'Brand Impact', desc: 'Strong recognition in target users', value: 85, icon: 'diamond' },
+      { label: 'Tech R&D', desc: 'Proprietary core systems, continuous innovation', value: 90, icon: 'code' },
+      { label: 'Market Growth', desc: 'Rapid user growth in past year', value: 78, icon: 'growth' },
+      { label: 'Satisfaction', desc: 'High overall service rating', value: 88, icon: 'happy' },
+      { label: 'Data Assets', desc: 'Complete user profiling system', value: 92, icon: 'user' },
+      { label: 'Innovation', desc: 'Above-average launch frequency', value: 83, icon: 'rocket' },
     ],
   }
 }

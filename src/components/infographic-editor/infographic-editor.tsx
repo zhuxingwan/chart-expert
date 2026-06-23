@@ -39,6 +39,7 @@ import {
   Grid2x2,
   Network,
   Share2,
+  Workflow,
   BarChart3,
   BarChartHorizontal,
   LineChart,
@@ -121,22 +122,58 @@ function getRandomPalette(): string[] {
   return COLOR_PRESETS[Math.floor(Math.random() * COLOR_PRESETS.length)].colors
 }
 
-// Icon registry — maps template icon names to lucide components
-const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
-  Rows3, LayoutGrid, Columns3, Triangle, PieChart, Waves, Spline,
-  'GitCommitHorizontal': GitCommitHorizontal, ListOrdered, 'Map': MapIcon,
-  CircleDot, Filter, ArrowRightLeft, TrendingUp, Database, Mountain,
-  Grid3x3, RefreshCw, Circle, Columns2, Split, 'Grid2x2': Grid2x2,
-  Network, Share2, 'BarChart3': BarChart3, 'BarChartHorizontal': BarChartHorizontal,
-  'LineChart': LineChart, Cloud, Square,
+// Icon prefix map — matches the unified catalog's INFOGRAPHIC_ICON_MAP
+const INFO_ICON_MAP: { prefix: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { prefix: 'list-row', icon: Rows3 },
+  { prefix: 'list-grid', icon: LayoutGrid },
+  { prefix: 'list-column', icon: Columns3 },
+  { prefix: 'list-pyramid', icon: Triangle },
+  { prefix: 'list-sector', icon: PieChart },
+  { prefix: 'list-waterfall', icon: Waves },
+  { prefix: 'list-zigzag', icon: Spline },
+  { prefix: 'sequence-timeline', icon: GitCommitHorizontal },
+  { prefix: 'sequence-steps', icon: ListOrdered },
+  { prefix: 'sequence-snake', icon: Spline },
+  { prefix: 'sequence-roadmap', icon: MapIcon },
+  { prefix: 'sequence-circular', icon: CircleDot },
+  { prefix: 'sequence-pyramid', icon: Triangle },
+  { prefix: 'sequence-funnel', icon: Filter },
+  { prefix: 'sequence-interaction', icon: ArrowRightLeft },
+  { prefix: 'sequence-color-snake', icon: Spline },
+  { prefix: 'sequence-horizontal-zigzag', icon: Spline },
+  { prefix: 'sequence-zigzag', icon: Spline },
+  { prefix: 'sequence-ascending', icon: TrendingUp },
+  { prefix: 'sequence-cylinders', icon: Database },
+  { prefix: 'sequence-stairs', icon: TrendingUp },
+  { prefix: 'sequence-mountain', icon: Mountain },
+  { prefix: 'sequence-filter-mesh', icon: Grid3x3 },
+  { prefix: 'sequence-circle-arrows', icon: RefreshCw },
+  { prefix: 'sequence-zigzag-pucks', icon: Circle },
+  { prefix: 'compare-binary', icon: Columns2 },
+  { prefix: 'compare-hierarchy', icon: Split },
+  { prefix: 'compare-swot', icon: Grid2x2 },
+  { prefix: 'compare-quadrant', icon: Grid2x2 },
+  { prefix: 'hierarchy-tree', icon: Network },
+  { prefix: 'relation-network', icon: Share2 },
+  { prefix: 'relation-circle', icon: Circle },
+  { prefix: 'relation-dagre', icon: Workflow },
+  { prefix: 'chart-pie', icon: PieChart },
+  { prefix: 'chart-column', icon: BarChart3 },
+  { prefix: 'chart-bar', icon: BarChartHorizontal },
+  { prefix: 'chart-line', icon: LineChart },
+  { prefix: 'chart-wordcloud', icon: Cloud },
+  { prefix: 'quadrant', icon: Grid2x2 },
+]
+
+function getTemplateIcon(templateId: string): React.ComponentType<{ className?: string }> {
+  for (const { prefix, icon } of INFO_ICON_MAP) {
+    if (templateId.startsWith(prefix)) return icon
+  }
+  return Square
 }
 
 function deepClone<T>(v: T): T {
   return JSON.parse(JSON.stringify(v)) as T
-}
-
-function getIcon(name: string): React.ComponentType<{ className?: string }> {
-  return ICON_MAP[name] ?? Square
 }
 
 // ---------------------------------------------------------------------------
@@ -531,8 +568,7 @@ interface CardProps {
 function TemplateCard({ tpl, active, onClick }: CardProps) {
   const t = useT()
   const { locale } = useI18n()
-  const iconKey = tpl.id.split('-').slice(0, 2).join('-')
-  const IconComponent = (getIcon(iconKey) || getIcon(tpl.id.split('-')[0]) || Square) as React.FC<{ className?: string }>
+  const IconComponent = getTemplateIcon(tpl.id) as React.FC<{ className?: string }>
   return (
     <button
       onClick={onClick}
@@ -978,21 +1014,6 @@ function ConfigPanel({ config, template, update }: ConfigProps) {
                   </button>
                 )}
               </div>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              <Label className="w-16 text-xs">{t('infographic.background')}</Label>
-              <Input
-                type="color"
-                value={config.background}
-                onChange={(e) => update({ background: e.target.value })}
-                className="h-8 w-10 cursor-pointer p-1"
-              />
-              <Input
-                value={config.background}
-                onChange={(e) => update({ background: e.target.value })}
-                className="h-8 flex-1 font-mono text-xs"
-              />
             </div>
           </div>
         </section>
