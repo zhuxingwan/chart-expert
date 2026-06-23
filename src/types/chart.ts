@@ -123,7 +123,7 @@ export interface InfographicConfig {
   theme: 'light' | 'dark' | 'hand-drawn'
   background: string
   colorPrimary?: string // primary color for theme (hex)
-  palette?: string // palette preset name
+  palette?: string[] // palette colors (array of hex strings)
   width: number
   height: number
 }

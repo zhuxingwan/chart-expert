@@ -96,37 +96,30 @@ import {
 } from '@/lib/i18n/template-names'
 
 // ─── Color palette presets (multi-color combinations) ───────────────────
-// Each preset is a harmonious color combination: primary color + background
-const COLOR_PRESETS: { name: string; color: string; bg?: string }[] = [
-  { name: 'Ocean', color: '#1783FF', bg: '#F0F7FF' },
-  { name: 'Sunset', color: '#FF6B6B', bg: '#FFF5F5' },
-  { name: 'Forest', color: '#10B981', bg: '#F0FDF4' },
-  { name: 'Honey', color: '#F59E0B', bg: '#FFFBEB' },
-  { name: 'Lavender', color: '#8B5CF6', bg: '#F5F3FF' },
-  { name: 'Cherry', color: '#F43F5E', bg: '#FFF1F2' },
-  { name: 'Sky', color: '#06B6D4', bg: '#ECFEFF' },
-  { name: 'Iris', color: '#6366F1', bg: '#EEF2FF' },
-  { name: 'Mint', color: '#14B8A6', bg: '#F0FDFA' },
-  { name: 'Pumpkin', color: '#F97316', bg: '#FFF7ED' },
-  { name: 'Orchid', color: '#D946EF', bg: '#FDF4FF' },
-  { name: 'Grass', color: '#84CC16', bg: '#F7FEE7' },
-  { name: 'Rosewood', color: '#BE123C', bg: '#FFF1F2' },
-  { name: 'Royal', color: '#3730A3', bg: '#EEF2FF' },
-  { name: 'Teal Dark', color: '#0F766E', bg: '#F0FDFA' },
-  { name: 'Slate', color: '#475569', bg: '#F8FAFC' },
+// Each preset is a harmonious palette of 5 colors used by the infographic engine.
+const COLOR_PRESETS: { name: string; colors: string[] }[] = [
+  { name: 'Slate', colors: ['#1e293b', '#334155', '#475569', '#64748b', '#94a3b8'] },
+  { name: 'Ocean', colors: ['#0c4a6e', '#075985', '#0369a1', '#0284c7', '#38bdf8'] },
+  { name: 'Forest', colors: ['#14532d', '#166534', '#15803d', '#16a34a', '#4ade80'] },
+  { name: 'Sunset', colors: ['#7c2d12', '#9a3412', '#c2410c', '#ea580c', '#fb923c'] },
+  { name: 'Rose', colors: ['#881337', '#9f1239', '#be123c', '#e11d48', '#fb7185'] },
+  { name: 'Violet', colors: ['#3b0764', '#5b21b6', '#6d28d9', '#7c3aed', '#a78bfa'] },
+  { name: 'Amber', colors: ['#713f12', '#854d0e', '#a16207', '#ca8a04', '#facc15'] },
+  { name: 'Teal', colors: ['#134e4a', '#0f766e', '#0d9488', '#14b8a6', '#5eead4'] },
+  { name: 'Indigo', colors: ['#1e1b4b', '#312e81', '#3730a3', '#4338ca', '#818cf8'] },
+  { name: 'Cyan', colors: ['#083344', '#155e75', '#0e7490', '#0891b2', '#22d3ee'] },
+  { name: 'Fuchsia', colors: ['#4a044e', '#701a75', '#86198f', '#a21caf', '#e879f9'] },
+  { name: 'Lime', colors: ['#1a2e05', '#365314', '#3f6212', '#4d7c0f', '#84cc16'] },
+  { name: 'Warm', colors: ['#7f1d1d', '#9a3412', '#a16207', '#15803d', '#0e7490'] },
+  { name: 'Cool', colors: ['#1e3a8a', '#3730a3', '#6d28d9', '#a21caf', '#be185d'] },
+  { name: 'Earth', colors: ['#44403c', '#78716c', '#a8a29e', '#d6d3d1', '#e7e5e4'] },
+  { name: 'Vibrant', colors: ['#dc2626', '#ea580c', '#facc15', '#16a34a', '#0ea5e9'] },
 ]
 
-// Random aesthetically pleasing color combinations
-const RANDOM_PALETTE: { color: string; bg: string }[] = [
-  { color: '#1783FF', bg: '#F0F7FF' }, { color: '#FF6B6B', bg: '#FFF5F5' },
-  { color: '#10B981', bg: '#F0FDF4' }, { color: '#F59E0B', bg: '#FFFBEB' },
-  { color: '#8B5CF6', bg: '#F5F3FF' }, { color: '#F43F5E', bg: '#FFF1F2' },
-  { color: '#06B6D4', bg: '#ECFEFF' }, { color: '#6366F1', bg: '#EEF2FF' },
-  { color: '#14B8A6', bg: '#F0FDFA' }, { color: '#F97316', bg: '#FFF7ED' },
-  { color: '#D946EF', bg: '#FDF4FF' }, { color: '#84CC16', bg: '#F7FEE7' },
-  { color: '#EC4899', bg: '#FDF2F8' }, { color: '#3B82F6', bg: '#EFF6FF' },
-  { color: '#22C55E', bg: '#F0FDF4' }, { color: '#A855F7', bg: '#FAF5FF' },
-]
+// Random palette from presets
+function getRandomPalette(): string[] {
+  return COLOR_PRESETS[Math.floor(Math.random() * COLOR_PRESETS.length)].colors
+}
 
 // Icon registry — maps template icon names to lucide components
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -643,7 +636,7 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
           theme: config.theme,
           themeConfig: {
             ...(config.colorPrimary ? { colorPrimary: config.colorPrimary } : {}),
-            ...(config.colorPrimary ? { colorBg: config.background } : {}),
+            ...(config.palette ? { palette: config.palette } : {}),
           },
         })
         setError(null)
@@ -653,7 +646,7 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
       }
     }, 250)
     return () => clearTimeout(timer)
-  }, [config.template, config.data, config.theme, config.colorPrimary, config.background, fullscreen])
+  }, [config.template, config.data, config.theme, config.colorPrimary, config.palette, config.background, fullscreen])
 
   const handleZoomIn = () => setZoom((z) => Math.min(2.5, z + 0.2))
   const handleZoomOut = () => setZoom((z) => Math.max(0.4, z - 0.2))
@@ -937,38 +930,47 @@ function ConfigPanel({ config, template, update }: ConfigProps) {
             {/* Color palette presets */}
             <div>
               <Label className="mb-1 block text-[10px] text-muted-foreground">
-                {locale.startsWith('zh') ? '主色预设' : 'Color Preset'}
+                {locale.startsWith('zh') ? '调色板' : 'Palette'}
               </Label>
               <div className="flex flex-wrap gap-1.5">
-                {COLOR_PRESETS.map((preset) => (
-                  <button
-                    key={preset.name}
-                    onClick={() => update({ colorPrimary: preset.color, background: preset.bg ?? config.background })}
-                    className={cn(
-                      'h-7 w-7 rounded-full border-2 transition-all',
-                      config.colorPrimary === preset.color
-                        ? 'border-foreground ring-1 ring-foreground ring-offset-1'
-                        : 'border-muted hover:border-foreground/40',
-                    )}
-                    style={{ backgroundColor: preset.color }}
-                    title={preset.name}
-                  />
-                ))}
+                {COLOR_PRESETS.map((preset) => {
+                  const paletteStr = preset.colors.join(',')
+                  const isActive = config.palette?.join(',') === paletteStr
+                  return (
+                    <button
+                      key={preset.name}
+                      onClick={() => update({ palette: preset.colors, colorPrimary: preset.colors[0] })}
+                      className={cn(
+                        'h-7 w-7 rounded-full border-2 transition-all overflow-hidden',
+                        isActive
+                          ? 'border-foreground ring-1 ring-foreground ring-offset-1'
+                          : 'border-muted hover:border-foreground/40',
+                      )}
+                      title={preset.name}
+                    >
+                      <div className="flex h-full w-full">
+                        {preset.colors.slice(0, 3).map((c, i) => (
+                          <div key={i} className="flex-1" style={{ backgroundColor: c }} />
+                        ))}
+                      </div>
+                    </button>
+                  )
+                })}
                 {/* Random palette button */}
                 <button
                   onClick={() => {
-                    const random = RANDOM_PALETTE[Math.floor(Math.random() * RANDOM_PALETTE.length)]
-                    update({ colorPrimary: random.color, background: random.bg })
+                    const random = getRandomPalette()
+                    update({ palette: random, colorPrimary: random[0] })
                   }}
                   className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-muted text-xs hover:border-foreground/40"
                   title={locale.startsWith('zh') ? '随机配色' : 'Random'}
                 >
                   🎲
                 </button>
-                {/* Reset color */}
-                {config.colorPrimary && (
+                {/* Reset palette */}
+                {config.palette && (
                   <button
-                    onClick={() => update({ colorPrimary: undefined })}
+                    onClick={() => update({ palette: undefined, colorPrimary: undefined })}
                     className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-muted text-xs text-muted-foreground hover:border-destructive hover:text-destructive"
                     title={locale.startsWith('zh') ? '清除' : 'Clear'}
                   >
