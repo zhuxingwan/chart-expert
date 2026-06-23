@@ -4,7 +4,7 @@ import * as React from 'react'
 import {
   type UserLicense,
   FREE_LICENSE,
-  loadStoredLicense,
+  checkStoredLicense,
   saveStoredLicense,
   clearStoredLicense,
   isProUser as checkIsProUser,
@@ -31,9 +31,14 @@ export function useLicense() {
 export function LicenseProvider({ children }: { children: React.ReactNode }) {
   const [license, setLicenseState] = React.useState<UserLicense>(FREE_LICENSE)
 
-  // Load stored license on mount (client-side only)
+  // On mount, check stored license using the same logic as the note app.
+  // This reads licenseKey + licenseEmail from localStorage and validates them.
   React.useEffect(() => {
-    setLicenseState(loadStoredLicense())
+    checkStoredLicense((validated: UserLicense) => {
+      setLicenseState(validated)
+      // Also cache in our own key for synchronous reads
+      saveStoredLicense(validated)
+    })
   }, [])
 
   const setLicense = React.useCallback((newLicense: UserLicense) => {

@@ -55,6 +55,9 @@ export function LicenseDialog({ open, onOpenChange }: Props) {
         }
         setLicense(newLicense)
         resetSubDeviceFailCount()
+        // Save to localStorage using the same keys as the note app
+        localStorage.setItem('licenseKey', licenseKey)
+        localStorage.setItem('licenseEmail', licenseEmail)
         toast.success(isZh ? 'License 验证成功！已解锁 Pro 功能。' : 'License verified successfully! Pro features unlocked.')
         onOpenChange(false)
         setLicenseKey('')

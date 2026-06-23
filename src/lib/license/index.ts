@@ -1,27 +1,26 @@
 /**
  * License verification logic for NoteRich Chart Expert.
+ * Completely matches the NoteRich note app's license system.
  *
- * This is a PURE FRONTEND verification — no server/API calls.
- * The license key is cryptographically signed using HMAC-SHA256 with a
- * secret key embedded in the code. The verification algorithm and secret
- * are obfuscated via webpack-obfuscator in production builds (see next.config.ts).
- *
- * License key format: NR-{base64(HMAC-SHA256 payload)}-{base64(payload)}
- * Payload: {email}|{expiryTimestamp}|{type}
+ * Uses XOR-based encryption with a key derived from a fixed password + salt.
+ * The salt is dynamically read from the NoteRich webicon SVG path data.
+ * In production, this code is obfuscated via webpack-obfuscator (see next.config.ts).
  */
 
+const IV_LENGTH = 16;
+
 export interface LicenseValidationResult {
-  valid: boolean
-  type?: string // 'pro' | 'free'
-  expiry?: number | null // Unix timestamp (ms)
-  error?: string | null
+  valid: boolean;
+  type?: string;
+  expiry?: number;
+  error?: string;
 }
 
 export interface UserLicense {
-  type: string // 'pro' | 'free'
-  expiry: number | null
-  email: string | null
-  error: string | null
+  type: string;
+  expiry: number | null;
+  email: string | null;
+  error: string | null;
 }
 
 export const FREE_LICENSE: UserLicense = {
@@ -29,226 +28,277 @@ export const FREE_LICENSE: UserLicense = {
   expiry: null,
   email: null,
   error: null,
-}
+};
 
-const LICENSE_STORAGE_KEY = 'noterich-license'
+const LICENSE_STORAGE_KEY = 'noterich-license';
 
-// ─── Embedded secret (obfuscated in production) ──────────────────────────
-// This key is used to sign and verify license keys. In production builds,
-// webpack-obfuscator encrypts this string and the verification logic.
-const LICENSE_SECRET = 'NR-ChartExpert-2024-PRO-License-SecretKey-v1'
+// ─── Key derivation (matches note app exactly) ──────────────────────────
 
-// ─── HMAC-SHA256 implementation (Web Crypto API) ────────────────────────
-
-async function hmacSha256(message: string, secret: string): Promise<string> {
-  const encoder = new TextEncoder()
-  const keyData = encoder.encode(secret)
-  const messageData = encoder.encode(message)
-
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw',
-    keyData,
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  )
-
-  const signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData)
-  // Convert to base64url (no padding)
-  const bytes = new Uint8Array(signature)
-  let binary = ''
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i])
+export async function deriveKeyFromParams(
+  password: string,
+  salt: string,
+): Promise<ArrayBuffer> {
+  const combined = password + salt;
+  let hash = 0;
+  for (let i = 0; i < combined.length; i++) {
+    const char = combined.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash |= 0;
   }
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  const keyBytes = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) {
+    keyBytes[i] = (hash >> ((i % 4) * 8)) & 0xff;
+  }
+  return keyBytes.buffer;
 }
 
-// ─── Base64 URL-safe helpers ─────────────────────────────────────────────
+// ─── Decryption (matches note app exactly) ──────────────────────────────
 
-function base64UrlEncode(str: string): string {
-  return btoa(unescape(encodeURIComponent(str)))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-}
-
-function base64UrlDecode(str: string): string {
-  const padded = str.replace(/-/g, '+').replace(/_/g, '/')
-  const decoded = atob(padded)
-  return decodeURIComponent(escape(decoded))
-}
-
-// ─── License key generation (for testing) ────────────────────────────────
-
-/**
- * Generate a test license key for development/testing.
- * Creates a properly-signed key that passes local verification.
- * Expiry is 365 days from now.
- *
- * Key format: NR.{signature}.{payload}
- * Using '.' as delimiter (base64url uses - and _, so '.' is safe).
- */
-export async function generateTestLicenseKey(email: string): Promise<string> {
-  const expiry = Date.now() + 365 * 24 * 60 * 60 * 1000 // 1 year
-  const payload = `${email}|${expiry}|pro`
-  const payloadEncoded = base64UrlEncode(payload)
-  const signature = await hmacSha256(payloadEncoded, LICENSE_SECRET)
-  return `NR.${signature}.${payloadEncoded}`
-}
-
-// ─── License key verification ─────────────────────────────────────────────
-
-/**
- * Validate a license key + email pair.
- * This is a PURE FRONTEND operation — no network calls.
- *
- * The key format is: NR.{signature}.{payload}
- * Using '.' as delimiter (base64url uses - and _, so '.' is safe).
- * Where:
- *   - signature = base64url(HMAC-SHA256(payload, LICENSE_SECRET))
- *   - payload = base64url("{email}|{expiryTimestamp}|{type}")
- *
- * Verification steps:
- *   1. Parse the key into signature + payload
- *   2. Recompute HMAC-SHA256 of the payload using the embedded secret
- *   3. Compare signatures (timing-safe)
- *   4. Decode payload and check email match + expiry
- */
-export async function validateLicenseKey(
-  licenseKey: string,
-  email: string,
-): Promise<LicenseValidationResult> {
+export async function decryptLicense(
+  encryptedData: Uint8Array,
+  key: ArrayBuffer,
+): Promise<any> {
+  const iv = encryptedData.slice(0, IV_LENGTH);
+  const ciphertext = encryptedData.slice(IV_LENGTH);
+  const keyMaterial = new Uint8Array(key);
+  const decryptedBuffer = new Uint8Array(ciphertext.length);
+  for (let i = 0; i < ciphertext.length; i++) {
+    decryptedBuffer[i] = ciphertext[i] ^ keyMaterial[i % keyMaterial.length];
+  }
+  const decoder = new TextDecoder();
+  const jsonString = decoder.decode(decryptedBuffer);
   try {
-    // Parse key format: NR.{signature}.{payload}
-    const key = licenseKey.trim()
-    if (!key.startsWith('NR.')) {
-      return { valid: false, error: 'Invalid license key format.' }
+    return JSON.parse(jsonString);
+  } catch (e) {
+    throw new Error('Decryption failed or resulted in invalid JSON');
+  }
+}
+
+// ─── Helper: get the derive salt from webicon SVG path ──────────────────
+
+function getDeriveSalt(): string {
+  if (typeof document === 'undefined') return 'FIXED_DERIVE_SALT';
+  return (
+    document
+      .getElementById('webicon')
+      ?.getElementsByTagName('path')[0]
+      ?.getAttribute('d')
+      ?.slice(0, 50) ?? 'FIXED_DERIVE_SALT'
+  );
+}
+
+// ─── License validation (matches note app exactly) ──────────────────────
+
+export const validateLicenseKey = async (
+  key: string,
+  email: string,
+): Promise<LicenseValidationResult> => {
+  try {
+    let binaryString: string;
+    try {
+      binaryString = atob(key);
+    } catch (e) {
+      console.error('License key decoding failed:', e);
+      return { error: 'License key format is invalid.', valid: false };
     }
-
-    const afterPrefix = key.substring(3) // remove "NR."
-    const dotIdx = afterPrefix.indexOf('.')
-    if (dotIdx === -1) {
-      return { valid: false, error: 'Invalid license key format.' }
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
     }
-
-    const signature = afterPrefix.substring(0, dotIdx)
-    const payloadEncoded = afterPrefix.substring(dotIdx + 1)
-
-    if (!signature || !payloadEncoded) {
-      return { valid: false, error: 'Invalid license key format.' }
+    const derivedKey = await deriveKeyFromParams(
+      'noterich.com',
+      getDeriveSalt(),
+    );
+    let decryptedData: any;
+    try {
+      decryptedData = await decryptLicense(bytes, derivedKey);
+    } catch (e) {
+      console.error('License key decryption failed:', e);
+      return { error: 'License key decryption failed.', valid: false };
     }
-
-    // Recompute the signature
-    const expectedSignature = await hmacSha256(payloadEncoded, LICENSE_SECRET)
-
-    // Timing-safe comparison
-    if (signature.length !== expectedSignature.length) {
-      return { valid: false, error: 'License key signature mismatch.' }
+    if (
+      typeof decryptedData !== 'object' ||
+      !decryptedData.hasOwnProperty('user') ||
+      !decryptedData.hasOwnProperty('expiry') ||
+      !decryptedData.hasOwnProperty('type')
+    ) {
+      return { error: 'License key structure is incorrect.', valid: false };
     }
-    let signatureMatch = true
-    for (let i = 0; i < signature.length; i++) {
-      if (signature.charCodeAt(i) !== expectedSignature.charCodeAt(i)) {
-        signatureMatch = false
+    if (decryptedData.user !== email) {
+      return { error: 'Email does not match the license key.', valid: false };
+    }
+    if (Date.now() > decryptedData.expiry) {
+      return { error: 'License key has expired.', valid: false };
+    }
+    if (decryptedData.type !== 'pro') {
+      return { error: 'Invalid license type.', valid: false };
+    }
+    return {
+      expiry: decryptedData.expiry,
+      type: decryptedData.type,
+      valid: true,
+    };
+  } catch (error) {
+    console.error('An unexpected error occurred during validation:', error);
+    return {
+      error: 'An unexpected error occurred during validation.',
+      valid: false,
+    };
+  }
+};
+
+// ─── Check stored license on app load (matches note app) ────────────────
+
+export const checkStoredLicense = async (
+  setUserLicense: (license: UserLicense) => void,
+  onError?: (error: string) => void,
+): Promise<void> => {
+  const storedKey = localStorage.getItem('licenseKey');
+  const storedEmail = localStorage.getItem('licenseEmail');
+  if (storedKey && storedEmail) {
+    const validationResult = await validateLicenseKey(storedKey, storedEmail);
+    if (
+      validationResult.valid &&
+      validationResult.type &&
+      validationResult.expiry
+    ) {
+      setUserLicense({
+        email: storedEmail,
+        error: null,
+        expiry: validationResult.expiry,
+        type: validationResult.type,
+      });
+    } else {
+      setUserLicense({
+        email: storedEmail,
+        error: validationResult.error || 'Unknown validation error',
+        expiry: validationResult.expiry || null,
+        type: 'free',
+      });
+      if (validationResult.error && onError) {
+        onError(validationResult.error);
       }
     }
-    if (!signatureMatch) {
-      return { valid: false, error: 'License key signature mismatch.' }
-    }
-
-    // Decode payload: {email}|{expiryTimestamp}|{type}
-    const payload = base64UrlDecode(payloadEncoded)
-    const payloadParts = payload.split('|')
-    if (payloadParts.length !== 3) {
-      return { valid: false, error: 'Invalid license payload.' }
-    }
-
-    const [payloadEmail, expiryStr, type] = payloadParts
-    const expiry = parseInt(expiryStr, 10)
-
-    // Verify email matches
-    if (payloadEmail.toLowerCase() !== email.trim().toLowerCase()) {
-      return { valid: false, error: 'License email does not match.' }
-    }
-
-    // Verify not expired
-    if (isNaN(expiry) || expiry < Date.now()) {
-      return { valid: false, error: 'License has expired. Please renew your subscription.' }
-    }
-
-    // Verify type is valid
-    if (type !== 'pro') {
-      return { valid: false, error: 'Invalid license type.' }
-    }
-
-    return {
-      valid: true,
-      type: 'pro',
-      expiry,
-      error: null,
-    }
-  } catch {
-    return { valid: false, error: 'License verification failed. Please check your key and email.' }
+  } else {
+    setUserLicense({ email: null, error: null, expiry: null, type: 'free' });
   }
-}
+};
 
-/**
- * Reset the sub-device fail count (called on successful validation).
- */
+// ─── Test license key generation (matches note app exactly) ─────────────
+
+export const generateTestLicenseKey = async (
+  email: string,
+  type: string = 'pro',
+  daysToAdd: number = 36500,
+): Promise<string> => {
+  try {
+    if (!email) {
+      throw new Error('Email is required to generate a test license key.');
+    }
+    const licenseData = {
+      expiry: Date.now() + daysToAdd * 24 * 60 * 60 * 1000,
+      isTest: true,
+      type: type,
+      user: email,
+    };
+    const derivedKey = await deriveKeyFromParams(
+      'noterich.com',
+      getDeriveSalt(),
+    );
+
+    const encryptLicense = async (
+      data: any,
+      key: ArrayBuffer,
+    ): Promise<Uint8Array> => {
+      const encoder = new TextEncoder();
+      const jsonString = JSON.stringify(data);
+      const dataBytes = encoder.encode(jsonString);
+      const iv = new Uint8Array(IV_LENGTH);
+      const timestamp = Date.now();
+      for (let i = 0; i < IV_LENGTH; i++) {
+        iv[i] = (timestamp >> (i * 8)) & 0xff;
+      }
+      const keyMaterial = new Uint8Array(key);
+      const encryptedBuffer = new Uint8Array(dataBytes.length);
+      for (let i = 0; i < dataBytes.length; i++) {
+        encryptedBuffer[i] = dataBytes[i] ^ keyMaterial[i % keyMaterial.length];
+      }
+      const result = new Uint8Array(iv.length + encryptedBuffer.length);
+      result.set(iv, 0);
+      result.set(encryptedBuffer, iv.length);
+      return result;
+    };
+
+    const encryptedBytes = await encryptLicense(licenseData, derivedKey);
+    let binary = '';
+    const len = encryptedBytes.byteLength;
+    for (let i = 0; i < len; i++) {
+      binary += String.fromCharCode(encryptedBytes[i]);
+    }
+    const encodedKey = btoa(binary);
+    return encodedKey;
+  } catch (error) {
+    console.error('Error generating test license key:', error);
+    throw error;
+  }
+};
+
+// ─── Storage helpers ────────────────────────────────────────────────────
+
 export function resetSubDeviceFailCount(): void {
   try {
-    localStorage.removeItem('noterich-license-fail-count')
+    localStorage.removeItem('noterich-license-fail-count');
   } catch {
     // ignore
   }
 }
 
-/**
- * Load the saved license from localStorage.
- * Returns the stored license or a free default.
- * Also re-verifies the license on load to prevent tampering.
- */
 export function loadStoredLicense(): UserLicense {
   try {
-    const stored = localStorage.getItem(LICENSE_STORAGE_KEY)
-    if (stored) {
-      const parsed = JSON.parse(stored) as UserLicense
-      // Check expiry — if expired, downgrade to free
-      if (parsed.type === 'pro' && parsed.expiry && parsed.expiry < Date.now()) {
-        return { ...FREE_LICENSE, error: 'License expired. Please renew your Pro subscription.' }
+    // Use the same localStorage keys as the note app
+    const storedKey = localStorage.getItem('licenseKey');
+    const storedEmail = localStorage.getItem('licenseEmail');
+    if (storedKey && storedEmail) {
+      // We can't synchronously validate here (validation is async), so
+      // return a placeholder that will be re-validated on mount by
+      // checkStoredLicense(). For now, assume valid if keys exist.
+      // The provider will call checkStoredLicense() on mount to verify.
+      const storedLicense = localStorage.getItem(LICENSE_STORAGE_KEY);
+      if (storedLicense) {
+        const parsed = JSON.parse(storedLicense) as UserLicense;
+        if (parsed.type === 'pro' && parsed.expiry && parsed.expiry < Date.now()) {
+          return { ...FREE_LICENSE, error: 'License expired. Please renew your Pro subscription.' };
+        }
+        return parsed;
       }
-      return parsed
     }
   } catch {
     // ignore
   }
-  return FREE_LICENSE
+  return FREE_LICENSE;
 }
 
-/**
- * Save the license to localStorage.
- */
 export function saveStoredLicense(license: UserLicense): void {
   try {
-    localStorage.setItem(LICENSE_STORAGE_KEY, JSON.stringify(license))
+    localStorage.setItem(LICENSE_STORAGE_KEY, JSON.stringify(license));
   } catch {
     // ignore
   }
 }
 
-/**
- * Clear the stored license (downgrade to free).
- */
 export function clearStoredLicense(): void {
   try {
-    localStorage.removeItem(LICENSE_STORAGE_KEY)
+    localStorage.removeItem(LICENSE_STORAGE_KEY);
+    // Also clear the note app's keys
+    localStorage.removeItem('licenseKey');
+    localStorage.removeItem('licenseEmail');
   } catch {
     // ignore
   }
 }
 
-/**
- * Check if the user currently has an active Pro license.
- */
 export function isProUser(license: UserLicense | null): boolean {
-  if (!license || license.type !== 'pro') return false
-  if (license.expiry && license.expiry < Date.now()) return false
-  return true
+  if (!license || license.type !== 'pro') return false;
+  if (license.expiry && license.expiry < Date.now()) return false;
+  return true;
 }
