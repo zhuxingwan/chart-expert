@@ -257,8 +257,8 @@ export function AISuggestDialog({ open, onOpenChange, engine, onApply }: Props) 
         }
       }}
     >
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+        <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-amber-500" />
             {t('aiDialog.title')}
@@ -268,7 +268,7 @@ export function AISuggestDialog({ open, onOpenChange, engine, onApply }: Props) 
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4 py-2">
+        <div className="grid gap-4 py-2 overflow-y-auto min-h-0 flex-1">
           {/* Prompt input */}
           <div className="grid gap-2">
             <Label>{t('aiDialog.promptLabel')}</Label>
@@ -369,7 +369,7 @@ export function AISuggestDialog({ open, onOpenChange, engine, onApply }: Props) 
                       ⚠ {suggestion.calibrationNote}
                     </p>
                   )}
-                  <pre className="mt-2 max-h-40 overflow-auto rounded bg-background p-2 text-[10px] leading-relaxed">
+                  <pre className="mt-2 max-h-40 overflow-auto rounded bg-background p-2 text-[10px] leading-relaxed break-all whitespace-pre-wrap">
 {JSON.stringify(suggestion.config, null, 2)}
                   </pre>
                 </div>
@@ -378,7 +378,7 @@ export function AISuggestDialog({ open, onOpenChange, engine, onApply }: Props) 
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0 border-t pt-3">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             {t('actions.cancel')}
           </Button>

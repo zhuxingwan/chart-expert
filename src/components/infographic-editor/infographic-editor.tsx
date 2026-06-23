@@ -225,28 +225,83 @@ export function InfographicEditor({ config, onChange, onTemplateChange, previewR
 
   const applyTemplate = React.useCallback((tpl: TemplateMeta) => {
     setLocal((prev) => {
-      // Determine if the current data is compatible with the new template's data shape.
-      // If compatible (e.g. both are list-based), KEEP the existing data so the
-      // user's edits / AI-generated content are preserved across template switches.
-      // Only generate fresh default data when the shapes are incompatible.
       const prevShape = currentTemplate?.dataShape
       const newShape = tpl.dataShape
-      const sameShape = prevShape === newShape
 
-      // Even if shapes differ, some data can be adapted:
-      // list → sequence: lists array works for both
-      // sequence → list: lists array works for both
-      // list/sequence → chart: lists array works
-      // chart → list/sequence: lists array works
-      // hierarchy → hierarchy: tree structure works
-      // relation → relation: nodes/edges work
-      // compare → compare: groups work
-      let keepData = sameShape
+      // Try to preserve user data across template switches.
+      // Same shape → always keep data.
+      // Different shape → try to adapt:
+      //   - list/sequence/chart are all flat-list based → compatible
+      //   - hierarchy has tree structure → extract labels into flat list when going to flat shapes
+      //   - compare has groups → extract all children into flat list when going to flat shapes
+      //   - relation has nodes/edges → extract node labels into flat list when going to flat shapes
+      //   - flat → hierarchy: put all items under a single root
+      //   - flat → compare: split items into 2 groups
+      //   - flat → relation: create linear chain from items
+      let data = prev.data
 
-      if (!keepData) {
+      if (prevShape !== newShape) {
         const flatShapes = ['list', 'sequence', 'chart']
-        if (flatShapes.includes(prevShape ?? '') && flatShapes.includes(newShape)) {
-          keepData = true
+        const isFlatToFlat = flatShapes.includes(prevShape ?? '') && flatShapes.includes(newShape)
+
+        if (!isFlatToFlat) {
+          // Need to adapt data structure
+          const prevData = prev.data
+          const adapted: { title?: { text?: string; subtext?: string }; lists?: any[]; nodes?: any[]; edges?: any[] } = {
+            title: prevData.title,
+          }
+
+          // Extract flat items from any shape
+          let flatItems: any[] = []
+          if (prevData.lists) {
+            flatItems = prevData.lists.map((item: any) => ({
+              label: item.label,
+              desc: item.desc,
+              value: item.value,
+              icon: item.icon,
+            }))
+          } else if (prevData.nodes) {
+            flatItems = prevData.nodes.map((node: any) => ({
+              label: node.label,
+              desc: node.group,
+              icon: undefined,
+            }))
+          }
+
+          if (newShape === 'hierarchy') {
+            // Flat → hierarchy: single root with all items as children
+            adapted.lists = [{
+              label: flatItems[0]?.label || 'Root',
+              desc: flatItems[0]?.desc,
+              children: flatItems.slice(1).map(item => ({
+                label: item.label,
+                desc: item.desc,
+              })),
+            }]
+          } else if (newShape === 'compare') {
+            // Flat → compare: split into 2 groups
+            const mid = Math.ceil(flatItems.length / 2)
+            adapted.lists = [
+              { label: 'Group A', children: flatItems.slice(0, mid).map(i => ({ label: i.label, desc: i.desc })) },
+              { label: 'Group B', children: flatItems.slice(mid).map(i => ({ label: i.label, desc: i.desc })) },
+            ]
+          } else if (newShape === 'relation') {
+            // Flat → relation: create linear chain
+            adapted.nodes = flatItems.map((item, i) => ({
+              id: `n${i + 1}`,
+              label: item.label || `Node ${i + 1}`,
+              group: i === 0 ? 'A' : 'B',
+            }))
+            adapted.edges = flatItems.slice(1).map((item, i) => ({
+              from: `n${i + 1}`,
+              to: `n${i + 2}`,
+            }))
+          } else if (flatShapes.includes(newShape)) {
+            // hierarchy/compare/relation → flat: use extracted items
+            adapted.lists = flatItems
+          }
+
+          data = adapted as any
         }
       }
 
@@ -254,8 +309,7 @@ export function InfographicEditor({ config, onChange, onTemplateChange, previewR
         ...prev,
         type: tpl.id,
         template: tpl.id,
-        // Keep existing data if compatible; otherwise use default for the new shape
-        data: keepData ? prev.data : defaultDataForShape(newShape),
+        data,
       }
     })
     onTemplateChange?.('infographic:' + tpl.id)

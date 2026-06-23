@@ -129,6 +129,14 @@ Infographic data shape rules:
 - If no specific data provided, generate realistic sample data.
 - Generate ALL text content in the user's locale language.
 - For mermaid, write complete, syntactically-valid code.
+- CRITICAL for infographic: Keep ALL text SHORT and CONCISE — this is an infographic, not a document.
+  * Title: max 30 characters
+  * Subtitle: max 50 characters
+  * Item label: max 20 characters (2-4 words, like "Market Research" or "Q1 Launch")
+  * Item desc: max 40 characters (one short sentence summary)
+  * Use keywords, not full sentences
+  * Summarize and condense — the visual layout breaks with long text
+- For infographic "icon": use a short English keyword (e.g. "rocket", "trophy", "target", "growth", "idea", "check", "star", "heart", "user", "code", "chart", "globe", "lightbulb"). The engine fetches an SVG icon based on the keyword. Do NOT use emoji. If unsure, omit the icon field.
 - Output STRICT JSON only.`
 
 // ─── Domain Signature (EXACT COPY from note app) ────────────────────────
