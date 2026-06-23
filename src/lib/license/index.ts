@@ -76,15 +76,24 @@ export async function decryptLicense(
 
 // ─── Helper: get the derive salt from webicon SVG path ──────────────────
 
+// The salt is the first 50 characters of the NoteRich webicon SVG path 'd' attribute.
+// This is hardcoded as a fallback — the note app reads it dynamically from the DOM,
+// but we also keep it here to avoid timing issues where the #webicon element might
+// not be in the DOM yet when license validation runs.
+const WEBICON_PATH_D = 'M22.266 3.834a12.7 12.7 0 0 1 3.194.319c10.765 2.446 7.71 15.16 7.951 23.149.02.66.055 1.165.414 1.737 1.484 1.192 3.724-.94 4.96-1.82.047 3.194.432 7.023-1.783 9.62-2.9 3.401-9.023 2.953-12.214.162-5.819-5.09-3.274-14.17-3.848-20.956-.14-.903-.248-2.55-1.277-2.806-2.546.55-1.905 9.046-1.903 11.107l-.004 14.444q-6.539.047-13.076-.021c-.035-1.486-.04-3.02-.02-4.507.13-10.036-.195-20.16.03-30.187l8.263-.016c1.381 0 3.457-.06 4.765.04.073.233.077.34.1.58.87-.008 2.717-.729 4.448-.845m-4.58 3.315c-.025.82-.23 4.093.1 4.614 2.211-.717 4-.498 4.702 2.144 1.861 6.998-2.623 17.779 4.738 22.513 1.653.982 4.264 1.003 6.168.59 2.914-1.129 3.355-3.198 3.507-6.033-2.127.555-4.656.681-5.183-2.042-1.344-6.942 2.66-16.998-4.075-21.94-1.598-1.1-4.356-1.376-6.326-1.125-1.497.216-2.325.434-3.63 1.28';
+
 function getDeriveSalt(): string {
-  if (typeof document === 'undefined') return 'FIXED_DERIVE_SALT';
-  return (
-    document
+  if (typeof document !== 'undefined') {
+    const domSalt = document
       .getElementById('webicon')
       ?.getElementsByTagName('path')[0]
       ?.getAttribute('d')
-      ?.slice(0, 50) ?? 'FIXED_DERIVE_SALT'
-  );
+      ?.slice(0, 50);
+    if (domSalt) return domSalt;
+  }
+  // Fallback: use the hardcoded path (first 50 chars) — identical to what the
+  // note app reads from its #webicon element.
+  return WEBICON_PATH_D.slice(0, 50);
 }
 
 // ─── License validation (matches note app exactly) ──────────────────────

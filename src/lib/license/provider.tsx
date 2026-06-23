@@ -34,11 +34,23 @@ export function LicenseProvider({ children }: { children: React.ReactNode }) {
   // On mount, check stored license using the same logic as the note app.
   // This reads licenseKey + licenseEmail from localStorage and validates them.
   React.useEffect(() => {
-    checkStoredLicense((validated: UserLicense) => {
-      setLicenseState(validated)
-      // Also cache in our own key for synchronous reads
-      saveStoredLicense(validated)
-    })
+    // Small delay to ensure #webicon SVG is in the DOM (needed for salt derivation)
+    const timer = setTimeout(() => {
+      checkStoredLicense((validated: UserLicense) => {
+        setLicenseState(validated)
+        saveStoredLicense(validated)
+        // If validation failed (e.g. old incompatible key), clean up localStorage
+        if (validated.type === 'free' && validated.error) {
+          try {
+            localStorage.removeItem('licenseKey')
+            localStorage.removeItem('licenseEmail')
+          } catch {
+            // ignore
+          }
+        }
+      })
+    }, 100)
+    return () => clearTimeout(timer)
   }, [])
 
   const setLicense = React.useCallback((newLicense: UserLicense) => {
