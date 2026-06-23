@@ -1,0 +1,1137 @@
+     1→'use client'
+     2→
+     3→import * as React from 'react'
+     4→import { Infographic as InfographicEngine } from '@antv/infographic'
+     5→import { toast } from 'sonner'
+     6→import {
+     7→  Download,
+     8→  Copy,
+     9→  Plus,
+    10→  Trash2,
+    11→  ChevronRight,
+    12→  ChevronDown,
+    13→  ZoomIn,
+    14→  ZoomOut,
+    15→  Maximize,
+    16→  Wand2,
+    17→  LayoutGrid,
+    18→  Rows3,
+    19→  Columns3,
+    20→  Triangle,
+    21→  PieChart,
+    22→  Waves,
+    23→  Spline,
+    24→  GitCommitHorizontal,
+    25→  ListOrdered,
+    26→  Map as MapIcon,
+    27→  CircleDot,
+    28→  Filter,
+    29→  ArrowRightLeft,
+    30→  TrendingUp,
+    31→  Database,
+    32→  Mountain,
+    33→  Grid3x3,
+    34→  RefreshCw,
+    35→  Circle,
+    36→  Columns2,
+    37→  Split,
+    38→  Grid2x2,
+    39→  Network,
+    40→  Share2,
+    41→  BarChart3,
+    42→  BarChartHorizontal,
+    43→  LineChart,
+    44→  Cloud,
+    45→  Square,
+    46→  Search,
+    47→} from 'lucide-react'
+    48→
+    49→import { cn } from '@/lib/utils'
+    50→import type {
+    51→  InfographicConfig,
+    52→  InfographicData,
+    53→  InfographicItem,
+    54→  InfographicRelationNode,
+    55→  InfographicRelationEdge,
+    56→} from '@/types/chart'
+    57→import {
+    58→  ResizablePanelGroup,
+    59→  ResizablePanel,
+    60→  ResizableHandle,
+    61→} from '@/components/ui/resizable'
+    62→import { Button } from '@/components/ui/button'
+    63→import { Input } from '@/components/ui/input'
+    64→import { Label } from '@/components/ui/label'
+    65→import { Textarea } from '@/components/ui/textarea'
+    66→import { Badge } from '@/components/ui/badge'
+    67→import {
+    68→  Select,
+    69→  SelectContent,
+    70→  SelectItem,
+    71→  SelectTrigger,
+    72→  SelectValue,
+    73→} from '@/components/ui/select'
+    74→import {
+    75→  ScrollArea,
+    76→} from '@/components/ui/scroll-area'
+    77→import {
+    78→  TEMPLATE_REGISTRY,
+    79→  CATEGORY_LABEL,
+    80→  CATEGORY_ORDER,
+    81→  groupTemplatesByCategory,
+    82→  defaultDataForShape,
+    83→  type TemplateMeta,
+    84→  type InfographicTemplateCategory,
+    85→} from './template-registry'
+    86→import { exportSvg, exportJson } from '@/lib/chart/export'
+    87→import { useT } from '@/lib/i18n'
+    88→
+    89→// Icon registry — maps template icon names to lucide components
+    90→const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+    91→  Rows3, LayoutGrid, Columns3, Triangle, PieChart, Waves, Spline,
+    92→  'GitCommitHorizontal': GitCommitHorizontal, ListOrdered, 'Map': MapIcon,
+    93→  CircleDot, Filter, ArrowRightLeft, TrendingUp, Database, Mountain,
+    94→  Grid3x3, RefreshCw, Circle, Columns2, Split, 'Grid2x2': Grid2x2,
+    95→  Network, Share2, 'BarChart3': BarChart3, 'BarChartHorizontal': BarChartHorizontal,
+    96→  'LineChart': LineChart, Cloud, Square,
+    97→}
+    98→
+    99→function deepClone<T>(v: T): T {
+   100→  return JSON.parse(JSON.stringify(v)) as T
+   101→}
+   102→
+   103→function getIcon(name: string): React.ComponentType<{ className?: string }> {
+   104→  return ICON_MAP[name] ?? Square
+   105→}
+   106→
+   107→// ---------------------------------------------------------------------------
+   108→// Props
+   109→// ---------------------------------------------------------------------------
+   110→
+   111→export interface InfographicEditorProps {
+   112→  config: InfographicConfig | null
+   113→  onChange: (cfg: InfographicConfig) => void
+   114→  previewRef: React.RefObject<HTMLDivElement | null>
+   115→}
+   116→
+   117→// ===========================================================================
+   118→// Main component
+   119→// ===========================================================================
+   120→
+   121→export function InfographicEditor({ config, onChange, previewRef }: InfographicEditorProps) {
+   122→  const t = useT()
+   123→  const [local, setLocal] = React.useState<InfographicConfig>(() =>
+   124→    config
+   125→      ? deepClone(config)
+   126→      : {
+   127→          type: TEMPLATE_REGISTRY[0].id,
+   128→          template: TEMPLATE_REGISTRY[0].id,
+   129→          data: defaultDataForShape(TEMPLATE_REGISTRY[0].dataShape),
+   130→          theme: 'light',
+   131→          background: '#ffffff',
+   132→          width: 900,
+   133→          height: 600,
+   134→        },
+   135→  )
+   136→  const lastAppliedKey = React.useRef<string>('')
+   137→
+   138→  // Sync parent -> local
+   139→  React.useEffect(() => {
+   140→    if (!config) return
+   141→    const key = JSON.stringify(config)
+   142→    if (key !== lastAppliedKey.current) {
+   143→      lastAppliedKey.current = key
+   144→      setLocal(deepClone(config))
+   145→    }
+   146→  }, [config])
+   147→
+   148→  // Sync local -> parent (debounced 200ms)
+   149→  React.useEffect(() => {
+   150→    const timer = setTimeout(() => {
+   151→      const key = JSON.stringify(local)
+   152→      if (key !== lastAppliedKey.current) {
+   153→        lastAppliedKey.current = key
+   154→        onChange(deepClone(local))
+   155→      }
+   156→    }, 200)
+   157→    return () => clearTimeout(timer)
+   158→  }, [local, onChange])
+   159→
+   160→  const update = React.useCallback((patch: Partial<InfographicConfig>) => {
+   161→    setLocal((prev) => ({ ...prev, ...patch }))
+   162→  }, [])
+   163→
+   164→  const applyTemplate = React.useCallback((tpl: TemplateMeta) => {
+   165→    setLocal((prev) => ({
+   166→      ...prev,
+   167→      type: tpl.id,
+   168→      template: tpl.id,
+   169→      data: defaultDataForShape(tpl.dataShape),
+   170→    }))
+   171→    toast.success(t('infographic.applied', { name: tpl.name }))
+   172→  }, [t])
+   173→
+   174→  const currentTemplate = React.useMemo(
+   175→    () => TEMPLATE_REGISTRY.find((t) => t.id === local.template) ?? TEMPLATE_REGISTRY[0],
+   176→    [local.template],
+   177→  )
+   178→
+   179→  return (
+   180→    <ResizablePanelGroup direction="horizontal" className="h-full">
+   181→      {/* ---------------- Left: Template gallery ---------------- */}
+   182→      <ResizablePanel defaultSize={28} minSize={20} maxSize={40}>
+   183→        <TemplateGallery
+   184→          currentId={local.template}
+   185→          onPick={applyTemplate}
+   186→        />
+   187→      </ResizablePanel>
+   188→
+   189→      <ResizableHandle withHandle />
+   190→
+   191→      {/* ---------------- Middle: Preview ---------------- */}
+   192→      <ResizablePanel defaultSize={42} minSize={30}>
+   193→        <PreviewPanel
+   194→          config={local}
+   195→          previewRef={previewRef}
+   196→        />
+   197→      </ResizablePanel>
+   198→
+   199→      <ResizableHandle withHandle />
+   200→
+   201→      {/* ---------------- Right: Data & style ---------------- */}
+   202→      <ResizablePanel defaultSize={30} minSize={22}>
+   203→        <ConfigPanel
+   204→          config={local}
+   205→          template={currentTemplate}
+   206→          update={update}
+   207→        />
+   208→      </ResizablePanel>
+   209→    </ResizablePanelGroup>
+   210→  )
+   211→}
+   212→
+   213→// ===========================================================================
+   214→// Template gallery (left)
+   215→// ===========================================================================
+   216→
+   217→interface GalleryProps {
+   218→  currentId: string
+   219→  onPick: (tpl: TemplateMeta) => void
+   220→}
+   221→
+   222→function TemplateGallery({ currentId, onPick }: GalleryProps) {
+   223→  const t = useT()
+   224→  const [keyword, setKeyword] = React.useState('')
+   225→  const groups = React.useMemo(() => groupTemplatesByCategory(), [])
+   226→
+   227→  const filtered = React.useMemo(() => {
+   228→    if (!keyword.trim()) return null
+   229→    const kw = keyword.toLowerCase()
+   230→    return TEMPLATE_REGISTRY.filter(
+   231→      (tpl) =>
+   232→        tpl.name.toLowerCase().includes(kw) ||
+   233→        tpl.id.toLowerCase().includes(kw) ||
+   234→        tpl.tags.some((tag) => tag.toLowerCase().includes(kw)),
+   235→    )
+   236→  }, [keyword])
+   237→
+   238→  return (
+   239→    <div className="flex h-full flex-col">
+   240→      <div className="border-b p-3">
+   241→        <div className="mb-2 flex items-center gap-2">
+   242→          <Wand2 className="h-4 w-4 text-primary" />
+   243→          <h3 className="text-sm font-semibold">{t('infographic.templateGallery')}</h3>
+   244→        </div>
+   245→        <div className="relative">
+   246→          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+   247→          <Input
+   248→            value={keyword}
+   249→            onChange={(e) => setKeyword(e.target.value)}
+   250→            placeholder={t('actions.search')}
+   251→            className="h-8 pl-8 text-xs"
+   252→          />
+   253→        </div>
+   254→      </div>
+   255→      <ScrollArea className="flex-1">
+   256→        <div className="p-3">
+   257→          {filtered ? (
+   258→            <div className="grid grid-cols-2 gap-2">
+   259→              {filtered.map((tpl) => (
+   260→                <TemplateCard
+   261→                  key={tpl.id}
+   262→                  tpl={tpl}
+   263→                  active={tpl.id === currentId}
+   264→                  onClick={() => onPick(tpl)}
+   265→                />
+   266→              ))}
+   267→              {filtered.length === 0 && (
+   268→                <div className="col-span-2 py-8 text-center text-xs text-muted-foreground">
+   269→                  {t('templatePicker.noResults')}
+   270→                </div>
+   271→              )}
+   272→            </div>
+   273→          ) : (
+   274→            <div className="space-y-4">
+   275→              {CATEGORY_ORDER.map((cat) => {
+   276→                const list = groups[cat]
+   277→                if (!list || list.length === 0) return null
+   278→                return (
+   279→                  <section key={cat}>
+   280→                    <div className="mb-2 flex items-center justify-between">
+   281→                      <h4 className="text-xs font-semibold text-foreground">
+   282→                        {CATEGORY_LABEL[cat]}
+   283→                      </h4>
+   284→                      <Badge variant="secondary" className="text-[10px]">
+   285→                        {list.length}
+   286→                      </Badge>
+   287→                    </div>
+   288→                    <div className="grid grid-cols-2 gap-2">
+   289→                      {list.map((tpl) => (
+   290→                        <TemplateCard
+   291→                          key={tpl.id}
+   292→                          tpl={tpl}
+   293→                          active={tpl.id === currentId}
+   294→                          onClick={() => onPick(tpl)}
+   295→                        />
+   296→                      ))}
+   297→                    </div>
+   298→                  </section>
+   299→                )
+   300→              })}
+   301→            </div>
+   302→          )}
+   303→        </div>
+   304→      </ScrollArea>
+   305→    </div>
+   306→  )
+   307→}
+   308→
+   309→interface CardProps {
+   310→  tpl: TemplateMeta
+   311→  active: boolean
+   312→  onClick: () => void
+   313→}
+   314→
+   315→function TemplateCard({ tpl, active, onClick }: CardProps) {
+   316→  const iconKey = tpl.id.split('-').slice(0, 2).join('-')
+   317→  const IconComponent = (getIcon(iconKey) || getIcon(tpl.id.split('-')[0]) || Square) as React.FC<{ className?: string }>
+   318→  return (
+   319→    <button
+   320→      onClick={onClick}
+   321→      title={tpl.description}
+   322→      className={cn(
+   323→        'group flex flex-col gap-1.5 rounded-lg border p-2.5 text-left transition-all',
+   324→        active
+   325→          ? 'border-primary bg-primary/5 ring-1 ring-primary'
+   326→          : 'hover:border-foreground/30 hover:bg-muted/50',
+   327→      )}
+   328→    >
+   329→      <div
+   330→        className={cn(
+   331→          'flex h-7 w-7 items-center justify-center rounded-md',
+   332→          active ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground',
+   333→        )}
+   334→      >
+   335→        <IconComponent className="h-4 w-4" />
+   336→      </div>
+   337→      <div className="text-xs font-medium leading-tight">{tpl.name}</div>
+   338→    </button>
+   339→  )
+   340→}
+   341→
+   342→// ===========================================================================
+   343→// Preview (middle)
+   344→// ===========================================================================
+   345→
+   346→interface PreviewProps {
+   347→  config: InfographicConfig
+   348→  previewRef: React.RefObject<HTMLDivElement | null>
+   349→}
+   350→
+   351→function PreviewPanel({ config, previewRef }: PreviewProps) {
+   352→  const t = useT()
+   353→  const containerRef = React.useRef<HTMLDivElement>(null)
+   354→  // The @antv/infographic engine instance.
+   355→  const engineRef = React.useRef<any>(null)
+   356→  const [zoom, setZoom] = React.useState(1)
+   357→  const [error, setError] = React.useState<string | null>(null)
+   358→  const renderSeq = React.useRef(0)
+   359→
+   360→  // Create / destroy engine — @antv/infographic is bundled directly (not CDN).
+   361→  React.useEffect(() => {
+   362→    if (!containerRef.current) return
+   363→    try {
+   364→      engineRef.current = new InfographicEngine({
+   365→        container: containerRef.current,
+   366→        width: '100%',
+   367→        height: '100%',
+   368→        editable: false,
+   369→      })
+   370→    } catch (e) {
+   371→      console.error('Infographic init error', e)
+   372→      setError((e as Error).message)
+   373→    }
+   374→    return () => {
+   375→      try {
+   376→        engineRef.current?.destroy()
+   377→      } catch {
+   378→        // ignore
+   379→      }
+   380→      engineRef.current = null
+   381→    }
+   382→  }, [])
+   383→
+   384→  // Render on config change (debounced 250ms)
+   385→  React.useEffect(() => {
+   386→    const seq = ++renderSeq.current
+   387→    const timer = setTimeout(() => {
+   388→      if (!engineRef.current || renderSeq.current !== seq) return
+   389→      try {
+   390→        engineRef.current.render({
+   391→          template: config.template,
+   392→          data: config.data,
+   393→          theme: config.theme,
+   394→        })
+   395→        setError(null)
+   396→      } catch (e) {
+   397→        console.error('Infographic render error', e)
+   398→        setError((e as Error).message)
+   399→      }
+   400→    }, 250)
+   401→    return () => clearTimeout(timer)
+   402→  }, [config.template, config.data, config.theme])
+   403→
+   404→  const handleZoomIn = () => setZoom((z) => Math.min(2.5, z + 0.2))
+   405→  const handleZoomOut = () => setZoom((z) => Math.max(0.4, z - 0.2))
+   406→  const handleReset = () => setZoom(1)
+   407→
+   408→  const handleDownloadSvg = async () => {
+   409→    const svg = containerRef.current?.querySelector('svg')
+   410→    if (!svg) {
+   411→      toast.error(t('toasts.noContent'))
+   412→      return
+   413→    }
+   414→    // Add background rect if needed
+   415→    const clone = svg.cloneNode(true) as SVGSVGElement
+   416→    if (config.background && config.background !== 'transparent') {
+   417→      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+   418→      rect.setAttribute('width', '100%')
+   419→      rect.setAttribute('height', '100%')
+   420→      rect.setAttribute('fill', config.background)
+   421→      clone.insertBefore(rect, clone.firstChild)
+   422→    }
+   423→    exportSvg(clone, `infographic-${Date.now()}.svg`)
+   424→    toast.success(t('toasts.exported'))
+   425→  }
+   426→
+   427→  const handleDownloadPng = async () => {
+   428→    const svg = containerRef.current?.querySelector('svg')
+   429→    if (!svg) {
+   430→      toast.error(t('toasts.noContent'))
+   431→      return
+   432→    }
+   433→    try {
+   434→      const clone = svg.cloneNode(true) as SVGSVGElement
+   435→      const bbox = svg.getBoundingClientRect()
+   436→      const w = Math.max(100, bbox.width)
+   437→      const h = Math.max(100, bbox.height)
+   438→      clone.setAttribute('width', String(w))
+   439→      clone.setAttribute('height', String(h))
+   440→      clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+   441→      if (config.background && config.background !== 'transparent') {
+   442→        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+   443→        rect.setAttribute('width', '100%')
+   444→        rect.setAttribute('height', '100%')
+   445→        rect.setAttribute('fill', config.background)
+   446→        clone.insertBefore(rect, clone.firstChild)
+   447→      }
+   448→      const str = new XMLSerializer().serializeToString(clone)
+   449→      const blob = new Blob([str], { type: 'image/svg+xml;charset=utf-8' })
+   450→      const url = URL.createObjectURL(blob)
+   451→      const img = new Image()
+   452→      img.crossOrigin = 'anonymous'
+   453→      img.onload = () => {
+   454→        const canvas = document.createElement('canvas')
+   455→        const scale = 2
+   456→        canvas.width = w * scale
+   457→        canvas.height = h * scale
+   458→        const ctx = canvas.getContext('2d')
+   459→        if (!ctx) return
+   460→        ctx.fillStyle = config.background
+   461→        ctx.fillRect(0, 0, canvas.width, canvas.height)
+   462→        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+   463→        URL.revokeObjectURL(url)
+   464→        canvas.toBlob((b) => {
+   465→          if (!b) return
+   466→          const a = document.createElement('a')
+   467→          a.href = URL.createObjectURL(b)
+   468→          a.download = `infographic-${Date.now()}.png`
+   469→          a.click()
+   470→          setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+   471→        }, 'image/png')
+   472→        toast.success(t('toasts.exported'))
+   473→      }
+   474→      img.onerror = () => {
+   475→        URL.revokeObjectURL(url)
+   476→        toast.error(t('toasts.exportFailed', { error: 'PNG' }))
+   477→      }
+   478→      img.src = url
+   479→    } catch (e) {
+   480→      toast.error(t('toasts.exportFailed', { error: (e as Error).message }))
+   481→    }
+   482→  }
+   483→
+   484→  const handleExportJson = () => {
+   485→    exportJson(config, `infographic-config-${Date.now()}.json`)
+   486→    toast.success(t('toasts.exported'))
+   487→  }
+   488→
+   489→  return (
+   490→    <div className="flex h-full flex-col">
+   491→      {/* Toolbar */}
+   492→      <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
+   493→        <div className="flex items-center gap-1.5">
+   494→          <Button size="sm" variant="ghost" onClick={handleZoomOut} className="h-7 w-7 p-0">
+   495→            <ZoomOut className="h-4 w-4" />
+   496→          </Button>
+   497→          <span className="w-12 text-center text-xs tabular-nums text-muted-foreground">
+   498→            {Math.round(zoom * 100)}%
+   499→          </span>
+   500→          <Button size="sm" variant="ghost" onClick={handleZoomIn} className="h-7 w-7 p-0">
+   501→            <ZoomIn className="h-4 w-4" />
+   502→          </Button>
+   503→          <Button size="sm" variant="ghost" onClick={handleReset} className="h-7 w-7 p-0">
+   504→            <Maximize className="h-4 w-4" />
+   505→          </Button>
+   506→        </div>
+   507→        <div className="flex items-center gap-1">
+   508→          <Button size="sm" variant="ghost" onClick={handleDownloadSvg} className="h-7 gap-1 px-2 text-xs">
+   509→            <Download className="h-3 w-3" /> {t('infographic.downloadSvg')}
+   510→          </Button>
+   511→          <Button size="sm" variant="ghost" onClick={handleDownloadPng} className="h-7 gap-1 px-2 text-xs">
+   512→            <Download className="h-3 w-3" /> {t('infographic.downloadPng')}
+   513→          </Button>
+   514→          <Button size="sm" variant="ghost" onClick={handleExportJson} className="h-7 gap-1 px-2 text-xs">
+   515→            <Copy className="h-3 w-3" /> {t('infographic.exportJson')}
+   516→          </Button>
+   517→        </div>
+   518→      </div>
+   519→
+   520→      {/* Canvas */}
+   521→      <div
+   522→        ref={previewRef}
+   523→        className="relative flex-1 overflow-auto p-4"
+   524→        style={{ background: config.background }}
+   525→      >
+   526→        <div
+   527→          className="mx-auto flex min-h-full w-full items-center justify-center"
+   528→          style={{
+   529→            transform: `scale(${zoom})`,
+   530→            transformOrigin: 'center center',
+   531→            transition: 'transform 0.15s ease',
+   532→          }}
+   533→        >
+   534→          <div
+   535→            ref={containerRef}
+   536→            className="h-full w-full"
+   537→            style={{ minHeight: 400 }}
+   538→          />
+   539→        </div>
+   540→        {error && (
+   541→          <div className="absolute inset-x-4 bottom-4 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-xs text-destructive">
+   542→            <div className="mb-1 font-semibold">{t('infographic.renderError')}</div>
+   543→            <pre className="max-h-32 overflow-auto whitespace-pre-wrap">{error}</pre>
+   544→          </div>
+   545→        )}
+   546→      </div>
+   547→    </div>
+   548→  )
+   549→}
+   550→
+   551→// ===========================================================================
+   552→// Config panel (right)
+   553→// ===========================================================================
+   554→
+   555→interface ConfigProps {
+   556→  config: InfographicConfig
+   557→  template: TemplateMeta
+   558→  update: (patch: Partial<InfographicConfig>) => void
+   559→}
+   560→
+   561→function ConfigPanel({ config, template, update }: ConfigProps) {
+   562→  const t = useT()
+   563→  return (
+   564→    <ScrollArea className="h-full">
+   565→      <div className="space-y-5 p-4">
+   566→        {/* Template info */}
+   567→        <section className="rounded-lg border bg-muted/30 p-3">
+   568→          <div className="mb-1 flex items-center gap-2">
+   569→            <Badge variant="secondary" className="text-[10px]">
+   570→              {CATEGORY_LABEL[template.category]}
+   571→            </Badge>
+   572→            <h3 className="text-sm font-semibold">{template.name}</h3>
+   573→          </div>
+   574→          <p className="text-xs text-muted-foreground">{template.description}</p>
+   575→        </section>
+   576→
+   577→        {/* Title */}
+   578→        <section className="space-y-2">
+   579→          <h4 className="text-xs font-semibold text-muted-foreground">{t('infographic.title_section')}</h4>
+   580→          <div className="grid gap-2">
+   581→            <Input
+   582→              value={config.data.title?.text ?? ''}
+   583→              onChange={(e) =>
+   584→                update({
+   585→                  data: {
+   586→                    ...config.data,
+   587→                    title: {
+   588→                      ...(config.data.title ?? {}),
+   589→                      text: e.target.value,
+   590→                    },
+   591→                  },
+   592→                })
+   593→              }
+   594→              placeholder={t('infographic.mainTitle')}
+   595→              className="h-8 text-xs"
+   596→            />
+   597→            <Input
+   598→              value={config.data.title?.subtext ?? ''}
+   599→              onChange={(e) =>
+   600→                update({
+   601→                  data: {
+   602→                    ...config.data,
+   603→                    title: {
+   604→                      ...(config.data.title ?? {}),
+   605→                      subtext: e.target.value,
+   606→                    },
+   607→                  },
+   608→                })
+   609→              }
+   610→              placeholder={t('infographic.subtitle')}
+   611→              className="h-8 text-xs"
+   612→            />
+   613→          </div>
+   614→        </section>
+   615→
+   616→        {/* Data editor — switch by data shape */}
+   617→        <section className="space-y-2">
+   618→          <h4 className="text-xs font-semibold text-muted-foreground">{t('infographic.data')}</h4>
+   619→          {template.dataShape === 'relation' ? (
+   620→            <RelationDataEditor config={config} update={update} />
+   621→          ) : template.dataShape === 'hierarchy' ? (
+   622→            <HierarchyDataEditor config={config} update={update} />
+   623→          ) : template.dataShape === 'compare' ? (
+   624→            <CompareDataEditor config={config} update={update} />
+   625→          ) : (
+   626→            <ListDataEditor config={config} update={update} />
+   627→          )}
+   628→        </section>
+   629→
+   630→        {/* Theme & background */}
+   631→        <section className="space-y-2">
+   632→          <h4 className="text-xs font-semibold text-muted-foreground">{t('infographic.style')}</h4>
+   633→          <div className="grid gap-2">
+   634→            <div className="grid grid-cols-3 gap-1.5">
+   635→              {(['light', 'dark', 'hand-drawn'] as const).map((th) => (
+   636→                <button
+   637→                  key={th}
+   638→                  onClick={() => update({ theme: th })}
+   639→                  className={cn(
+   640→                    'rounded-md border py-1.5 text-xs transition-all',
+   641→                    config.theme === th
+   642→                      ? 'border-primary bg-primary/5 text-primary ring-1 ring-primary'
+   643→                      : 'hover:bg-muted',
+   644→                  )}
+   645→                >
+   646→                  {th === 'light' ? t('infographic.themeLight') : th === 'dark' ? t('infographic.themeDark') : t('infographic.themeHandDrawn')}
+   647→                </button>
+   648→              ))}
+   649→            </div>
+   650→            <div className="flex items-center gap-1.5">
+   651→              <Label className="w-16 text-xs">{t('infographic.background')}</Label>
+   652→              <Input
+   653→                type="color"
+   654→                value={config.background}
+   655→                onChange={(e) => update({ background: e.target.value })}
+   656→                className="h-8 w-10 cursor-pointer p-1"
+   657→              />
+   658→              <Input
+   659→                value={config.background}
+   660→                onChange={(e) => update({ background: e.target.value })}
+   661→                className="h-8 flex-1 font-mono text-xs"
+   662→              />
+   663→            </div>
+   664→          </div>
+   665→        </section>
+   666→      </div>
+   667→    </ScrollArea>
+   668→  )
+   669→}
+   670→
+   671→// ---------------------------------------------------------------------------
+   672→// List / sequence / chart data editor
+   673→// ---------------------------------------------------------------------------
+   674→
+   675→function ListDataEditor({
+   676→  config,
+   677→  update,
+   678→}: {
+   679→  config: InfographicConfig
+   680→  update: (patch: Partial<InfographicConfig>) => void
+   681→}) {
+   682→  const t = useT()
+   683→  const items = config.data.lists ?? []
+   684→
+   685→  const setItems = (next: InfographicItem[]) => {
+   686→    update({ data: { ...config.data, lists: next } })
+   687→  }
+   688→
+   689→  const add = () => {
+   690→    setItems([
+   691→      ...items,
+   692→      { label: `Item ${items.length + 1}`, desc: '', value: 50, icon: '📍' },
+   693→    ])
+   694→  }
+   695→
+   696→  const updateItem = (i: number, patch: Partial<InfographicItem>) => {
+   697→    setItems(items.map((it, idx) => (idx === i ? { ...it, ...patch } : it)))
+   698→  }
+   699→
+   700→  const remove = (i: number) => {
+   701→    setItems(items.filter((_, idx) => idx !== i))
+   702→  }
+   703→
+   704→  const move = (i: number, dir: -1 | 1) => {
+   705→    const j = i + dir
+   706→    if (j < 0 || j >= items.length) return
+   707→    const next = [...items]
+   708→    ;[next[i], next[j]] = [next[j], next[i]]
+   709→    setItems(next)
+   710→  }
+   711→
+   712→  return (
+   713→    <div className="space-y-2">
+   714→      {items.map((it, i) => (
+   715→        <div key={i} className="rounded-md border p-2 space-y-1.5">
+   716→          <div className="flex items-center gap-1.5">
+   717→            <Input
+   718→              value={it.icon ?? ''}
+   719→              onChange={(e) => updateItem(i, { icon: e.target.value })}
+   720→              placeholder={t('infographic.iconPlaceholder')}
+   721→              className="h-7 w-12 text-center text-xs"
+   722→            />
+   723→            <Input
+   724→              value={it.label ?? ''}
+   725→              onChange={(e) => updateItem(i, { label: e.target.value })}
+   726→              placeholder={t('infographic.labelPlaceholder')}
+   727→              className="h-7 flex-1 text-xs"
+   728→            />
+   729→            <Button size="sm" variant="ghost" onClick={() => move(i, -1)} className="h-7 w-6 p-0" disabled={i === 0} aria-label={t('infographic.moveUp')}>
+   730→              ↑
+   731→            </Button>
+   732→            <Button size="sm" variant="ghost" onClick={() => move(i, 1)} className="h-7 w-6 p-0" disabled={i === items.length - 1} aria-label={t('infographic.moveDown')}>
+   733→              ↓
+   734→            </Button>
+   735→            <Button size="sm" variant="ghost" onClick={() => remove(i)} className="h-7 w-6 p-0 text-destructive" aria-label={t('actions.delete')}>
+   736→              <Trash2 className="h-3 w-3" />
+   737→            </Button>
+   738→          </div>
+   739→          <Input
+   740→            value={it.desc ?? ''}
+   741→            onChange={(e) => updateItem(i, { desc: e.target.value })}
+   742→            placeholder={t('infographic.descPlaceholder')}
+   743→            className="h-7 text-xs"
+   744→          />
+   745→          {(it.value !== undefined) && (
+   746→            <div className="flex items-center gap-1.5">
+   747→              <Label className="w-10 text-[10px] text-muted-foreground">{t('infographic.valueLabel')}</Label>
+   748→              <Input
+   749→                type="number"
+   750→                value={it.value ?? 0}
+   751→                onChange={(e) => updateItem(i, { value: Number(e.target.value) })}
+   752→                className="h-7 flex-1 text-xs"
+   753→              />
+   754→            </div>
+   755→          )}
+   756→        </div>
+   757→      ))}
+   758→      <Button size="sm" variant="outline" onClick={add} className="w-full gap-1 text-xs">
+   759→        <Plus className="h-3 w-3" /> {t('infographic.addNode')}
+   760→      </Button>
+   761→    </div>
+   762→  )
+   763→}
+   764→
+   765→// ---------------------------------------------------------------------------
+   766→// Hierarchy data editor (tree)
+   767→// ---------------------------------------------------------------------------
+   768→
+   769→function HierarchyDataEditor({
+   770→  config,
+   771→  update,
+   772→}: {
+   773→  config: InfographicConfig
+   774→  update: (patch: Partial<InfographicConfig>) => void
+   775→}) {
+   776→  const t = useT()
+   777→  const root = config.data.lists?.[0]
+   778→
+   779→  const setRoot = (next: InfographicItem) => {
+   780→    update({ data: { ...config.data, lists: [next] } })
+   781→  }
+   782→
+   783→  if (!root) {
+   784→    return (
+   785→      <Button
+   786→        size="sm"
+   787→        variant="outline"
+   788→        className="w-full text-xs"
+   789→        onClick={() => setRoot({ label: 'Root', children: [] })}
+   790→      >
+   791→        {t('infographic.initTree')}
+   792→      </Button>
+   793→    )
+   794→  }
+   795→
+   796→  return (
+   797→    <div className="space-y-2">
+   798→      <div className="rounded-md border bg-muted/30 p-2">
+   799→        <NodeEditor
+   800→          node={root}
+   801→          onChange={setRoot}
+   802→          depth={0}
+   803→        />
+   804→      </div>
+   805→    </div>
+   806→  )
+   807→}
+   808→
+   809→function NodeEditor({
+   810→  node,
+   811→  onChange,
+   812→  depth,
+   813→}: {
+   814→  node: InfographicItem
+   815→  onChange: (n: InfographicItem) => void
+   816→  depth: number
+   817→}) {
+   818→  const t = useT()
+   819→  const [expanded, setExpanded] = React.useState(depth < 2)
+   820→
+   821→  const patch = (p: Partial<InfographicItem>) => onChange({ ...node, ...p })
+   822→
+   823→  const addChild = () => {
+   824→    const children = [...(node.children ?? []), { label: `Node ${(node.children?.length ?? 0) + 1}` }]
+   825→    patch({ children })
+   826→    if (!expanded) setExpanded(true)
+   827→  }
+   828→
+   829→  const removeChild = (i: number) => {
+   830→    const children = (node.children ?? []).filter((_, idx) => idx !== i)
+   831→    patch({ children })
+   832→  }
+   833→
+   834→  const updateChild = (i: number, child: InfographicItem) => {
+   835→    const children = (node.children ?? []).map((c, idx) => (idx === i ? child : c))
+   836→    patch({ children })
+   837→  }
+   838→
+   839→  return (
+   840→    <div className="space-y-1.5" style={{ paddingLeft: depth > 0 ? 12 : 0 }}>
+   841→      <div className="flex items-center gap-1.5">
+   842→        {(node.children?.length ?? 0) > 0 && (
+   843→          <button
+   844→            onClick={() => setExpanded(!expanded)}
+   845→            className="text-muted-foreground hover:text-foreground"
+   846→          >
+   847→            {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+   848→          </button>
+   849→        )}
+   850→        <Input
+   851→          value={node.label ?? ''}
+   852→          onChange={(e) => patch({ label: e.target.value })}
+   853→          placeholder={t('infographic.labelPlaceholder')}
+   854→          className="h-7 flex-1 text-xs"
+   855→          style={{ fontWeight: depth === 0 ? 600 : 400 }}
+   856→        />
+   857→        {depth > 0 && (
+   858→          <Button size="sm" variant="ghost" onClick={() => onChange({})} className="h-7 w-6 p-0 text-destructive" aria-label={t('actions.delete')}>
+   859→            <Trash2 className="h-3 w-3" />
+   860→          </Button>
+   861→        )}
+   862→      </div>
+   863→      {depth === 0 && (
+   864→        <Input
+   865→          value={node.desc ?? ''}
+   866→          onChange={(e) => patch({ desc: e.target.value })}
+   867→          placeholder={t('infographic.descPlaceholder')}
+   868→          className="h-7 text-xs"
+   869→        />
+   870→      )}
+   871→      {expanded && (node.children?.length ?? 0) > 0 && (
+   872→        <div className="space-y-1.5 border-l pl-2">
+   873→          {node.children!.map((child, i) => (
+   874→            <NodeEditor
+   875→              key={i}
+   876→              node={child}
+   877→              onChange={(c) => updateChild(i, c)}
+   878→              depth={depth + 1}
+   879→            />
+   880→          ))}
+   881→        </div>
+   882→      )}
+   883→      <Button
+   884→        size="sm"
+   885→        variant="ghost"
+   886→        onClick={addChild}
+   887→        className="h-6 gap-1 text-[10px] text-muted-foreground"
+   888→      >
+   889→        <Plus className="h-2.5 w-2.5" /> {t('infographic.addChild')}
+   890→      </Button>
+   891→    </div>
+   892→  )
+   893→}
+   894→
+   895→// ---------------------------------------------------------------------------
+   896→// Compare data editor (2 or 4 groups)
+   897→// ---------------------------------------------------------------------------
+   898→
+   899→function CompareDataEditor({
+   900→  config,
+   901→  update,
+   902→}: {
+   903→  config: InfographicConfig
+   904→  update: (patch: Partial<InfographicConfig>) => void
+   905→}) {
+   906→  const t = useT()
+   907→  const groups = config.data.lists ?? []
+   908→
+   909→  const setGroups = (next: InfographicItem[]) => {
+   910→    update({ data: { ...config.data, lists: next } })
+   911→  }
+   912→
+   913→  const addGroup = () => {
+   914→    setGroups([...groups, { label: `Group ${groups.length + 1}`, children: [] }])
+   915→  }
+   916→
+   917→  const updateGroup = (i: number, g: InfographicItem) => {
+   918→    setGroups(groups.map((gg, idx) => (idx === i ? g : gg)))
+   919→  }
+   920→
+   921→  const removeGroup = (i: number) => {
+   922→    setGroups(groups.filter((_, idx) => idx !== i))
+   923→  }
+   924→
+   925→  return (
+   926→    <div className="space-y-2">
+   927→      {groups.map((g, i) => (
+   928→        <div key={i} className="rounded-md border p-2 space-y-1.5">
+   929→          <div className="flex items-center gap-1.5">
+   930→            <Input
+   931→              value={g.label ?? ''}
+   932→              onChange={(e) => updateGroup(i, { ...g, label: e.target.value })}
+   933→              placeholder="Group name"
+   934→              className="h-7 flex-1 text-xs font-medium"
+   935→            />
+   936→            <Button size="sm" variant="ghost" onClick={() => removeGroup(i)} className="h-7 w-6 p-0 text-destructive" aria-label={t('actions.delete')}>
+   937→              <Trash2 className="h-3 w-3" />
+   938→            </Button>
+   939→          </div>
+   940→          <Input
+   941→            value={g.desc ?? ''}
+   942→            onChange={(e) => updateGroup(i, { ...g, desc: e.target.value })}
+   943→            placeholder={t('infographic.descPlaceholder')}
+   944→            className="h-7 text-xs"
+   945→          />
+   946→          {/* children */}
+   947→          <div className="space-y-1 pl-2 border-l">
+   948→            {(g.children ?? []).map((c, j) => (
+   949→              <div key={j} className="flex items-center gap-1.5">
+   950→                <Input
+   951→                  value={c.label ?? ''}
+   952→                  onChange={(e) => {
+   953→                    const children = [...(g.children ?? [])]
+   954→                    children[j] = { ...c, label: e.target.value }
+   955→                    updateGroup(i, { ...g, children })
+   956→                  }}
+   957→                  placeholder="Point"
+   958→                  className="h-6 flex-1 text-[11px]"
+   959→                />
+   960→                <Button
+   961→                  size="sm"
+   962→                  variant="ghost"
+   963→                  onClick={() => {
+   964→                    const children = (g.children ?? []).filter((_, idx) => idx !== j)
+   965→                    updateGroup(i, { ...g, children })
+   966→                  }}
+   967→                  className="h-6 w-5 p-0 text-destructive"
+   968→                  aria-label={t('actions.delete')}
+   969→                >
+   970→                  <Trash2 className="h-2.5 w-2.5" />
+   971→                </Button>
+   972→              </div>
+   973→            ))}
+   974→            <Button
+   975→              size="sm"
+   976→              variant="ghost"
+   977→              onClick={() => {
+   978→                const children = [...(g.children ?? []), { label: 'New point' }]
+   979→                updateGroup(i, { ...g, children })
+   980→              }}
+   981→              className="h-5 gap-1 text-[10px] text-muted-foreground"
+   982→            >
+   983→              <Plus className="h-2.5 w-2.5" /> {t('infographic.addChild')}
+   984→            </Button>
+   985→          </div>
+   986→        </div>
+   987→      ))}
+   988→      <Button size="sm" variant="outline" onClick={addGroup} className="w-full gap-1 text-xs">
+   989→        <Plus className="h-3 w-3" /> {t('infographic.addGroup')}
+   990→      </Button>
+   991→    </div>
+   992→  )
+   993→}
+   994→
+   995→// ---------------------------------------------------------------------------
+   996→// Relation data editor (nodes + edges)
+   997→// ---------------------------------------------------------------------------
+   998→
+   999→function RelationDataEditor({
+  1000→  config,
+  1001→  update,
+  1002→}: {
+  1003→  config: InfographicConfig
+  1004→  update: (patch: Partial<InfographicConfig>) => void
+  1005→}) {
+  1006→  const t = useT()
+  1007→  const nodes = config.data.nodes ?? []
+  1008→  const edges = config.data.edges ?? []
+  1009→
+  1010→  const setNodes = (next: InfographicRelationNode[]) => {
+  1011→    update({ data: { ...config.data, nodes: next } })
+  1012→  }
+  1013→  const setEdges = (next: InfographicRelationEdge[]) => {
+  1014→    update({ data: { ...config.data, edges: next } })
+  1015→  }
+  1016→
+  1017→  return (
+  1018→    <div className="space-y-3">
+  1019→      {/* Nodes */}
+  1020→      <div className="space-y-1.5">
+  1021→        <div className="flex items-center justify-between">
+  1022→          <span className="text-[11px] font-medium text-muted-foreground">{t('infographic.nodes', { count: nodes.length })}</span>
+  1023→          <Button
+  1024→            size="sm"
+  1025→            variant="ghost"
+  1026→            onClick={() =>
+  1027→              setNodes([
+  1028→                ...nodes,
+  1029→                { id: `n${nodes.length + 1}`, label: `Node ${nodes.length + 1}` },
+  1030→              ])
+  1031→            }
+  1032→            className="h-6 gap-1 px-1.5 text-[10px]"
+  1033→          >
+  1034→            <Plus className="h-2.5 w-2.5" /> {t('infographic.addNode')}
+  1035→          </Button>
+  1036→        </div>
+  1037→        {nodes.map((n, i) => (
+  1038→          <div key={i} className="flex items-center gap-1.5">
+  1039→            <Input
+  1040→              value={n.id}
+  1041→              onChange={(e) => setNodes(nodes.map((nn, idx) => (idx === i ? { ...nn, id: e.target.value } : nn)))}
+  1042→              placeholder={t('infographic.nodeId')}
+  1043→              className="h-7 w-16 font-mono text-[10px]"
+  1044→            />
+  1045→            <Input
+  1046→              value={n.label}
+  1047→              onChange={(e) => setNodes(nodes.map((nn, idx) => (idx === i ? { ...nn, label: e.target.value } : nn)))}
+  1048→              placeholder={t('infographic.nodeName')}
+  1049→              className="h-7 flex-1 text-xs"
+  1050→            />
+  1051→            <Input
+  1052→              value={n.group ?? ''}
+  1053→              onChange={(e) => setNodes(nodes.map((nn, idx) => (idx === i ? { ...nn, group: e.target.value } : nn)))}
+  1054→              placeholder={t('infographic.nodeGroup')}
+  1055→              className="h-7 w-12 text-[10px]"
+  1056→            />
+  1057→            <Button
+  1058→              size="sm"
+  1059→              variant="ghost"
+  1060→              onClick={() => setNodes(nodes.filter((_, idx) => idx !== i))}
+  1061→              className="h-7 w-6 p-0 text-destructive"
+  1062→              aria-label={t('actions.delete')}
+  1063→            >
+  1064→              <Trash2 className="h-3 w-3" />
+  1065→            </Button>
+  1066→          </div>
+  1067→        ))}
+  1068→      </div>
+  1069→
+  1070→      {/* Edges */}
+  1071→      <div className="space-y-1.5">
+  1072→        <div className="flex items-center justify-between">
+  1073→          <span className="text-[11px] font-medium text-muted-foreground">{t('infographic.edges', { count: edges.length })}</span>
+  1074→          <Button
+  1075→            size="sm"
+  1076→            variant="ghost"
+  1077→            onClick={() => setEdges([...edges, { from: nodes[0]?.id ?? '', to: nodes[1]?.id ?? '' }])}
+  1078→            className="h-6 gap-1 px-1.5 text-[10px]"
+  1079→          >
+  1080→            <Plus className="h-2.5 w-2.5" /> {t('infographic.addEdge')}
+  1081→          </Button>
+  1082→        </div>
+  1083→        {edges.map((e, i) => (
+  1084→          <div key={i} className="flex items-center gap-1.5">
+  1085→            <Select
+  1086→              value={e.from}
+  1087→              onValueChange={(v) => setEdges(edges.map((ee, idx) => (idx === i ? { ...ee, from: v } : ee)))}
+  1088→            >
+  1089→              <SelectTrigger className="h-7 w-16 text-[10px]">
+  1090→                <SelectValue placeholder={t('infographic.edgeFrom')} />
+  1091→              </SelectTrigger>
+  1092→              <SelectContent>
+  1093→                {nodes.map((n) => (
+  1094→                  <SelectItem key={n.id} value={n.id} className="text-[10px]">
+  1095→                    {n.label}
+  1096→                  </SelectItem>
+  1097→                ))}
+  1098→              </SelectContent>
+  1099→            </Select>
+  1100→            <span className="text-muted-foreground">→</span>
+  1101→            <Select
+  1102→              value={e.to}
+  1103→              onValueChange={(v) => setEdges(edges.map((ee, idx) => (idx === i ? { ...ee, to: v } : ee)))}
+  1104→            >
+  1105→              <SelectTrigger className="h-7 w-16 text-[10px]">
+  1106→                <SelectValue placeholder={t('infographic.edgeTo')} />
+  1107→              </SelectTrigger>
+  1108→              <SelectContent>
+  1109→                {nodes.map((n) => (
+  1110→                  <SelectItem key={n.id} value={n.id} className="text-[10px]">
+  1111→                    {n.label}
+  1112→                  </SelectItem>
+  1113→                ))}
+  1114→              </SelectContent>
+  1115→            </Select>
+  1116→            <Input
+  1117→              value={e.label ?? ''}
+  1118→              onChange={(ev) => setEdges(edges.map((ee, idx) => (idx === i ? { ...ee, label: ev.target.value } : ee)))}
+  1119→              placeholder={t('infographic.edgeLabel')}
+  1120→              className="h-7 flex-1 text-[10px]"
+  1121→            />
+  1122→            <Button
+  1123→              size="sm"
+  1124→              variant="ghost"
+  1125→              onClick={() => setEdges(edges.filter((_, idx) => idx !== i))}
+  1126→              className="h-7 w-6 p-0 text-destructive"
+  1127→              aria-label={t('actions.delete')}
+  1128→            >
+  1129→              <Trash2 className="h-3 w-3" />
+  1130→            </Button>
+  1131→          </div>
+  1132→        ))}
+  1133→      </div>
+  1134→    </div>
+  1135→  )
+  1136→}
+  1137→

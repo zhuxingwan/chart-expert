@@ -16,6 +16,7 @@ import type {
   InfographicConfig,
 } from '@/types/chart'
 import {
+  UNIFIED_TEMPLATES,
   findUnifiedTemplate,
   defaultConfigForEngine,
   type UnifiedTemplate,
@@ -54,10 +55,59 @@ interface ActiveDoc {
   infographic?: InfographicConfig
 }
 
+// ---- URL helpers ----
+/** Read the `?chart=` query param. Returns the unified template id or null. */
+function getChartFromUrl(): string | null {
+  if (typeof window === 'undefined') return null
+  const params = new URLSearchParams(window.location.search)
+  const chart = params.get('chart')
+  return chart
+}
+
+/** Update the URL's `?chart=` param without triggering a navigation/reload. */
+function updateUrlChart(templateId: string) {
+  if (typeof window === 'undefined') return
+  const url = new URL(window.location.href)
+  url.searchParams.set('chart', templateId)
+  window.history.replaceState(window.history.state, '', url.toString())
+}
+
+/** Clear the `?chart=` param (when no doc is active). */
+function clearUrlChart() {
+  if (typeof window === 'undefined') return
+  const url = new URL(window.location.href)
+  url.searchParams.delete('chart')
+  window.history.replaceState(window.history.state, '', url.toString())
+}
+
+/** Activate a doc from a unified template id (e.g. "echarts:bar"). */
+function activateFromTemplateId(templateId: string): ActiveDoc | null {
+  const tpl = findUnifiedTemplate(templateId)
+  if (!tpl) return null
+  const config = defaultConfigForEngine(tpl.engine, tpl.libraryType)
+  return {
+    engine: tpl.engine,
+    templateId: tpl.id,
+    echarts: tpl.engine === 'echarts' ? (config as EChartsConfig) : undefined,
+    mermaid: tpl.engine === 'mermaid' ? (config as MermaidConfig) : undefined,
+    infographic: tpl.engine === 'infographic' ? (config as InfographicConfig) : undefined,
+  }
+}
+
 export function ChartToolApp() {
   const t = useT()
   const previewRef = React.useRef<HTMLDivElement>(null)
-  const [doc, setDoc] = React.useState<ActiveDoc | null>(null)
+
+  // On first mount, check the URL for a ?chart= param. If present, activate
+  // that template directly (no picker dialog). Otherwise start empty.
+  const [doc, setDoc] = React.useState<ActiveDoc | null>(() => {
+    if (typeof window === 'undefined') return null
+    const chartParam = getChartFromUrl()
+    if (chartParam) {
+      return activateFromTemplateId(chartParam)
+    }
+    return null
+  })
 
   // Dialogs
   const [pickerOpen, setPickerOpen] = React.useState(false)
@@ -66,9 +116,40 @@ export function ChartToolApp() {
   const [aiOpen, setAiOpen] = React.useState(false)
 
   // Open the picker automatically on first load if no document is active
+  // (and no ?chart= param was in the URL).
   React.useEffect(() => {
-    if (!doc) setPickerOpen(true)
+    if (!doc && !getChartFromUrl()) {
+      setPickerOpen(true)
+    }
   }, [doc])
+
+  // Sync URL when doc changes
+  React.useEffect(() => {
+    if (doc) {
+      updateUrlChart(doc.templateId)
+    } else {
+      clearUrlChart()
+    }
+  }, [doc])
+
+  // Listen for browser back/forward navigation to update the active doc
+  React.useEffect(() => {
+    const handlePopState = () => {
+      const chartParam = getChartFromUrl()
+      if (chartParam) {
+        const newDoc = activateFromTemplateId(chartParam)
+        if (newDoc) {
+          setDoc(newDoc)
+          return
+        }
+      }
+      // No chart param — go back to empty state
+      setDoc(null)
+      setPickerOpen(true)
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
 
   const handlePickTemplate = React.useCallback((tpl: UnifiedTemplate) => {
     const config = defaultConfigForEngine(tpl.engine, tpl.libraryType)
@@ -161,18 +242,21 @@ export function ChartToolApp() {
                 <EChartsEditor
                   config={doc.echarts ?? null}
                   onChange={(cfg) => setDoc((d) => (d ? { ...d, echarts: cfg } : d))}
+                  onTemplateChange={(tid) => setDoc((d) => (d ? { ...d, templateId: tid } : d))}
                   previewRef={previewRef}
                 />
               ) : doc.engine === 'mermaid' ? (
                 <MermaidEditor
                   config={doc.mermaid ?? null}
                   onChange={(cfg) => setDoc((d) => (d ? { ...d, mermaid: cfg } : d))}
+                  onTemplateChange={(tid) => setDoc((d) => (d ? { ...d, templateId: tid } : d))}
                   previewRef={previewRef}
                 />
               ) : (
                 <InfographicEditor
                   config={doc.infographic ?? null}
                   onChange={(cfg) => setDoc((d) => (d ? { ...d, infographic: cfg } : d))}
+                  onTemplateChange={(tid) => setDoc((d) => (d ? { ...d, templateId: tid } : d))}
                   previewRef={previewRef}
                 />
               )}

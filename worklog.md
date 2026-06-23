@@ -268,3 +268,131 @@ Stage Summary:
 - ✅ 16 translation files (en, zh, zh-CN, zh-TW, es, fr, de, ja, ko, pt, pt-PT, pt-BR, ru, ar, hi, vi)
 - ✅ Lint passes (0 errors), all JSON valid
 - ✅ Verified in browser: English default works, Chinese switch works, infographic renders, ECharts renders, server stable
+
+---
+
+Task ID: UNIFY-TOOLBAR-MERMAID-INFO
+Agent: main
+Task: Unify mermaid + infographic toolbar — replace "copy SVG" / "JSON" buttons with a single "Markdown" button, and fix scrollbar/overflow issues across all panels.
+
+Work Log:
+- mermaid-editor.tsx
+  - Imports: added `FileText` (lucide-react); removed unused `exportJson` from `@/lib/chart/export` (kept `exportSvg`). `Copy` kept (still used by the in-panel "Copy code" button).
+  - Toolbar right-side buttons: SVG / PNG / Markdown. Removed the old "SVG source" (`handleCopySvg`) and "JSON" (`handleExportJson`) buttons.
+  - New `handleCopyAsMarkdown`: wraps the chart's mermaid source code in a ```mermaid``` markdown fence and copies to clipboard. Still verifies an SVG exists in the container before copying (so the user gets a `noContent` toast if nothing has rendered yet).
+  - Scrollbar / overflow fixes:
+    * Left config panel: wrapped `<ScrollArea>` in `<div className="flex h-full flex-col">` and changed ScrollArea to `min-h-0 flex-1` (critical `min-h-0` so the flex child actually scrolls instead of expanding the panel).
+    * Preview canvas: added `min-h-0` alongside `flex-1 overflow-auto` so it scrolls within the `flex h-full flex-col` shell.
+    * Code `Textarea`: capped with `max-h-[420px] min-h-[220px]` so very long code doesn't blow out the panel; `resize-y` retained for manual resizing.
+
+- infographic-editor.tsx
+  - Imports: added `FileText`; removed `Copy` (was only used by the now-removed JSON button) and unused `exportJson`.
+  - New module-level helper `generateInfographicSyntax(config)`: serializes an `InfographicConfig` into the @antv/infographic text-syntax form (header `infographic <template>`, then `data` block with `title` / `lists` / `nodes` / `edges` subsections — only emits the subsections that have content).
+  - Toolbar right-side buttons: SVG / PNG / Markdown. Removed the old "JSON" (`handleExportJson`) button.
+  - New `handleCopyAsMarkdown`: builds the syntax string and wraps it in a ```infographic``` markdown fence, then writes to clipboard with success/error toasts.
+  - Scrollbar / overflow fixes:
+    * Left template gallery: `<ScrollArea>` changed from `flex-1` to `min-h-0 flex-1` (the gallery panel header + ScrollArea already live inside a `flex h-full flex-col` shell; adding `min-h-0` lets the long template list scroll instead of pushing the toolbar off-screen).
+    * Middle preview canvas: added `min-h-0` to the `flex-1 overflow-auto` canvas div.
+    * Right config panel: wrapped `<ScrollArea>` in `<div className="flex h-full flex-col">` and changed ScrollArea to `min-h-0 flex-1` so the data editors (relation nodes/edges, hierarchy trees, compare groups) can grow tall and scroll inside the panel instead of overflowing into the preview.
+
+Verification:
+- `bun run lint` — passes with zero errors.
+- `curl -s http://127.0.0.1:3000/ -o /dev/null -w "%{http_code}\n"` → `200`.
+- `dev.log` shows normal 200 responses, no compile/render errors after the edits (only the pre-existing `allowedDevOrigins` cross-origin notice, unrelated to this task).
+
+Stage Summary:
+- Both editors now share an identical 3-button right-side export toolbar: **SVG · PNG · Markdown**.
+- The Markdown button copies a markdown code fence:
+  - Mermaid → ` ```mermaid ` wrapping the chart's source code (rendered output is checked only as a "is there anything to copy" guard).
+  - Infographic → ` ```infographic ` wrapping a generated text-syntax representation of the current config (template id + title/lists/nodes/edges).
+- All scrollable panels (template gallery, code editor, preview canvas, data editors) now use the `flex-1 min-h-0` pattern inside `flex flex-col` shells, eliminating the previous overflow / clipped-scroll issues.
+
+---
+
+Task ID: UNIFY-TOOLBAR-ECHARTS
+Agent: main
+Task: Unify the ECharts editor's toolbar with the infographic / mermaid editors (zoom controls + SVG / PNG / Markdown export) and drop the old Card-with-header + export-accordion layout.
+
+Work Log:
+- File modified: `src/components/echarts-editor/echarts-editor.tsx`.
+- **Imports**: Added `ZoomIn`, `ZoomOut`, `Maximize` from `lucide-react`. Removed the now-unused `Code2` import (was dead code), the entire `Card / CardContent / CardHeader / CardTitle / CardDescription` import block (the middle panel no longer uses a Card), and the `Badge` import (was only used inside the Card header).
+- **Removed `typeNameLabel` helper** — it was only referenced inside the deleted Card header, so it became dead code.
+- **Zoom state**: Added `const [zoom, setZoom] = React.useState(1)` plus `handleZoomIn / handleZoomOut / handleReset` (clamped to 0.4 – 2.5 in 0.2 steps, mirroring the infographic editor).
+- **SVG export**: New `handleDownloadSvg` callback. Because the live preview uses the canvas renderer (`{ renderer: 'canvas' }`) — which cannot produce SVG — the handler spins up a temporary off-screen div positioned at `left: -9999px`, initializes an SVG-renderer ECharts instance with the same `option` / theme / size as the live chart, calls `tempChart.setOption(option, true)`, grabs the resulting `<svg>`, sets `xmlns`, serializes via `XMLSerializer`, downloads as `image/svg+xml`, and tears down the temp chart + DOM node in a `finally` block. Uses `t('toasts.noContent')`, `t('toasts.exported')`, `t('toasts.exportFailed')`.
+- **PNG export**: Kept the existing `handleDownloadPNG` (uses `chartRef.current.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#fff' })`). Updated the "not rendered yet" toast to use the shared `t('toasts.noContent')` key for consistency.
+- **Markdown copy**: Replaced `handleCopyOption` (raw JSON) with `handleCopyAsMarkdown` — wraps `JSON.stringify(option, null, 2)` in a ` ```echarts ` / ` ``` ` fence and writes to the clipboard, toasting `t('toasts.copied')` / `t('toasts.copyFailed')`.
+- **Removed `handleDownloadJSON`** (no longer wired anywhere).
+- **Middle panel restructure**: Replaced the entire `<Card>…<CardHeader>…<CardContent>…</Card>` block with a `flex h-full flex-col` shell that contains:
+  1. A `border-b px-3 py-2` toolbar row split into two halves:
+     - Left: zoom-out button (icon-only `h-7 w-7 p-0`), `w-12` centered `tabular-nums` percentage label, zoom-in button, reset button (Maximize icon). All `size="sm" variant="ghost"`.
+     - Right: SVG / PNG / Markdown buttons (`size="sm" variant="ghost" h-7 gap-1 px-2 text-xs`), each with a small `h-3 w-3` icon. Labels are literal strings `'SVG'`, `'PNG'`, `'Markdown'` per the task spec.
+  2. A `relative flex-1 overflow-auto` canvas (white background) that contains a transformed wrapper (`transform: scale(${zoom})`, `transformOrigin: center center`, `transition: transform 0.15s ease`) wrapping the actual `chartContainerRef` div (`width: 100%, height: 100%, minHeight: 400`).
+  3. The existing `Loader2` spinner overlay for `!echartsLoaded`, re-parented into the new canvas div.
+- The `previewRef` (used by the parent shell for thumbnails) is preserved on the outer `flex-1 overflow-auto` canvas div; the `chartContainerRef` is preserved on the inner div where echarts initializes.
+- The existing ResizeObserver + dispose-on-unmount effect is unchanged — it still observes `chartContainerRef` and resizes the live canvas-renderer instance. (CSS transforms on the parent wrapper don't change the inner container's layout size, so the observer won't fire spuriously on zoom changes.)
+- **Right panel cleanup**: Removed the entire `AccordionItem value="export"` section (download-PNG / download-JSON / copy-option buttons + the description paragraph). Updated the Accordion's `defaultValue` from `['type', 'title', 'data', 'style', 'export']` to `['type', 'title', 'data', 'style']`. All other config sections (chart type, title, data, style) are untouched.
+- Verified the left template-gallery panel already uses a `ScrollArea` for proper scrolling — no changes needed there.
+- Ran `bun run lint` — clean (no errors or warnings).
+- Verified the page still loads: `curl -s http://127.0.0.1:3000/ -o /dev/null -w "%{http_code}\n"` returns `200`. Dev log shows no new errors.
+
+Stage Summary:
+- The ECharts editor now visually matches the infographic and mermaid editors: a single thin toolbar at the top of the middle panel with zoom controls on the left (zoom out / `NN%` / zoom in / reset) and three export buttons on the right (SVG / PNG / Markdown).
+- "Copy option" became "Copy as Markdown" — copies the chart's JSON option wrapped in a ` ```echarts ` code fence, mirroring the mermaid (` ```mermaid `) and infographic (` ```infographic `) editors.
+- SVG export works reliably by spinning up a temporary SVG-renderer ECharts instance with the same option/theme/size, serializing its `<svg>`, and disposing of it cleanly in a `finally` block.
+- Removed ~60 lines of dead code: the Card-based preview, the `typeNameLabel` helper, `handleDownloadJSON`, `handleCopyOption`, the export accordion item, and the unused `Code2` / `Card*` / `Badge` imports.
+
+---
+Task ID: URL-SYNC-EDITORS
+Agent: main
+Task: Add `onTemplateChange` callback to all three editors so template switches made *inside* an editor propagate up to the parent's `doc.templateId` and keep the `?chart=<engine>:<libraryType>` URL param in sync.
+
+Work Log:
+- `src/components/echarts-editor/echarts-editor.tsx`
+  - Added `onTemplateChange?: (templateId: string) => void` to `EChartsEditorProps`.
+  - Added `onTemplateChange` to the destructure.
+  - In `applyTemplate` (single funnel used by both the gallery click and the chart-type `Select`), added `onTemplateChange?.('echarts:' + tpl.id)` after `setCurrentTemplateId(tpl.id)`, and added `onTemplateChange` to the useCallback deps.
+- `src/components/mermaid-editor/mermaid-editor.tsx`
+  - Added `onTemplateChange?: (templateId: string) => void` to `MermaidEditorProps` + destructure.
+  - In `applyTemplate`, added `onTemplateChange?.('mermaid:' + tpl.id)` after `setLocal(...)`, and added `onTemplateChange` to the useCallback deps.
+- `src/components/infographic-editor/infographic-editor.tsx`
+  - Added `onTemplateChange?: (templateId: string) => void` to `InfographicEditorProps` + destructure.
+  - In `applyTemplate`, added `onTemplateChange?.('infographic:' + tpl.id)` after `setLocal(...)`, and added `onTemplateChange` to the useCallback deps.
+- `src/components/chart-tool/chart-tool-app.tsx`
+  - Passed `onTemplateChange={(tid) => setDoc((d) => (d ? { ...d, templateId: tid } : d))}` to all three editor instances.
+  - The existing `useEffect` on `[doc]` already calls `updateUrlChart(doc.templateId)`, so the URL is now kept in sync when the user switches templates from inside any editor's template gallery.
+
+Stage Summary:
+- Switching a template from within any editor (ECharts gallery / chart-type dropdown, Mermaid gallery, Infographic gallery) now updates `doc.templateId`, which in turn updates the `?chart=` URL param.
+- `onTemplateChange` is optional — existing callers that don't pass it are unaffected.
+- `bun run lint` passes; dev server still serving 200 on `/?chart=echarts:bar` etc.
+- Work record also saved to `/home/z/my-project/agent-ctx/URL-SYNC-EDITORS-main.md`.
+
+---
+Task ID: UNIFY-TOOLBAR + URL-PARAMS + SCROLL-FIX
+Agent: main
+Task: Unify all editors' toolbar (zoom/SVG/PNG/Markdown), add URL param for chart preselect, fix scrollbar issues
+
+Work Log:
+- **Unified toolbar**: ECharts editor previously used a Card layout with export buttons in an accordion. Refactored to match infographic/mermaid: a thin toolbar with zoom controls (ZoomOut / percentage / ZoomIn / Maximize-reset) on the left, and SVG / PNG / Markdown buttons on the right.
+- **Copy as Markdown**: Replaced all "copy" / "JSON export" buttons with "Markdown" button that wraps content in the appropriate code fence:
+  - ECharts: ` ```echarts\n{json option}\n``` `
+  - Mermaid: ` ```mermaid\n{mermaid source code}\n``` `
+  - Infographic: ` ```infographic\n{infographic syntax}\n``` ` (generated from config via `generateInfographicSyntax()`)
+- **URL parameter**: Added `?chart=<engine>:<libraryType>` support:
+  - On page load, reads `?chart=` param and preselects the template (no picker dialog).
+  - When user picks a template (from main picker OR from editor's internal gallery), updates URL via `history.replaceState`.
+  - Browser back/forward navigation updates the active doc via `popstate` listener.
+- **Editor → URL sync**: Added `onTemplateChange?: (templateId: string) => void` callback prop to all three editors. When the user switches templates within an editor's gallery, the editor calls `onTemplateChange('echarts:bar')` etc., which updates `doc.templateId`, which triggers the URL sync effect.
+- **Scrollbar fixes**: 
+  - All `ScrollArea` components now use `min-h-0 flex-1` (the `min-h-0` is critical for flex children to scroll).
+  - Panels wrapped in `flex h-full flex-col` with scrollable content area.
+  - Mermaid code Textarea capped with `max-h-[420px]`.
+  - Preview canvas uses `overflow-auto` with `min-h-0`.
+- **ECharts SVG export**: Implemented via temp off-screen div with SVG renderer (`echarts.init(temp, theme, { renderer: 'svg' })`), serialize the SVG, download, then dispose.
+
+Stage Summary:
+- ✅ All three editors have identical toolbar: zoom controls + SVG/PNG/Markdown
+- ✅ Copy-as-Markdown verified for all three engines (echarts/mermaid/infographic code fences)
+- ✅ URL `?chart=` param works: preselect on load, updates on template switch (both main picker and editor gallery), browser back/forward support
+- ✅ Scrollbar issues fixed (config panels, template galleries, data editors all scroll properly)
+- ✅ Lint passes (0 errors), dev server stable, all editors verified in browser

@@ -24,6 +24,7 @@ import {
   Triangle,
   ListOrdered,
   Loader2,
+  FileText,
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -59,7 +60,7 @@ import {
   SYNTAX_CHEATSHEET,
   type MermaidTemplateMeta,
 } from './mermaid-templates'
-import { exportSvg, exportJson } from '@/lib/chart/export'
+import { exportSvg } from '@/lib/chart/export'
 import { useT } from '@/lib/i18n'
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -89,6 +90,7 @@ function deepClone<T>(v: T): T {
 export interface MermaidEditorProps {
   config: MermaidConfig | null
   onChange: (cfg: MermaidConfig) => void
+  onTemplateChange?: (templateId: string) => void
   previewRef: React.RefObject<HTMLDivElement | null>
 }
 
@@ -96,7 +98,7 @@ export interface MermaidEditorProps {
 // Component
 // ===========================================================================
 
-export function MermaidEditor({ config, onChange, previewRef }: MermaidEditorProps) {
+export function MermaidEditor({ config, onChange, onTemplateChange, previewRef }: MermaidEditorProps) {
   const t = useT()
   const [local, setLocal] = React.useState<MermaidConfig>(() =>
     config
@@ -142,8 +144,9 @@ export function MermaidEditor({ config, onChange, previewRef }: MermaidEditorPro
       type: tpl.type,
       code: tpl.defaultCode,
     }))
+    onTemplateChange?.('mermaid:' + tpl.id)
     toast.success(t('toasts.applied', { name: tpl.name }))
-  }, [t])
+  }, [t, onTemplateChange])
 
   const handleFormat = () => {
     update({
@@ -168,7 +171,8 @@ export function MermaidEditor({ config, onChange, previewRef }: MermaidEditorPro
     <ResizablePanelGroup direction="horizontal" className="h-full">
       {/* ---------------- Left: Configuration ---------------- */}
       <ResizablePanel defaultSize={45} minSize={28} maxSize={60}>
-        <ScrollArea className="h-full">
+        <div className="flex h-full flex-col">
+        <ScrollArea className="min-h-0 flex-1">
           <div className="space-y-4 p-4">
             {/* Template gallery */}
             <section>
@@ -223,7 +227,7 @@ export function MermaidEditor({ config, onChange, previewRef }: MermaidEditorPro
               <Textarea
                 value={local.code}
                 onChange={(e) => update({ code: e.target.value })}
-                className="min-h-[300px] resize-y font-mono text-xs leading-relaxed"
+                className="max-h-[420px] min-h-[220px] resize-y font-mono text-xs leading-relaxed"
                 spellCheck={false}
                 placeholder="Type Mermaid code here…"
               />
@@ -297,6 +301,7 @@ export function MermaidEditor({ config, onChange, previewRef }: MermaidEditorPro
             </section>
           </div>
         </ScrollArea>
+        </div>
       </ResizablePanel>
 
       <ResizableHandle withHandle />
@@ -452,24 +457,20 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
     }
   }
 
-  const handleCopySvg = async () => {
+  const handleCopyAsMarkdown = async () => {
     const svg = containerRef.current?.querySelector('svg')
     if (!svg) {
       toast.error(t('toasts.noContent'))
       return
     }
     try {
-      const str = new XMLSerializer().serializeToString(svg)
-      await navigator.clipboard.writeText(str)
+      // For mermaid, the markdown fence wraps the mermaid SOURCE code (not the SVG)
+      const markdown = '```mermaid\n' + config.code + '\n```'
+      await navigator.clipboard.writeText(markdown)
       toast.success(t('toasts.copied'))
     } catch {
       toast.error(t('toasts.copyFailed'))
     }
-  }
-
-  const handleExportJson = () => {
-    exportJson(config, `mermaid-config-${Date.now()}.json`)
-    toast.success(t('toasts.exported'))
   }
 
   return (
@@ -497,11 +498,8 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
           <Button size="sm" variant="ghost" onClick={handleDownloadPng} className="h-7 gap-1 px-2 text-xs">
             <Download className="h-3 w-3" /> PNG
           </Button>
-          <Button size="sm" variant="ghost" onClick={handleCopySvg} className="h-7 gap-1 px-2 text-xs">
-            <Copy className="h-3 w-3" /> {t('mermaid.copySvg')}
-          </Button>
-          <Button size="sm" variant="ghost" onClick={handleExportJson} className="h-7 gap-1 px-2 text-xs">
-            <Code2 className="h-3 w-3" /> JSON
+          <Button size="sm" variant="ghost" onClick={handleCopyAsMarkdown} className="h-7 gap-1 px-2 text-xs">
+            <FileText className="h-3 w-3" /> Markdown
           </Button>
         </div>
       </div>
@@ -509,7 +507,7 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
       {/* Canvas */}
       <div
         ref={previewRef}
-        className="relative flex-1 overflow-auto bg-muted/30 p-4"
+        className="relative min-h-0 flex-1 overflow-auto bg-muted/30 p-4"
         style={{ background: config.background }}
       >
         <div

@@ -5,7 +5,6 @@ import { Infographic as InfographicEngine } from '@antv/infographic'
 import { toast } from 'sonner'
 import {
   Download,
-  Copy,
   Plus,
   Trash2,
   ChevronRight,
@@ -44,6 +43,7 @@ import {
   Cloud,
   Square,
   Search,
+  FileText,
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -83,7 +83,7 @@ import {
   type TemplateMeta,
   type InfographicTemplateCategory,
 } from './template-registry'
-import { exportSvg, exportJson } from '@/lib/chart/export'
+import { exportSvg } from '@/lib/chart/export'
 import { useT } from '@/lib/i18n'
 
 // Icon registry — maps template icon names to lucide components
@@ -105,12 +105,58 @@ function getIcon(name: string): React.ComponentType<{ className?: string }> {
 }
 
 // ---------------------------------------------------------------------------
+// Infographic syntax generator — produces a text-based representation of the
+// current config so users can copy it as a ```infographic``` markdown block.
+// The format loosely mirrors @antv/infographic's declarative text syntax.
+// ---------------------------------------------------------------------------
+function generateInfographicSyntax(config: InfographicConfig): string {
+  const lines: string[] = []
+  lines.push(`infographic ${config.template}`)
+  lines.push('data')
+  if (config.data.title?.text) {
+    lines.push('  title')
+    lines.push(`    text ${config.data.title.text}`)
+    if (config.data.title.subtext) {
+      lines.push(`    subtext ${config.data.title.subtext}`)
+    }
+  }
+  if (config.data.lists && config.data.lists.length > 0) {
+    lines.push('  lists')
+    for (const item of config.data.lists) {
+      const parts = [`- label ${item.label || ''}`]
+      if (item.desc) parts.push(`  desc ${item.desc}`)
+      if (item.value !== undefined) parts.push(`  value ${item.value}`)
+      if (item.icon) parts.push(`  icon ${item.icon}`)
+      lines.push(parts.join('\n'))
+    }
+  }
+  if (config.data.nodes && config.data.nodes.length > 0) {
+    lines.push('  nodes')
+    for (const node of config.data.nodes) {
+      lines.push(`    - id ${node.id}`)
+      lines.push(`      label ${node.label}`)
+      if (node.group) lines.push(`      group ${node.group}`)
+    }
+  }
+  if (config.data.edges && config.data.edges.length > 0) {
+    lines.push('  edges')
+    for (const edge of config.data.edges) {
+      lines.push(`    - from ${edge.from}`)
+      lines.push(`      to ${edge.to}`)
+      if (edge.label) lines.push(`      label ${edge.label}`)
+    }
+  }
+  return lines.join('\n')
+}
+
+// ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
 
 export interface InfographicEditorProps {
   config: InfographicConfig | null
   onChange: (cfg: InfographicConfig) => void
+  onTemplateChange?: (templateId: string) => void
   previewRef: React.RefObject<HTMLDivElement | null>
 }
 
@@ -118,7 +164,7 @@ export interface InfographicEditorProps {
 // Main component
 // ===========================================================================
 
-export function InfographicEditor({ config, onChange, previewRef }: InfographicEditorProps) {
+export function InfographicEditor({ config, onChange, onTemplateChange, previewRef }: InfographicEditorProps) {
   const t = useT()
   const [local, setLocal] = React.useState<InfographicConfig>(() =>
     config
@@ -168,8 +214,9 @@ export function InfographicEditor({ config, onChange, previewRef }: InfographicE
       template: tpl.id,
       data: defaultDataForShape(tpl.dataShape),
     }))
+    onTemplateChange?.('infographic:' + tpl.id)
     toast.success(t('infographic.applied', { name: tpl.name }))
-  }, [t])
+  }, [t, onTemplateChange])
 
   const currentTemplate = React.useMemo(
     () => TEMPLATE_REGISTRY.find((t) => t.id === local.template) ?? TEMPLATE_REGISTRY[0],
@@ -252,7 +299,7 @@ function TemplateGallery({ currentId, onPick }: GalleryProps) {
           />
         </div>
       </div>
-      <ScrollArea className="flex-1">
+      <ScrollArea className="min-h-0 flex-1">
         <div className="p-3">
           {filtered ? (
             <div className="grid grid-cols-2 gap-2">
@@ -481,9 +528,16 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
     }
   }
 
-  const handleExportJson = () => {
-    exportJson(config, `infographic-config-${Date.now()}.json`)
-    toast.success(t('toasts.exported'))
+  const handleCopyAsMarkdown = () => {
+    // For infographic, generate the infographic syntax from the current config
+    // and wrap it in a markdown ```infographic``` code fence.
+    const syntax = generateInfographicSyntax(config)
+    const markdown = '```infographic\n' + syntax + '\n```'
+    navigator.clipboard.writeText(markdown).then(() => {
+      toast.success(t('toasts.copied'))
+    }).catch(() => {
+      toast.error(t('toasts.copyFailed'))
+    })
   }
 
   return (
@@ -506,13 +560,13 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
         </div>
         <div className="flex items-center gap-1">
           <Button size="sm" variant="ghost" onClick={handleDownloadSvg} className="h-7 gap-1 px-2 text-xs">
-            <Download className="h-3 w-3" /> {t('infographic.downloadSvg')}
+            <Download className="h-3 w-3" /> SVG
           </Button>
           <Button size="sm" variant="ghost" onClick={handleDownloadPng} className="h-7 gap-1 px-2 text-xs">
-            <Download className="h-3 w-3" /> {t('infographic.downloadPng')}
+            <Download className="h-3 w-3" /> PNG
           </Button>
-          <Button size="sm" variant="ghost" onClick={handleExportJson} className="h-7 gap-1 px-2 text-xs">
-            <Copy className="h-3 w-3" /> {t('infographic.exportJson')}
+          <Button size="sm" variant="ghost" onClick={handleCopyAsMarkdown} className="h-7 gap-1 px-2 text-xs">
+            <FileText className="h-3 w-3" /> Markdown
           </Button>
         </div>
       </div>
@@ -520,7 +574,7 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
       {/* Canvas */}
       <div
         ref={previewRef}
-        className="relative flex-1 overflow-auto p-4"
+        className="relative min-h-0 flex-1 overflow-auto p-4"
         style={{ background: config.background }}
       >
         <div
@@ -561,7 +615,8 @@ interface ConfigProps {
 function ConfigPanel({ config, template, update }: ConfigProps) {
   const t = useT()
   return (
-    <ScrollArea className="h-full">
+    <div className="flex h-full flex-col">
+    <ScrollArea className="min-h-0 flex-1">
       <div className="space-y-5 p-4">
         {/* Template info */}
         <section className="rounded-lg border bg-muted/30 p-3">
@@ -665,6 +720,7 @@ function ConfigPanel({ config, template, update }: ConfigProps) {
         </section>
       </div>
     </ScrollArea>
+    </div>
   )
 }
 

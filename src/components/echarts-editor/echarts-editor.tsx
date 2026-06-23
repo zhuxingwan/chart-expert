@@ -17,9 +17,11 @@ import {
   Shuffle,
   Download,
   Copy,
-  Code2,
   AlignLeft,
   Loader2,
+  ZoomIn,
+  ZoomOut,
+  Maximize,
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -30,13 +32,6 @@ import {
   ResizablePanel,
   ResizableHandle,
 } from '@/components/ui/resizable'
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from '@/components/ui/card'
 import {
   Accordion,
   AccordionItem,
@@ -57,7 +52,6 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Slider } from '@/components/ui/slider'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   ECHARTS_TEMPLATES,
@@ -113,20 +107,6 @@ function iconForType(type: string) {
   }
 }
 
-function typeNameLabel(type: string): string {
-  const map: Record<string, string> = {
-    bar: 'Bar',
-    line: 'Line',
-    pie: 'Pie',
-    scatter: 'Scatter',
-    radar: 'Radar',
-    funnel: 'Funnel',
-    gauge: 'Gauge',
-    heatmap: 'Heatmap',
-  }
-  return map[type] ?? type
-}
-
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -134,6 +114,7 @@ function typeNameLabel(type: string): string {
 export interface EChartsEditorProps {
   config: EChartsConfig | null
   onChange: (cfg: EChartsConfig) => void
+  onTemplateChange?: (templateId: string) => void
   previewRef: React.RefObject<HTMLDivElement | null>
 }
 
@@ -141,7 +122,7 @@ export interface EChartsEditorProps {
 // Component
 // ===========================================================================
 
-export function EChartsEditor({ config, onChange, previewRef }: EChartsEditorProps) {
+export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }: EChartsEditorProps) {
   const t = useT()
   // CDN-loaded echarts — status flips to 'loaded' once the <script> tag from
   // VizLibLoader finishes. We render a loading placeholder until then.
@@ -271,9 +252,10 @@ export function EChartsEditor({ config, onChange, previewRef }: EChartsEditorPro
       if (keepTitle && local.title) next.title = deepClone(local.title)
       commit(next)
       setCurrentTemplateId(tpl.id)
+      onTemplateChange?.('echarts:' + tpl.id)
       toast.success(t('toasts.applied', { name: tpl.name }))
     },
-    [commit, local.title, t],
+    [commit, local.title, t, onTemplateChange],
   )
 
   const onTemplateIdChange = React.useCallback(
@@ -284,10 +266,16 @@ export function EChartsEditor({ config, onChange, previewRef }: EChartsEditorPro
     [applyTemplate],
   )
 
+  // ----- Zoom -----
+  const [zoom, setZoom] = React.useState(1)
+  const handleZoomIn = () => setZoom((z) => Math.min(2.5, z + 0.2))
+  const handleZoomOut = () => setZoom((z) => Math.max(0.4, z - 0.2))
+  const handleReset = () => setZoom(1)
+
   // ----- Export handlers -----
   const handleDownloadPNG = React.useCallback(() => {
     if (!chartRef.current) {
-      toast.error('Chart not rendered yet')
+      toast.error(t('toasts.noContent'))
       return
     }
     try {
@@ -308,29 +296,62 @@ export function EChartsEditor({ config, onChange, previewRef }: EChartsEditorPro
     }
   }, [local.title, t])
 
-  const handleDownloadJSON = React.useCallback(() => {
+  // Render the option into a hidden, off-screen SVG-renderer ECharts instance
+  // and serialize the resulting SVG. The live preview uses the canvas renderer
+  // (which can't produce SVG), so we spin up a temporary SVG-renderer instance
+  // with the same option / size / theme, grab its <svg>, and tear it down.
+  const handleDownloadSvg = React.useCallback(() => {
+    const echartsLib = getECharts()
+    if (!echartsLib || !chartContainerRef.current) {
+      toast.error(t('toasts.noContent'))
+      return
+    }
+    const temp = document.createElement('div')
+    temp.style.width = chartContainerRef.current.clientWidth + 'px'
+    temp.style.height = chartContainerRef.current.clientHeight + 'px'
+    temp.style.position = 'absolute'
+    temp.style.left = '-9999px'
+    document.body.appendChild(temp)
+    let tempChart: any = null
     try {
-      const blob = new Blob([JSON.stringify(local, null, 2)], {
-        type: 'application/json',
-      })
+      const themeName =
+        local.theme && local.theme !== 'default' ? local.theme : undefined
+      tempChart = echartsLib.init(temp, themeName, { renderer: 'svg' })
+      tempChart.setOption(option, true)
+      const svg = temp.querySelector('svg')
+      if (!svg) {
+        toast.error(t('toasts.noContent'))
+        return
+      }
+      svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+      const svgStr = new XMLSerializer().serializeToString(svg)
+      const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `${local.title?.text || 'chart'}.json`
+      a.download = `${local.title?.text || 'chart'}.svg`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
       toast.success(t('toasts.exported'))
-    } catch {
-      toast.error(t('toasts.exportFailed', { error: 'JSON' }))
+    } catch (e) {
+      toast.error(t('toasts.exportFailed', { error: (e as Error).message }))
+    } finally {
+      try {
+        tempChart?.dispose()
+      } catch {
+        // ignore
+      }
+      if (temp.parentNode) document.body.removeChild(temp)
     }
-  }, [local, t])
+  }, [option, local.theme, local.title, t])
 
-  const handleCopyOption = React.useCallback(async () => {
+  const handleCopyAsMarkdown = React.useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(JSON.stringify(option, null, 2))
-      toast.success(t('echarts.copied'))
+      const markdown = '```echarts\n' + JSON.stringify(option, null, 2) + '\n```'
+      await navigator.clipboard.writeText(markdown)
+      toast.success(t('toasts.copied'))
     } catch {
       toast.error(t('toasts.copyFailed'))
     }
@@ -436,43 +457,99 @@ export function EChartsEditor({ config, onChange, previewRef }: EChartsEditorPro
 
       {/* ----------------------- MIDDLE: Preview ----------------------- */}
       <ResizablePanel defaultSize={40} minSize={30} className="bg-muted/20">
-        <Card className="h-full rounded-none border-0 shadow-none">
-          <CardHeader className="border-b pb-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Badge variant="secondary" className="font-normal">
-                    {typeNameLabel(local.type)}
-                  </Badge>
-                  <span className="text-base">{local.title?.text || 'Untitled Chart'}</span>
-                </CardTitle>
-                {local.title?.subtext ? (
-                  <CardDescription className="mt-1">{local.title.subtext}</CardDescription>
-                ) : null}
-              </div>
-              <Badge variant="outline" className="hidden md:inline-flex">
-                Live Preview
-              </Badge>
+        <div className="flex h-full flex-col">
+          {/* Toolbar — unified across all editors (zoom left, export right) */}
+          <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
+            <div className="flex items-center gap-1.5">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleZoomOut}
+                aria-label="Zoom out"
+                className="h-7 w-7 p-0"
+              >
+                <ZoomOut className="h-4 w-4" />
+              </Button>
+              <span className="w-12 text-center text-xs tabular-nums text-muted-foreground">
+                {Math.round(zoom * 100)}%
+              </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleZoomIn}
+                aria-label="Zoom in"
+                className="h-7 w-7 p-0"
+              >
+                <ZoomIn className="h-4 w-4" />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleReset}
+                aria-label="Reset zoom"
+                className="h-7 w-7 p-0"
+              >
+                <Maximize className="h-4 w-4" />
+              </Button>
             </div>
-          </CardHeader>
-          <CardContent className="flex-1 p-2 sm:p-4">
+            <div className="flex items-center gap-1">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleDownloadSvg}
+                className="h-7 gap-1 px-2 text-xs"
+              >
+                <Download className="h-3 w-3" /> SVG
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleDownloadPNG}
+                className="h-7 gap-1 px-2 text-xs"
+              >
+                <Download className="h-3 w-3" /> PNG
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleCopyAsMarkdown}
+                className="h-7 gap-1 px-2 text-xs"
+              >
+                <Copy className="h-3 w-3" /> Markdown
+              </Button>
+            </div>
+          </div>
+
+          {/* Canvas */}
+          <div
+            ref={previewRef}
+            className="relative flex-1 overflow-auto"
+            style={{ background: '#fff' }}
+          >
             <div
-              ref={previewRef}
-              className="relative h-full min-h-[320px] w-full overflow-hidden rounded-lg bg-background"
+              style={{
+                transform: `scale(${zoom})`,
+                transformOrigin: 'center center',
+                transition: 'transform 0.15s ease',
+                width: '100%',
+                height: '100%',
+              }}
             >
               <div
                 ref={chartContainerRef}
-                style={{ width: '100%', height: '100%' }}
+                style={{ width: '100%', height: '100%', minHeight: 400 }}
               />
-              {!echartsLoaded && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/80 backdrop-blur-sm">
-                  <Loader2 className="size-6 animate-spin text-primary" />
-                  <span className="text-sm text-muted-foreground">{t('app.loadingLib')}</span>
-                </div>
-              )}
             </div>
-          </CardContent>
-        </Card>
+            {!echartsLoaded && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/80 backdrop-blur-sm">
+                <Loader2 className="size-6 animate-spin text-primary" />
+                <span className="text-sm text-muted-foreground">
+                  {t('app.loadingLib')}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
       </ResizablePanel>
 
       <ResizableHandle withHandle />
@@ -490,7 +567,7 @@ export function EChartsEditor({ config, onChange, previewRef }: EChartsEditorPro
             <div className="p-3">
               <Accordion
                 type="multiple"
-                defaultValue={['type', 'title', 'data', 'style', 'export']}
+                defaultValue={['type', 'title', 'data', 'style']}
                 className="w-full"
               >
                 {/* 1. Chart type */}
@@ -589,31 +666,6 @@ export function EChartsEditor({ config, onChange, previewRef }: EChartsEditorPro
                   </AccordionTrigger>
                   <AccordionContent>
                     <StyleEditor config={local} patch={patch} />
-                  </AccordionContent>
-                </AccordionItem>
-
-                {/* 5. Export */}
-                <AccordionItem value="export">
-                  <AccordionTrigger>
-                    <span className="flex items-center gap-2 font-medium">
-                      <Download className="size-4 text-primary" /> {t('echarts.export_section')}
-                    </span>
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <div className="space-y-2">
-                      <p className="text-xs text-muted-foreground">
-                        PNG is great for documents; JSON can be re-imported to keep editing; option JSON is for developers to call directly.
-                      </p>
-                      <Button onClick={handleDownloadPNG} className="w-full" variant="default">
-                        <Download className="size-4" /> {t('echarts.downloadPng')}
-                      </Button>
-                      <Button onClick={handleDownloadJSON} className="w-full" variant="outline">
-                        <Download className="size-4" /> {t('echarts.downloadJson')}
-                      </Button>
-                      <Button onClick={handleCopyOption} className="w-full" variant="outline">
-                        <Copy className="size-4" /> {t('echarts.copyOption')}
-                      </Button>
-                    </div>
                   </AccordionContent>
                 </AccordionItem>
               </Accordion>
