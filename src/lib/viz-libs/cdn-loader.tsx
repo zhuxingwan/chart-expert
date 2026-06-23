@@ -20,11 +20,11 @@ const CDN_SCRIPTS = [
   },
   {
     id: 'antv-infographic',
-    src: 'https://cdn.jsdelivr.net/npm/@antv/infographic@0.2.19/dist/infographic.umd.min.js',
+    src: 'https://cdn.jsdelivr.net/npm/@antv/infographic@0.2.19/dist/infographic.min.js',
     check: () => {
       if (typeof window === 'undefined') return false
-      const w = window as unknown as { Infographic?: unknown }
-      return !!w.Infographic
+      const w = window as unknown as { AntVInfographic?: { Infographic?: unknown } }
+      return !!w.AntVInfographic?.Infographic
     },
   },
 ]
@@ -130,6 +130,6 @@ export function getMermaid(): any | null {
 /** Get the AntV Infographic constructor from the CDN-loaded global. */
 export function getInfographic(): any | null {
   if (typeof window === 'undefined') return null
-  const w = window as unknown as { Infographic?: any }
-  return w.Infographic ?? null
+  const w = window as unknown as { AntVInfographic?: { Infographic?: any } }
+  return w.AntVInfographic?.Infographic ?? null
 }

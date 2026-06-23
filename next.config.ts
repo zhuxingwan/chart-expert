@@ -6,8 +6,10 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
-  // Heavy client-only viz libraries — externalize to CDN globals so the
-  // webpack bundle stays small and the dev server doesn't OOM.
+  // Heavy client-only viz libraries are loaded from CDN via <script> tags
+  // (see src/lib/viz-libs/cdn-loader.tsx). Keep them out of BOTH server and
+  // client bundles: serverExternalPackages for server, webpack externals for
+  // client (maps `import x from 'echarts'` → `window.echarts` at runtime).
   serverExternalPackages: [
     "mermaid",
     "echarts",
@@ -21,29 +23,18 @@ const nextConfig: NextConfig = {
     "culori",
     "html2canvas",
   ],
-  // Map library imports to globals loaded from CDN scripts (see VizLibLoader).
-  // `var echarts` → window.echarts, etc. Only applied to client bundles.
   webpack: (config, { isServer }) => {
     if (!isServer) {
-      config.externals = config.externals || []
-      config.externals.push({
-        echarts: 'echarts',
-        mermaid: 'mermaid',
-        '@antv/infographic': 'Infographic',
-      })
+      config.externals = config.externals || [];
+      (config.externals as Array<Record<string, string>>).push({
+        echarts: "echarts",
+        mermaid: "mermaid",
+        "@antv/infographic": "AntVInfographic",
+      });
     }
-    return config
+    return config;
   },
-  allowedDevOrigins: [
-    "127.0.0.1",
-    "localhost",
-    "http://127.0.0.1",
-    "http://localhost",
-    "http://127.0.0.1:81",
-    "http://localhost:81",
-    "http://127.0.0.1:3000",
-    "http://localhost:3000",
-  ],
+  allowedDevOrigins: ["*"],
 };
 
 export default nextConfig;
