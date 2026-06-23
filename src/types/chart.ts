@@ -122,6 +122,8 @@ export interface InfographicConfig {
   data: InfographicData
   theme: 'light' | 'dark' | 'hand-drawn'
   background: string
+  colorPrimary?: string // primary color for theme (hex)
+  palette?: string // palette preset name
   width: number
   height: number
 }

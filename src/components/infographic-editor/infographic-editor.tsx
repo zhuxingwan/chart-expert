@@ -95,6 +95,29 @@ import {
   getInfographicCategoryLabel,
 } from '@/lib/i18n/template-names'
 
+// ─── Color palette presets (aesthetically curated) ──────────────────────
+const COLOR_PRESETS: { name: string; color: string; bg?: string }[] = [
+  { name: 'AntV Blue', color: '#1783FF' },
+  { name: 'Coral', color: '#FF6B6B' },
+  { name: 'Emerald', color: '#10B981' },
+  { name: 'Amber', color: '#F59E0B' },
+  { name: 'Violet', color: '#8B5CF6' },
+  { name: 'Rose', color: '#F43F5E' },
+  { name: 'Cyan', color: '#06B6D4' },
+  { name: 'Indigo', color: '#6366F1' },
+  { name: 'Teal', color: '#14B8A6' },
+  { name: 'Orange', color: '#F97316' },
+  { name: 'Magenta', color: '#D946EF' },
+  { name: 'Lime', color: '#84CC16' },
+]
+
+// Random aesthetically pleasing colors (curated, not fully random)
+const RANDOM_COLORS = [
+  '#1783FF', '#FF6B6B', '#10B981', '#F59E0B', '#8B5CF6', '#F43F5E',
+  '#06B6D4', '#6366F1', '#14B8A6', '#F97316', '#D946EF', '#84CC16',
+  '#EC4899', '#3B82F6', '#22C55E', '#A855F7', '#EF4444', '#0EA5E9',
+]
+
 // Icon registry — maps template icon names to lucide components
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Rows3, LayoutGrid, Columns3, Triangle, PieChart, Waves, Spline,
@@ -608,6 +631,10 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
           template: config.template,
           data: engineData,
           theme: config.theme,
+          themeConfig: {
+            ...(config.colorPrimary ? { colorPrimary: config.colorPrimary } : {}),
+            ...(config.colorPrimary ? { colorBg: config.background } : {}),
+          },
         })
         setError(null)
       } catch (e) {
@@ -896,6 +923,51 @@ function ConfigPanel({ config, template, update }: ConfigProps) {
                 </button>
               ))}
             </div>
+
+            {/* Color palette presets */}
+            <div>
+              <Label className="mb-1 block text-[10px] text-muted-foreground">
+                {locale.startsWith('zh') ? '主色预设' : 'Color Preset'}
+              </Label>
+              <div className="flex flex-wrap gap-1.5">
+                {COLOR_PRESETS.map((preset) => (
+                  <button
+                    key={preset.name}
+                    onClick={() => update({ colorPrimary: preset.color, background: preset.bg ?? config.background })}
+                    className={cn(
+                      'h-7 w-7 rounded-full border-2 transition-all',
+                      config.colorPrimary === preset.color
+                        ? 'border-foreground ring-1 ring-foreground ring-offset-1'
+                        : 'border-muted hover:border-foreground/40',
+                    )}
+                    style={{ backgroundColor: preset.color }}
+                    title={preset.name}
+                  />
+                ))}
+                {/* Random palette button */}
+                <button
+                  onClick={() => {
+                    const random = RANDOM_COLORS[Math.floor(Math.random() * RANDOM_COLORS.length)]
+                    update({ colorPrimary: random, background: config.theme === 'dark' ? '#1F1F1F' : '#ffffff' })
+                  }}
+                  className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-muted text-xs hover:border-foreground/40"
+                  title={locale.startsWith('zh') ? '随机颜色' : 'Random'}
+                >
+                  🎲
+                </button>
+                {/* Reset color */}
+                {config.colorPrimary && (
+                  <button
+                    onClick={() => update({ colorPrimary: undefined })}
+                    className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-muted text-xs text-muted-foreground hover:border-destructive hover:text-destructive"
+                    title={locale.startsWith('zh') ? '清除' : 'Clear'}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
+
             <div className="flex items-center gap-1.5">
               <Label className="w-16 text-xs">{t('infographic.background')}</Label>
               <Input

@@ -209,30 +209,30 @@ export function defaultDataForShape(
 ): import('@/types/chart').InfographicData {
   if (shape === 'relation') {
     return {
-      title: { text: 'Relationship Example', subtext: 'Click a node for details' },
+      title: { text: 'Team Structure', subtext: 'Key roles and connections' },
       nodes: [
-        { id: 'n1', label: 'Core', group: 'A' },
-        { id: 'n2', label: 'Node 1', group: 'B' },
-        { id: 'n3', label: 'Node 2', group: 'B' },
-        { id: 'n4', label: 'Node 3', group: 'C' },
+        { id: 'n1', label: 'PM', group: 'Core' },
+        { id: 'n2', label: 'Designer', group: 'Design' },
+        { id: 'n3', label: 'Engineer', group: 'Dev' },
+        { id: 'n4', label: 'QA', group: 'Dev' },
       ],
       edges: [
-        { from: 'n1', to: 'n2', label: 'Link' },
-        { from: 'n1', to: 'n3', label: 'Link' },
-        { from: 'n2', to: 'n4', label: 'Link' },
+        { from: 'n1', to: 'n2', label: 'leads' },
+        { from: 'n1', to: 'n3', label: 'leads' },
+        { from: 'n3', to: 'n4', label: 'tests' },
       ],
     }
   }
   if (shape === 'hierarchy') {
     return {
-      title: { text: 'Hierarchy Example', subtext: 'Drag to edit nodes' },
+      title: { text: 'Product Team', subtext: 'Organization overview' },
       lists: [
         {
-          label: 'Root',
-          desc: 'Top-level category',
+          label: 'Product Lead',
+          desc: 'Overall strategy',
           children: [
-            { label: 'Child A', desc: 'Left branch' },
-            { label: 'Child B', desc: 'Right branch', children: [{ label: 'Leaf B1' }, { label: 'Leaf B2' }] },
+            { label: 'Design', desc: 'UI/UX & brand' },
+            { label: 'Engineering', desc: 'Build & deploy', children: [{ label: 'Frontend' }, { label: 'Backend' }] },
           ],
         },
       ],
@@ -240,21 +240,21 @@ export function defaultDataForShape(
   }
   if (shape === 'compare') {
     return {
-      title: { text: 'Comparison Example', subtext: 'Left/right or 4-quadrant comparison' },
+      title: { text: 'Plan A vs Plan B', subtext: 'Feature comparison' },
       lists: [
-        { label: 'Group A', desc: 'Description A', children: [{ label: 'Point A1' }, { label: 'Point A2' }, { label: 'Point A3' }] },
-        { label: 'Group B', desc: 'Description B', children: [{ label: 'Point B1' }, { label: 'Point B2' }, { label: 'Point B3' }] },
+        { label: 'Plan A', desc: 'Fast launch', children: [{ label: 'Quick setup' }, { label: 'Lower cost' }, { label: 'Limited scale' }] },
+        { label: 'Plan B', desc: 'Full feature', children: [{ label: 'Scalable' }, { label: 'Custom design' }, { label: 'Higher cost' }] },
       ],
     }
   }
   // list / chart
   return {
-    title: { text: 'List Example', subtext: 'Click + on the right to add items' },
+    title: { text: 'Key Metrics', subtext: 'Q4 performance highlights' },
     lists: [
-      { label: 'First Item', desc: 'Short description text', value: 80, icon: 'rocket' },
-      { label: 'Second Item', desc: 'Short description text', value: 65, icon: 'star' },
-      { label: 'Third Item', desc: 'Short description text', value: 50, icon: 'target' },
-      { label: 'Fourth Item', desc: 'Short description text', value: 35, icon: 'idea' },
+      { label: 'Revenue', desc: 'Total income', value: 92, icon: 'growth' },
+      { label: 'Users', desc: 'Active monthly', value: 78, icon: 'user' },
+      { label: 'Retention', desc: 'Monthly rate', value: 65, icon: 'repeat' },
+      { label: 'NPS Score', desc: 'Customer rating', value: 54, icon: 'star' },
     ],
   }
 }
