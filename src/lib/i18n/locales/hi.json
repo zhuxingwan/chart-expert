@@ -1,6 +1,8 @@
 {
   "app": {
+    "title": "Chart Expert",
     "title": "चार्ट कार्यशाला",
+    "titleSuffix": "Chart Expert",
     "subtitle": "समृद्ध चार्ट · फ्लोचार्ट · इन्फोग्राफिक्स · ज़ीरो-कोड विज़ुअलाइज़ेशन",
     "current": "वर्तमान: {name}",
     "loadingEditor": "एडिटर लोड हो रहा है…",
@@ -24,6 +26,7 @@
   },
   "templatePicker": {
     "title": "टेम्पलेट चुनें",
+    "titleSuffix": "Chart Expert",
     "description": "उद्देश्य अनुसार {count} टेम्पलेट देखें। शुरू करने के लिए किसी भी एक पर क्लिक करें।",
     "all": "सभी ({count})",
     "noResults": "कोई मेल खाता टेम्पलेट नहीं",
@@ -43,11 +46,13 @@
   },
   "emptyState": {
     "title": "अपना चार्ट बनाना शुरू करें",
+    "titleSuffix": "Chart Expert",
     "description": "हमारी समृद्ध टेम्पलेट गैलरी से चुनें, या AI को सुझाव देने दें",
     "selectTemplate": "टेम्पलेट चुनें"
   },
   "saveDialog": {
     "title": "चार्ट सहेजें",
+    "titleSuffix": "Chart Expert",
     "description": "अपने चार्ट को नाम दें ताकि बाद में आसानी से मिल सके।",
     "chartName": "चार्ट का नाम",
     "placeholder": "जैसे 2024 Q1 बिक्री तुलना",
@@ -57,6 +62,7 @@
   },
   "loadDialog": {
     "title": "मेरे चार्ट",
+    "titleSuffix": "Chart Expert",
     "description": "एडिटर में लोड करने के लिए किसी भी चार्ट पर क्लिक करें।",
     "noPreview": "कोई पूर्वावलोकन नहीं",
     "empty": "अभी कोई चार्ट नहीं — एक बनाएँ!",
@@ -67,6 +73,7 @@
   },
   "aiDialog": {
     "title": "AI स्मार्ट सुझाव",
+    "titleSuffix": "Chart Expert",
     "description": "एक वाक्य में बताएँ कि आप क्या विज़ुअलाइज़ करना चाहते हैं। AI सबसे अच्छा चार्ट प्रकार चुनेगा और नमूना डेटा तैयार करेगा।",
     "promptLabel": "अपनी आवश्यकता बताएँ",
     "promptPlaceholder": "जैसे 2024 की तिमाही बिक्री तुलना उत्पाद लाइनों में दिखाएँ",

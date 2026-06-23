@@ -1,6 +1,8 @@
 {
   "app": {
+    "title": "Chart Expert",
     "title": "ورشة الرسوم البيانية",
+    "titleSuffix": "Chart Expert",
     "subtitle": "رسوم بيانية غنية · مخططات انسيابية · إنفوجرافيك · تصور بدون كود",
     "current": "الحالي: {name}",
     "loadingEditor": "جارٍ تحميل المحرر…",
@@ -24,6 +26,7 @@
   },
   "templatePicker": {
     "title": "اختر قالباً",
+    "titleSuffix": "Chart Expert",
     "description": "تصفّح {count} قالباً حسب الغرض. انقر على أي قالب للبدء.",
     "all": "الكل ({count})",
     "noResults": "لا توجد قوالب مطابقة",
@@ -43,11 +46,13 @@
   },
   "emptyState": {
     "title": "ابدأ بإنشاء الرسم البياني",
+    "titleSuffix": "Chart Expert",
     "description": "اختر من معرض القوالب الغني، أو دع الذكاء الاصطناعي يرشّح لك",
     "selectTemplate": "اختر قالباً"
   },
   "saveDialog": {
     "title": "حفظ الرسم البياني",
+    "titleSuffix": "Chart Expert",
     "description": "أعطِ الرسم اسماً لتجده بسهولة لاحقاً.",
     "chartName": "اسم الرسم البياني",
     "placeholder": "مثال: مقارنة مبيعات الربع الأول 2024",
@@ -57,6 +62,7 @@
   },
   "loadDialog": {
     "title": "رسومي",
+    "titleSuffix": "Chart Expert",
     "description": "انقر على أي رسم بياني لتحميله في المحرر.",
     "noPreview": "لا معاينة",
     "empty": "لا توجد رسوم بعد — أنشئ واحداً!",
@@ -67,6 +73,7 @@
   },
   "aiDialog": {
     "title": "اقتراح ذكي بالذكاء الاصطناعي",
+    "titleSuffix": "Chart Expert",
     "description": "صف ما تريد تصوّره في جملة واحدة. سيختار الذكاء الاصطناعي أفضل نوع رسم ويولّد بيانات نموذجية.",
     "promptLabel": "صف احتياجك",
     "promptPlaceholder": "مثال: اعرض مقارنة مبيعات الأرباع 2024 عبر خطوط المنتجات",

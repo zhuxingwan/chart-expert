@@ -66,6 +66,8 @@ import {
 } from './mermaid-templates'
 import { exportSvg } from '@/lib/chart/export'
 import { useT, useI18n } from '@/lib/i18n'
+import { useProFeature } from '@/lib/license/use-pro-feature'
+import { drawWatermark } from '@/lib/license/watermark'
 import { getMermaidTemplateName } from '@/lib/i18n/template-names'
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -375,6 +377,7 @@ interface PreviewProps {
 
 function PreviewPanel({ config, previewRef }: PreviewProps) {
   const t = useT()
+  const { isPro, requirePro } = useProFeature()
   const containerRef = React.useRef<HTMLDivElement>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [zoom, setZoom] = React.useState(1)
@@ -455,6 +458,7 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
   const handleReset = () => setZoom(1)
 
   const handleDownloadSvg = () => {
+    if (!requirePro()) return
     const svg = containerRef.current?.querySelector('svg')
     if (!svg) {
       toast.error(t('toasts.noContent'))
@@ -484,7 +488,7 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
       const url = URL.createObjectURL(blob)
       const img = new Image()
       img.crossOrigin = 'anonymous'
-      img.onload = () => {
+      img.onload = async () => {
         const canvas = document.createElement('canvas')
         const scale = 2
         canvas.width = w * scale
@@ -495,6 +499,10 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
         ctx.fillRect(0, 0, canvas.width, canvas.height)
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
         URL.revokeObjectURL(url)
+        // Add watermark for free users
+        if (!isPro) {
+          await drawWatermark(ctx, canvas.width, canvas.height)
+        }
         canvas.toBlob((b) => {
           if (!b) return
           const a = document.createElement('a')
@@ -516,6 +524,7 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
   }
 
   const handleCopyAsMarkdown = async () => {
+    if (!requirePro()) return
     const svg = containerRef.current?.querySelector('svg')
     if (!svg) {
       toast.error(t('toasts.noContent'))

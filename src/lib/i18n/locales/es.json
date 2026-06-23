@@ -1,6 +1,6 @@
 {
   "app": {
-    "title": "Taller de gráficos",
+    "title": "Experto de gráficos",
     "subtitle": "Gráficos variados · Diagramas de flujo · Infografías · Visualización sin código",
     "current": "Actual: {name}",
     "loadingEditor": "Cargando editor…",
@@ -23,7 +23,6 @@
     "search": "Buscar…"
   },
   "templatePicker": {
-    "title": "Elegir plantilla",
     "description": "Explora {count} plantillas por propósito. Haz clic en cualquiera para empezar.",
     "all": "Todas ({count})",
     "noResults": "Sin plantillas coincidentes",
@@ -42,12 +41,10 @@
     "metric": "Medidor"
   },
   "emptyState": {
-    "title": "Empieza a crear tu gráfico",
     "description": "Elige entre nuestra galería de plantillas o deja que la IA te recomiende una",
     "selectTemplate": "Seleccionar plantilla"
   },
   "saveDialog": {
-    "title": "Guardar gráfico",
     "description": "Dale un nombre a tu gráfico para encontrarlo fácilmente después.",
     "chartName": "Nombre del gráfico",
     "placeholder": "p. ej. Comparación de ventas Q1 2024",
@@ -56,7 +53,6 @@
     "nothingToSave": "Nada que guardar todavía"
   },
   "loadDialog": {
-    "title": "Mis gráficos",
     "description": "Haz clic en cualquier gráfico para cargarlo en el editor.",
     "noPreview": "Sin vista previa",
     "empty": "Aún no hay gráficos — ¡crea uno!",
@@ -66,7 +62,6 @@
     "loaded": "Cargado: {title}"
   },
   "aiDialog": {
-    "title": "Recomendación inteligente IA",
     "description": "Describe en una frase lo que quieres visualizar. La IA elegirá el mejor tipo de gráfico y generará datos de ejemplo.",
     "promptLabel": "Describe tu necesidad",
     "promptPlaceholder": "p. ej. Mostrar comparación de ventas trimestrales 2024 entre líneas de producto",

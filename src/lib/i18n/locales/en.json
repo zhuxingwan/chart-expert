@@ -1,6 +1,6 @@
 {
   "app": {
-    "title": "Chart Workshop",
+    "title": "Chart Expert",
     "subtitle": "Rich charts · Flowcharts · Infographics · Zero-code visualization",
     "current": "Current: {name}",
     "loadingEditor": "Loading editor…",
@@ -23,7 +23,6 @@
     "search": "Search…"
   },
   "templatePicker": {
-    "title": "Choose Template",
     "description": "Browse {count} templates by purpose. Click any to start editing.",
     "all": "All {count}",
     "noResults": "No matching templates",
@@ -42,12 +41,10 @@
     "metric": "Gauge"
   },
   "emptyState": {
-    "title": "Start creating your chart",
     "description": "Pick from our rich template gallery, or let AI recommend one",
     "selectTemplate": "Select Template"
   },
   "saveDialog": {
-    "title": "Save Chart",
     "description": "Give your chart a name for easy finding later.",
     "chartName": "Chart name",
     "placeholder": "e.g. 2024 Q1 Sales Comparison",
@@ -56,7 +53,6 @@
     "nothingToSave": "Nothing to save yet"
   },
   "loadDialog": {
-    "title": "My Charts",
     "description": "Click any chart to load it into the editor.",
     "noPreview": "No preview",
     "empty": "No charts yet — create one!",
@@ -66,7 +62,6 @@
     "loaded": "Loaded: {title}"
   },
   "aiDialog": {
-    "title": "AI Smart Recommend",
     "description": "Describe what you want to visualize in one sentence. AI will pick the best chart type and generate sample data.",
     "promptLabel": "Describe your need",
     "promptPlaceholder": "e.g. Show 2024 quarterly sales comparison across product lines",

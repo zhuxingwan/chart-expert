@@ -88,6 +88,8 @@ import {
   type InfographicTemplateCategory,
 } from './template-registry'
 import { useT, useI18n } from '@/lib/i18n'
+import { useProFeature } from '@/lib/license/use-pro-feature'
+import { drawWatermark } from '@/lib/license/watermark'
 import {
   getInfographicTemplateName,
   getInfographicCategoryLabel,
@@ -461,6 +463,7 @@ interface PreviewProps {
 function PreviewPanel({ config, previewRef }: PreviewProps) {
   const t = useT()
   const { locale } = useI18n()
+  const { isPro, requirePro } = useProFeature()
   const containerRef = React.useRef<HTMLDivElement>(null)
   // The @antv/infographic engine instance.
   const engineRef = React.useRef<any>(null)
@@ -530,6 +533,7 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
   const handleReset = () => setZoom(1)
 
   const handleDownloadSvg = async () => {
+    if (!requirePro()) return
     if (!engineRef.current) {
       toast.error(t('toasts.noContent'))
       return
@@ -560,19 +564,48 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
       // when manually drawing an SVG (containing external CDN fonts/images)
       // onto a canvas via drawImage().
       const dataUrl = await engineRef.current.toDataURL({ type: 'png', dpr: 2 })
-      const a = document.createElement('a')
-      a.href = dataUrl
-      a.download = `infographic-${Date.now()}.png`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      toast.success(t('toasts.exported'))
+
+      if (isPro) {
+        // Pro user: download without watermark
+        const a = document.createElement('a')
+        a.href = dataUrl
+        a.download = `infographic-${Date.now()}.png`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        toast.success(t('toasts.exported'))
+      } else {
+        // Free user: add NoteRich watermark before download
+        const img = new Image()
+        img.crossOrigin = 'anonymous'
+        img.onload = async () => {
+          const canvas = document.createElement('canvas')
+          canvas.width = img.naturalWidth
+          canvas.height = img.naturalHeight
+          const ctx = canvas.getContext('2d')
+          if (!ctx) return
+          ctx.drawImage(img, 0, 0)
+          await drawWatermark(ctx, canvas.width, canvas.height)
+          canvas.toBlob((blob) => {
+            if (!blob) return
+            const a = document.createElement('a')
+            a.href = URL.createObjectURL(blob)
+            a.download = `infographic-${Date.now()}.png`
+            a.click()
+            setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+          }, 'image/png')
+          toast.success(t('toasts.exported'))
+        }
+        img.onerror = () => toast.error(t('toasts.exportFailed', { error: 'PNG' }))
+        img.src = dataUrl
+      }
     } catch (e) {
       toast.error(t('toasts.exportFailed', { error: (e as Error).message }))
     }
   }
 
   const handleCopyAsMarkdown = () => {
+    if (!requirePro()) return
     // For infographic, generate the infographic syntax from the current config
     // and wrap it in a markdown ```infographic``` code fence.
     const syntax = generateInfographicSyntax(config)

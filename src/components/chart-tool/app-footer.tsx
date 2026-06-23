@@ -1,35 +1,81 @@
 'use client'
 
-import { Github, Heart } from 'lucide-react'
-import { useT } from '@/lib/i18n'
+import * as React from 'react'
+import { Crown, ExternalLink } from 'lucide-react'
+import { useLicense } from '@/lib/license/provider'
+import { useI18n } from '@/lib/i18n'
+import { NoteRichIcon, NOTERICH_LOGO_DATA_URL } from '@/components/brand/noterich-logo'
+import { cn } from '@/lib/utils'
 
-export function AppFooter() {
-  const t = useT()
+interface Props {
+  onLicenseClick?: () => void
+}
+
+export function AppFooter({ onLicenseClick }: Props) {
+  const { license, isPro } = useLicense()
+  const { locale } = useI18n()
+  const isZh = locale.startsWith('zh')
+
   return (
     <footer className="mt-auto border-t bg-background">
-      <div className="mx-auto flex w-full max-w-[1600px] flex-col items-center justify-between gap-2 px-4 py-3 text-xs text-muted-foreground sm:flex-row">
-        <div className="flex items-center gap-1.5">
-          <span>{t('footer.builtWith')}</span>
-          <span className="font-medium text-foreground">ECharts 6</span>
-          <span>·</span>
-          <span className="font-medium text-foreground">Mermaid 11</span>
-          <span>·</span>
-          <span className="font-medium text-foreground">AntV Infographic</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1">
-            {t('app.forNonCoders')} <Heart className="h-3 w-3 fill-current text-rose-500" />
+      <div className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-xs">
+        {/* Left: NoteRich logo + product name */}
+        <div className="flex items-center gap-2">
+          <img
+            src={NOTERICH_LOGO_DATA_URL}
+            alt="NoteRich"
+            style={{ width: '90px', height: '17px' }}
+          />
+          <span className="text-muted-foreground">
+            {isZh ? '图表专家' : 'Chart Expert'}
           </span>
-          <a
-            href="https://echarts.apache.org/"
-            target="_blank"
-            rel="noreferrer"
-            className="hover:text-foreground"
+        </div>
+
+        {/* Right: PRO status + links */}
+        <div className="flex items-center gap-3">
+          {/* PRO / Free badge */}
+          <button
+            onClick={onLicenseClick}
+            className={cn(
+              'flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium transition-colors',
+              isPro
+                ? 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-950/40 dark:text-amber-300'
+                : 'bg-muted text-muted-foreground hover:bg-muted/70',
+            )}
+            title={isPro
+              ? (isZh ? 'Pro 已激活' : 'Pro activated')
+              : (isZh ? '点击升级到 Pro' : 'Click to upgrade to Pro')
+            }
           >
-            {t('footer.docs')}
+            <Crown className="h-3 w-3" />
+            {license.type === 'pro' ? 'PRO' : (isZh ? '免费' : 'FREE')}
+          </button>
+
+          {/* Website link */}
+          <a
+            href="https://noterich.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-0.5 text-muted-foreground hover:text-foreground"
+          >
+            {isZh ? '官网' : 'Website'}
+            <ExternalLink className="h-2.5 w-2.5" />
           </a>
-          <span className="flex items-center gap-1">
-            <Github className="h-3 w-3" /> {t('footer.openSource')}
+
+          {/* Pricing link */}
+          <a
+            href="https://noterich.com/#pricing"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-0.5 text-muted-foreground hover:text-foreground"
+          >
+            {isZh ? '定价' : 'Pricing'}
+            <ExternalLink className="h-2.5 w-2.5" />
+          </a>
+
+          {/* Copyright */}
+          <span className="text-muted-foreground">
+            © {new Date().getFullYear()} NoteRich
           </span>
         </div>
       </div>

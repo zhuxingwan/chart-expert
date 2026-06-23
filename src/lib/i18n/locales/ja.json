@@ -1,6 +1,6 @@
 {
   "app": {
-    "title": "チャート工房",
+    "title": "チャートエキスパート",
     "subtitle": "リッチチャート · フローチャート · インフォグラフィック · ノーコード可視化",
     "current": "現在：{name}",
     "loadingEditor": "エディターを読み込み中…",
@@ -23,7 +23,6 @@
     "search": "検索…"
   },
   "templatePicker": {
-    "title": "テンプレートを選択",
     "description": "目的別に {count} 個のテンプレートを閲覧できます。クリックで編集を開始。",
     "all": "すべて ({count})",
     "noResults": "該当するテンプレートがありません",
@@ -42,12 +41,10 @@
     "metric": "ゲージ"
   },
   "emptyState": {
-    "title": "チャート作成を始めましょう",
     "description": "豊富なテンプレートから選ぶか、AIにおすすめを提案してもらいましょう",
     "selectTemplate": "テンプレートを選択"
   },
   "saveDialog": {
-    "title": "チャートを保存",
     "description": "後で見つけやすいようにチャートに名前をつけてください。",
     "chartName": "チャート名",
     "placeholder": "例：2024年第1四半期 売上比較",
@@ -56,7 +53,6 @@
     "nothingToSave": "保存できるものがまだありません"
   },
   "loadDialog": {
-    "title": "マイチャート",
     "description": "チャートをクリックするとエディターに読み込まれます。",
     "noPreview": "プレビューなし",
     "empty": "まだチャートがありません — 作成してみましょう！",
@@ -66,7 +62,6 @@
     "loaded": "読み込みました：{title}"
   },
   "aiDialog": {
-    "title": "AIスマート提案",
     "description": "可視化したい内容を一文で記述してください。AIが最適なチャート種別を選び、サンプルデータを生成します。",
     "promptLabel": "要件を記述",
     "promptPlaceholder": "例：2024年四半期ごとの製品ライン別売上比較を表示",

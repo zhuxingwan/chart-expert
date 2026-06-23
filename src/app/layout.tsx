@@ -15,13 +15,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Chart Workshop - Zero-code Visualization Tool",
+  title: "NoteRich Chart Expert - Zero-code Visualization Tool",
   description: "A rich chart-making tool supporting data charts, flowcharts, and infographics. Non-coder friendly. Built with ECharts, Mermaid, and AntV Infographic.",
-  keywords: ["chart", "visualization", "ECharts", "Mermaid", "AntV Infographic", "infographic", "flowchart", "zero-code"],
-  authors: [{ name: "Z.ai" }],
-  icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
-  },
+  keywords: ["NoteRich", "chart", "visualization", "ECharts", "Mermaid", "AntV Infographic", "infographic", "flowchart", "zero-code"],
+  authors: [{ name: "NoteRich" }],
 };
 
 export default function RootLayout({

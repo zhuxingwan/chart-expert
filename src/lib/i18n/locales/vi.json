@@ -1,6 +1,8 @@
 {
   "app": {
+    "title": "Chart Expert",
     "title": "Xưởng biểu đồ",
+    "titleSuffix": "Chart Expert",
     "subtitle": "Biểu đồ đa dạng · Sơ đồ luồng · Infographic · Trực quan hóa không cần code",
     "current": "Hiện tại: {name}",
     "loadingEditor": "Đang tải trình soạn thảo…",
@@ -24,6 +26,7 @@
   },
   "templatePicker": {
     "title": "Chọn mẫu",
+    "titleSuffix": "Chart Expert",
     "description": "Duyệt {count} mẫu theo mục đích. Nhấn vào bất kỳ để bắt đầu.",
     "all": "Tất cả ({count})",
     "noResults": "Không có mẫu phù hợp",
@@ -43,11 +46,13 @@
   },
   "emptyState": {
     "title": "Bắt đầu tạo biểu đồ",
+    "titleSuffix": "Chart Expert",
     "description": "Chọn từ bộ sưu tập mẫu đa dạng, hoặc để AI gợi ý cho bạn",
     "selectTemplate": "Chọn mẫu"
   },
   "saveDialog": {
     "title": "Lưu biểu đồ",
+    "titleSuffix": "Chart Expert",
     "description": "Đặt tên cho biểu đồ để dễ tìm lại sau này.",
     "chartName": "Tên biểu đồ",
     "placeholder": "vd. So sánh doanh thu Q1 2024",
@@ -57,6 +62,7 @@
   },
   "loadDialog": {
     "title": "Biểu đồ của tôi",
+    "titleSuffix": "Chart Expert",
     "description": "Nhấn vào bất kỳ biểu đồ nào để tải vào trình soạn thảo.",
     "noPreview": "Không xem trước",
     "empty": "Chưa có biểu đồ nào — hãy tạo một biểu đồ!",
@@ -67,6 +73,7 @@
   },
   "aiDialog": {
     "title": "Gợi ý AI thông minh",
+    "titleSuffix": "Chart Expert",
     "description": "Mô tả trong một câu những gì bạn muốn hiển thị. AI sẽ chọn loại biểu đồ phù hợp nhất và tạo dữ liệu mẫu.",
     "promptLabel": "Mô tả nhu cầu của bạn",
     "promptPlaceholder": "vd. So sánh doanh số quý 2024 theo dòng sản phẩm",

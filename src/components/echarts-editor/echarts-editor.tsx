@@ -35,6 +35,8 @@ import {
 import { cn } from '@/lib/utils'
 import type { EChartsConfig } from '@/types/chart'
 import { useT, useI18n } from '@/lib/i18n'
+import { useProFeature } from '@/lib/license/use-pro-feature'
+import { drawWatermark } from '@/lib/license/watermark'
 import {
   getEChartsTemplateName,
   getEChartsCategoryLabel,
@@ -155,6 +157,7 @@ export interface EChartsEditorProps {
 export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }: EChartsEditorProps) {
   const t = useT()
   const { locale } = useI18n()
+  const { isPro, requirePro } = useProFeature()
   // CDN-loaded echarts — status flips to 'loaded' once the <script> tag from
   // VizLibLoader finishes. We render a loading placeholder until then.
   const { status } = useVizLibs()
@@ -344,23 +347,50 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
         pixelRatio: 2,
         backgroundColor: '#fff',
       })
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${local.title?.text || 'chart'}.png`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      toast.success(t('toasts.exported'))
+      if (isPro) {
+        // Pro: download directly
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${local.title?.text || 'chart'}.png`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        toast.success(t('toasts.exported'))
+      } else {
+        // Free: add watermark
+        const img = new Image()
+        img.crossOrigin = 'anonymous'
+        img.onload = async () => {
+          const canvas = document.createElement('canvas')
+          canvas.width = img.naturalWidth
+          canvas.height = img.naturalHeight
+          const ctx = canvas.getContext('2d')
+          if (!ctx) return
+          ctx.drawImage(img, 0, 0)
+          await drawWatermark(ctx, canvas.width, canvas.height)
+          canvas.toBlob((blob) => {
+            if (!blob) return
+            const a = document.createElement('a')
+            a.href = URL.createObjectURL(blob)
+            a.download = `${local.title?.text || 'chart'}.png`
+            a.click()
+            setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+          }, 'image/png')
+          toast.success(t('toasts.exported'))
+        }
+        img.src = url
+      }
     } catch {
       toast.error(t('toasts.exportFailed', { error: 'PNG' }))
     }
-  }, [local.title, t])
+  }, [local.title, t, isPro])
 
   // Render the option into a hidden, off-screen SVG-renderer ECharts instance
   // and serialize the resulting SVG. The live preview uses the canvas renderer
   // (which can't produce SVG), so we spin up a temporary SVG-renderer instance
   // with the same option / size / theme, grab its <svg>, and tear it down.
   const handleDownloadSvg = React.useCallback(() => {
+    if (!requirePro()) return
     const echartsLib = getECharts()
     if (!echartsLib || !chartContainerRef.current) {
       toast.error(t('toasts.noContent'))
@@ -408,6 +438,7 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
   }, [option, local.theme, local.title, t])
 
   const handleCopyAsMarkdown = React.useCallback(async () => {
+    if (!requirePro()) return
     try {
       const markdown = '```echarts\n' + JSON.stringify(option, null, 2) + '\n```'
       await navigator.clipboard.writeText(markdown)

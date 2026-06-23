@@ -748,3 +748,36 @@ Stage Summary:
 - ✅ PNG export: correct aspect ratio matching the SVG (same viewBox, scaled by dpr=2)
 - ✅ No SecurityError (uses engine's built-in export, not manual canvas drawing)
 - ✅ Verified with multiple infographic templates
+
+---
+Task ID: NOTERICH-BRANDING-PRO
+Agent: main
+Task: Rename to NoteRich Chart Expert, add PRO license system, watermark, obfuscation
+
+Work Log:
+- **Renamed product**: "Chart Workshop" → "NoteRich Chart Expert" in metadata, header, footer, and all 16 locale files (title + titleSuffix keys).
+- **Created PRO license system** (`src/lib/license/`):
+  - `index.ts` — `validateLicenseKey()` calls PayProGlobal API (productId 126640), `generateTestLicenseKey()`, `loadStoredLicense()`, `saveStoredLicense()`, `isProUser()`
+  - `provider.tsx` — React context provider with `useLicense()` hook, loads/saves license from localStorage
+  - `use-pro-feature.ts` — `useProFeature()` hook with `requirePro()` function that shows toast + "Upgrade" action button
+  - `watermark.ts` — `drawWatermark()` draws NoteRich logo at 30% opacity in bottom-right corner
+- **Created License dialog** (`src/components/license/license-dialog.tsx`): Matches note product pattern — status card, upgrade section with purchase link, license key + email inputs, verify/reset buttons, test key generator.
+- **Created NoteRich brand components** (`src/components/brand/noterich-logo.tsx`): `NoteRichIcon` (SVG component), `NOTERICH_LOGO_DATA_URL` (for watermark).
+- **Updated header**: Uses NoteRichIcon instead of BarChart3, shows "NoteRich [Chart Expert]".
+- **Rewrote footer**: Replaced "Built with ECharts/Mermaid/AntV" + "Open Source" with NoteRich logo + product name + PRO/FREE badge (clickable to open license dialog) + Website/Pricing links + copyright. Removed "open source" and "docs" references.
+- **PRO gating**:
+  - SVG download: gated behind PRO (all 3 editors)
+  - Markdown copy: gated behind PRO (all 3 editors)
+  - PNG download: free users get NoteRich watermark; Pro users get clean PNG
+- **Obfuscation**: Added `webpack-obfuscator` to `next.config.ts` — applies medium-strength obfuscation (control flow flattening, string array encoding, dead code injection, debug protection) to `src/lib/license/` and `src/components/license/` modules in production builds only (`!dev`).
+
+Stage Summary:
+- ✅ Product renamed to "NoteRich Chart Expert" across all UI and metadata
+- ✅ Footer shows NoteRich logo + PRO/FREE badge + website/pricing links (no more "open source")
+- ✅ Header shows NoteRich icon + "NoteRich Chart Expert"
+- ✅ PRO license verification matches note product pattern (PayProGlobal API, localStorage persistence)
+- ✅ License dialog with status, upgrade, verify, reset, test key
+- ✅ SVG download + Markdown copy gated behind PRO
+- ✅ Free-user PNG downloads have NoteRich watermark (30% opacity, bottom-right)
+- ✅ License code obfuscated in production builds
+- ✅ Lint passes, all features verified in browser

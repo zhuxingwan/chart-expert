@@ -1,6 +1,6 @@
 {
   "app": {
-    "title": "图表制作工坊",
+    "title": "图表专家",
     "subtitle": "丰富的图表 · 流程图 · 信息图 · 零代码可视化",
     "current": "当前：{name}",
     "loadingEditor": "正在加载编辑器…",
@@ -23,7 +23,6 @@
     "search": "搜索…"
   },
   "templatePicker": {
-    "title": "选择模板",
     "description": "按用途分类浏览全部 {count} 个模板，点击任意一个即可开始编辑。",
     "all": "全部 {count}",
     "noResults": "没有匹配的模板",
@@ -42,12 +41,10 @@
     "metric": "指标仪表"
   },
   "emptyState": {
-    "title": "开始制作你的图表",
     "description": "从丰富的模板库中挑选一个开始，或让 AI 帮你推荐",
     "selectTemplate": "选择模板"
   },
   "saveDialog": {
-    "title": "保存图表",
     "description": "给图表起一个名字，方便日后查找与复用。",
     "chartName": "图表名称",
     "placeholder": "例如：2024 年季度销售对比",
@@ -56,7 +53,6 @@
     "nothingToSave": "当前没有可保存的内容"
   },
   "loadDialog": {
-    "title": "我的图表",
     "description": "点击任意一张图表即可载入到编辑器继续编辑。",
     "noPreview": "无预览",
     "empty": "暂无图表，先去创建一个吧！",
@@ -66,7 +62,6 @@
     "loaded": "已载入：{title}"
   },
   "aiDialog": {
-    "title": "AI 智能推荐",
     "description": "用一句话描述你想呈现的内容，AI 帮你挑选最合适的图表类型并生成示例数据。",
     "promptLabel": "描述你的需求",
     "promptPlaceholder": "例如：展示 2024 年四个季度各产品线的销售额对比，产品线包括手机、电脑、平板。",

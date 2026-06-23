@@ -8,6 +8,7 @@ import { SaveDialog } from './save-dialog'
 import { SavedChartsDialog } from './saved-charts-dialog'
 import { AISuggestDialog } from './ai-suggest-dialog'
 import { TemplatePickerDialog } from './template-picker-dialog'
+import { LicenseDialog } from '@/components/license/license-dialog'
 import { VizLibLoader } from '@/lib/viz-libs/cdn-loader'
 import type {
   ChartEngine,
@@ -120,6 +121,7 @@ export function ChartToolApp() {
   const [saveOpen, setSaveOpen] = React.useState(false)
   const [loadOpen, setLoadOpen] = React.useState(false)
   const [aiOpen, setAiOpen] = React.useState(false)
+  const [licenseOpen, setLicenseOpen] = React.useState(false)
 
   // Open the picker automatically on first load if no document is active
   // (and no ?chart= param was in the URL).
@@ -284,7 +286,7 @@ export function ChartToolApp() {
           </div>
         </main>
 
-        <AppFooter />
+        <AppFooter onLicenseClick={() => setLicenseOpen(true)} />
 
         <TemplatePickerDialog
           open={pickerOpen}
@@ -308,6 +310,10 @@ export function ChartToolApp() {
           onOpenChange={setAiOpen}
           engine={doc?.engine}
           onApply={handleApplySuggestion}
+        />
+        <LicenseDialog
+          open={licenseOpen}
+          onOpenChange={setLicenseOpen}
         />
       </div>
     </VizLibLoader>

@@ -1,9 +1,10 @@
 'use client'
 
-import { BarChart3, Sparkles, Save, FolderOpen, Plus } from 'lucide-react'
+import { Sparkles, Save, FolderOpen, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { LanguageSwitcher } from './language-switcher'
 import { useT } from '@/lib/i18n'
+import { NoteRichIcon } from '@/components/brand/noterich-logo'
 
 interface Props {
   templateName: string
@@ -24,14 +25,14 @@ export function AppHeader({
   return (
     <header className="sticky top-0 z-30 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70">
       <div className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center justify-between gap-3 px-4 py-2.5">
-        {/* Brand */}
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <BarChart3 className="h-5 w-5" />
+        {/* Brand: NoteRich icon + product name */}
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <NoteRichIcon size={20} />
           </div>
           <div>
-            <h1 className="text-base font-semibold leading-tight sm:text-lg">
-              {t('app.title')}
+            <h1 className="text-sm font-semibold leading-tight sm:text-base">
+              NoteRich <span className="text-muted-foreground font-normal">{t('app.title')}</span>
             </h1>
             <p className="hidden text-xs text-muted-foreground sm:block">
               {templateName ? t('app.current', { name: templateName }) : t('app.subtitle')}

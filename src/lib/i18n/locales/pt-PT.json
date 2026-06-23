@@ -1,6 +1,8 @@
 {
   "app": {
-    "title": "Oficina de Gráficos",
+    "title": "Especialista em gráficos",
+    "title": "Especialista em gráficos",
+    "titleSuffix": "Especialista em gráficos",
     "subtitle": "Gráficos variados · Fluxogramas · Infográficos · Visualização sem código",
     "current": "Atual: {name}",
     "loadingEditor": "Carregando editor…",
@@ -24,6 +26,7 @@
   },
   "templatePicker": {
     "title": "Escolher modelo",
+    "titleSuffix": "Especialista em gráficos",
     "description": "Navegue por {count} modelos por finalidade. Clique em qualquer um para começar.",
     "all": "Todos ({count})",
     "noResults": "Nenhum modelo correspondente",
@@ -43,11 +46,13 @@
   },
   "emptyState": {
     "title": "Comece a criar seu gráfico",
+    "titleSuffix": "Especialista em gráficos",
     "description": "Escolha da nossa galeria de modelos ou deixe a IA recomendar um",
     "selectTemplate": "Selecionar modelo"
   },
   "saveDialog": {
     "title": "Salvar gráfico",
+    "titleSuffix": "Especialista em gráficos",
     "description": "Dê um nome ao seu gráfico para encontrá-lo facilmente depois.",
     "chartName": "Nome do gráfico",
     "placeholder": "ex. Comparação de vendas Q1 2024",
@@ -57,6 +62,7 @@
   },
   "loadDialog": {
     "title": "Meus gráficos",
+    "titleSuffix": "Especialista em gráficos",
     "description": "Clique em qualquer gráfico para carregá-lo no editor.",
     "noPreview": "Sem prévia",
     "empty": "Nenhum gráfico ainda — crie um!",
@@ -67,6 +73,7 @@
   },
   "aiDialog": {
     "title": "Sugestão inteligente IA",
+    "titleSuffix": "Especialista em gráficos",
     "description": "Descreva em uma frase o que você quer visualizar. A IA escolherá o melhor tipo de gráfico e gerará dados de exemplo.",
     "promptLabel": "Descreva sua necessidade",
     "promptPlaceholder": "ex. Mostrar comparação de vendas trimestrais 2024 entre linhas de produtos",
