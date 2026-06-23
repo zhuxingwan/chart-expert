@@ -54,7 +54,11 @@ template: list-row-simple-horizontal-arrow, list-grid-compact-card, sequence-tim
 - For mermaid, write complete, syntactically-valid code.
 - Output STRICT JSON only.`
 
-// ─── Domain Signature (matches note app's signedFetch) ──────────────────
+// ─── Domain Signature (EXACT COPY from note app) ────────────────────────
+// This is NOT a PRO license check — it's a simple anti-third-party-call
+// mechanism. The signature is generated using the requesting domain as part
+// of the HMAC key, so only requests from noterich.com (or our app served
+// from the same domain) can pass the server-side verification.
 
 async function generateRequestSignature(method: string, path: string, timestamp: number): Promise<string> {
   const domain = 'noterich.com'
@@ -93,7 +97,7 @@ async function signedFetch(url: string, options: RequestInit = {}): Promise<Resp
   return fetch(url, { ...options, headers })
 }
 
-// ─── Compression (matches note app's compressToFile) ─────────────────────
+// ─── Compression (matches note app) ──────────────────────────────────────
 
 async function compressPayload(data: string): Promise<FormData> {
   const encoder = new TextEncoder()
@@ -110,72 +114,9 @@ async function compressPayload(data: string): Promise<FormData> {
     formData.append('payload', file)
     return formData
   } catch {
-    // Fallback: no compression
     const formData = new FormData()
     formData.append('payload', new File([input], 'payload.json', { type: 'application/json' }))
     return formData
-  }
-}
-
-// ─── License decryption (matches note app) ───────────────────────────────
-
-const IV_LENGTH = 16
-
-async function deriveKeyFromParams(password: string, salt: string): Promise<ArrayBuffer> {
-  const combined = password + salt
-  let hash = 0
-  for (let i = 0; i < combined.length; i++) {
-    const char = combined.charCodeAt(i)
-    hash = (hash << 5) - hash + char
-    hash |= 0
-  }
-  const keyBytes = new Uint8Array(32)
-  for (let i = 0; i < 32; i++) {
-    keyBytes[i] = (hash >> ((i % 4) * 8)) & 0xff
-  }
-  return keyBytes.buffer
-}
-
-function getDeriveSalt(): string {
-  const WEBICON_PATH_D = 'M22.266 3.834a12.7 12.7 0 0 1 3.194.319c10.765 2.446 7.71 15.16 7.951 23.149.02.66.055 1.165.414 1.737 1.484 1.192 3.724-.94 4.96-1.82.047 3.194.432 7.023-1.783 9.62-2.9 3.401-9.023 2.953-12.214.162-5.819-5.09-3.274-14.17-3.848-20.956-.14-.903-.248-2.55-1.277-2.806-2.546.55-1.905 9.046-1.903 11.107l-.004 14.444q-6.539.047-13.076-.021c-.035-1.486-.04-3.02-.02-4.507.13-10.036-.195-20.16.03-30.187l8.263-.016c1.381 0 3.457-.06 4.765.04.073.233.077.34.1.58.87-.008 2.717-.729 4.448-.845m-4.58 3.315c-.025.82-.23 4.093.1 4.614 2.211-.717 4-.498 4.702 2.144 1.861 6.998-2.623 17.779 4.738 22.513 1.653.982 4.264 1.003 6.168.59 2.914-1.129 3.355-3.198 3.507-6.033-2.127.555-4.656.681-5.183-2.042-1.344-6.942 2.66-16.998-4.075-21.94-1.598-1.1-4.356-1.376-6.326-1.125-1.497.216-2.325.434-3.63 1.28'
-  return WEBICON_PATH_D.slice(0, 50)
-}
-
-async function decryptLicense(encryptedData: Uint8Array, key: ArrayBuffer): Promise<any> {
-  const keyMaterial = new Uint8Array(key)
-  for (const ivLen of [16, 12, 0, 8, 4, 20, 24]) {
-    if (ivLen >= encryptedData.length) continue
-    const ciphertext = encryptedData.slice(ivLen)
-    const decryptedBuffer = new Uint8Array(ciphertext.length)
-    for (let i = 0; i < ciphertext.length; i++) {
-      decryptedBuffer[i] = ciphertext[i] ^ keyMaterial[i % keyMaterial.length]
-    }
-    const jsonString = new TextDecoder().decode(decryptedBuffer)
-    try {
-      const parsed = JSON.parse(jsonString)
-      if (parsed && typeof parsed === 'object' && parsed.user && parsed.expiry && parsed.type) {
-        return parsed
-      }
-    } catch {}
-  }
-  throw new Error('Decryption failed')
-}
-
-async function validateLicenseKey(key: string, email: string): Promise<boolean> {
-  try {
-    const binaryString = Buffer.from(key, 'base64').toString('binary')
-    const bytes = new Uint8Array(binaryString.length)
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i)
-    }
-    const derivedKey = await deriveKeyFromParams('noterich.com', getDeriveSalt())
-    const decryptedData = await decryptLicense(bytes, derivedKey)
-    if (decryptedData.user !== email) return false
-    if (Date.now() > decryptedData.expiry) return false
-    if (decryptedData.type !== 'pro') return false
-    return true
-  } catch {
-    return false
   }
 }
 
@@ -186,17 +127,6 @@ export async function POST(req: NextRequest) {
     const body = (await req.json()) as SuggestBody
     if (!body.prompt && !body.imageDataUrl) {
       return NextResponse.json({ error: 'prompt or imageDataUrl is required' }, { status: 400 })
-    }
-
-    // ─── License check ───────────────────────────────────────────────────
-    const licenseKey = req.headers.get('x-license-key')
-    const licenseEmail = req.headers.get('x-license-email')
-    if (!licenseKey || !licenseEmail) {
-      return NextResponse.json({ error: 'License required' }, { status: 403 })
-    }
-    const isValid = await validateLicenseKey(licenseKey, licenseEmail)
-    if (!isValid) {
-      return NextResponse.json({ error: 'Invalid or expired license' }, { status: 403 })
     }
 
     const locale = body.locale ?? 'en'
@@ -236,6 +166,8 @@ export async function POST(req: NextRequest) {
       fetchHeaders['Content-Type'] = 'application/json'
     }
 
+    // Call the noterich.com AI API with domain signature (anti-third-party-call,
+    // NOT a PRO license check — AI is available to all users)
     const apiUrl = 'https://www.noterich.com/api.php?api=general&path=/v1/chat/completions'
     const response = await signedFetch(apiUrl, {
       body: fetchBody,
