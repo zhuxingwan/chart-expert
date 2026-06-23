@@ -32,9 +32,22 @@ Output schema:
 IMPORTANT — Language: The user specifies a locale (BCP-47 code). You MUST generate ALL text content in the SAME language as the user's locale.
 
 === How to pick the engine ===
-- Use "echarts" for: numerical data trends, comparisons, proportions, distributions, gauges, heatmaps, candlestick, boxplot, graph, sankey, treemap, sunburst, parallel, themeRiver.
-- Use "mermaid" for: flowcharts, sequence diagrams, state machines, ER diagrams, class diagrams, git branches, gantt, journey, mindmap, pie, timeline.
-- Use "infographic" for: step lists, roadmaps, mind maps, comparison cards, org trees, relationship circles, decorative timelines.
+- Use "echarts" for: numerical data trends, comparisons, proportions, distributions, gauges, heatmaps, candlestick, boxplot, graph, sankey, treemap, sunburst, parallel, themeRiver. Think: numbers + axes.
+- Use "mermaid" for: code-like diagrams with logical flow — flowcharts, sequence diagrams between actors, state machines, ER diagrams, class diagrams, git branches, gantt, journey, mindmap, pie, timeline. Think: structured logic with text labels.
+- Use "infographic" for: visually rich, presentation-ready visuals — this is the PREFERRED engine for most qualitative content. Use it when the user wants:
+  * Step-by-step guides, tutorials, onboarding flows, how-to instructions
+  * Roadmaps, project plans, milestones, product launch timelines
+  * Comparison of two options (pros/cons, VS, before/after)
+  * SWOT analysis, quadrant analysis, 2x2 matrices
+  * Organization charts, team structures, reporting hierarchies
+  * Feature lists, benefit lists, checklists, to-do lists
+  * Relationship maps, network diagrams, ecosystem maps
+  * Mind maps, concept maps, brainstorming summaries
+  * Process flows, pipelines, funnels
+  * Card-based layouts, badge cards, progress cards
+  * Any visually appealing, card/illustration-style presentation
+  * Content that combines text + icons + visual hierarchy
+  Think: presentation-ready visuals with cards, icons, and decorative elements.
 
 === ECharts config ===
 type: bar|line|pie|scatter|radar|funnel|gauge|heatmap|candlestick|boxplot|graph|sankey|treemap|sunburst|parallel|themeRiver
@@ -44,8 +57,72 @@ type: bar|line|pie|scatter|radar|funnel|gauge|heatmap|candlestick|boxplot|graph|
 { "type":"flowchart|sequence|class|state|er|gantt|journey|mindmap|pie|gitgraph|timeline", "code":"", "theme":"default|dark|forest|neutral|base", "background":"#ffffff" }
 
 === Infographic config ===
-template: list-row-simple-horizontal-arrow, list-grid-compact-card, sequence-timeline-simple, sequence-steps-badge-card, compare-binary-horizontal-simple-vs, compare-swot, hierarchy-tree-tech-style-capsule-item, relation-network-simple-circle-node, relation-dagre-flow-tb-compact-card, chart-pie-plain-text, chart-wordcloud, etc.
-{ "type":"", "template":"", "data": {"title":{"text":"","subtext":""}, "lists":[{"label":"","desc":"","value":0,"icon":"","children":[]}], "nodes":[{"id":"","label":"","group":""}], "edges":[{"from":"","to":"","label":""}]}, "theme":"light|dark|hand-drawn", "background":"#ffffff", "width":900, "height":600 }
+Pick a "template" id from the full list below. Match the user's intent to the closest template.
+
+LIST templates (for flat lists, feature lists, checklists, key points):
+- list-row-simple-horizontal-arrow, list-row-horizontal-icon-line, list-row-circular-progress, list-row-simple-illus
+- list-grid-simple, list-grid-compact-card, list-grid-badge-card, list-grid-progress-card, list-grid-circular-progress, list-grid-ribbon-card, list-grid-candy-card-lite, list-grid-done-list, list-grid-horizontal-icon-arrow
+- list-column-done-list, list-column-simple-vertical-arrow, list-column-vertical-icon-arrow
+- list-pyramid-badge-card, list-pyramid-compact-card, list-pyramid-rounded-rect-node
+- list-sector-simple, list-sector-plain-text, list-sector-half-plain-text
+- list-waterfall-compact-card, list-waterfall-badge-card
+- list-zigzag-up-compact-card, list-zigzag-down-compact-card
+
+SEQUENCE templates (for steps, timelines, roadmaps, processes, funnels):
+- sequence-timeline-simple, sequence-timeline-plain-text, sequence-timeline-done-list, sequence-timeline-rounded-rect-node, sequence-timeline-simple-illus
+- sequence-steps-simple, sequence-steps-badge-card, sequence-steps-simple-illus
+- sequence-snake-steps-compact-card, sequence-snake-steps-pill-badge, sequence-snake-steps-simple, sequence-snake-steps-simple-illus
+- sequence-color-snake-steps-horizontal-icon-line, sequence-color-snake-steps-simple-illus
+- sequence-roadmap-vertical-plain-text, sequence-roadmap-vertical-simple, sequence-roadmap-vertical-badge-card, sequence-roadmap-vertical-pill-badge, sequence-roadmap-vertical-quarter-circular, sequence-roadmap-vertical-quarter-simple-card, sequence-roadmap-vertical-underline-text
+- sequence-horizontal-zigzag-simple, sequence-horizontal-zigzag-plain-text, sequence-horizontal-zigzag-simple-illus, sequence-horizontal-zigzag-simple-horizontal-arrow, sequence-horizontal-zigzag-horizontal-icon-line, sequence-horizontal-zigzag-underline-text
+- sequence-zigzag-steps-underline-text, sequence-circle-arrows-indexed-card
+- sequence-zigzag-pucks-3d-simple, sequence-zigzag-pucks-3d-underline-text, sequence-zigzag-pucks-3d-indexed-card
+- sequence-ascending-stairs-3d-simple, sequence-ascending-stairs-3d-underline-text, sequence-ascending-steps
+- sequence-cylinders-3d-simple, sequence-circular-simple, sequence-circular-underline-text
+- sequence-filter-mesh-simple, sequence-filter-mesh-underline-text, sequence-mountain-underline-text
+- sequence-pyramid-simple, sequence-funnel-simple
+- sequence-stairs-front-simple, sequence-stairs-front-compact-card, sequence-stairs-front-pill-badge
+- sequence-interaction-default-badge-card, sequence-interaction-default-compact-card, sequence-interaction-default-capsule-item, sequence-interaction-default-rounded-rect-node
+- sequence-interaction-compact-capsule-item, sequence-interaction-wide-capsule-item
+- sequence-interaction-default-dashed-capsule-item, sequence-interaction-default-animated-capsule-item
+
+COMPARE templates (for comparisons, VS, pros/cons, SWOT, quadrants):
+- compare-binary-horizontal-simple-vs, compare-binary-horizontal-compact-card-vs, compare-binary-horizontal-badge-card-vs, compare-binary-horizontal-underline-text-vs
+- compare-binary-horizontal-simple-arrow, compare-binary-horizontal-compact-card-arrow, compare-binary-horizontal-simple-fold
+- compare-hierarchy-row-letter-card-compact-card, compare-hierarchy-row-letter-card-rounded-rect-node
+- compare-hierarchy-left-right-circle-node-pill-badge, compare-hierarchy-left-right-circle-node-plain-text
+- compare-swot, compare-quadrant-quarter-simple-card, compare-quadrant-quarter-circular, compare-quadrant-simple-illus
+
+HIERARCHY templates (for org charts, tree structures, mind maps):
+- hierarchy-tree-tech-style-capsule-item, hierarchy-tree-tech-style-compact-card, hierarchy-tree-tech-style-rounded-rect-node, hierarchy-tree-tech-style-badge-card
+- hierarchy-tree-dashed-line-capsule-item, hierarchy-tree-distributed-origin-capsule-item, hierarchy-tree-curved-line-capsule-item, hierarchy-tree-dashed-arrow-capsule-item
+- hierarchy-tree-lr-tech-style-capsule-item, hierarchy-tree-lr-dashed-line-capsule-item
+- hierarchy-tree-bt-tech-style-capsule-item, hierarchy-tree-rl-distributed-origin-capsule-item
+- hierarchy-tree-curved-line-badge-card, hierarchy-tree-curved-line-compact-card, hierarchy-tree-curved-line-rounded-rect-node
+
+RELATION templates (for network diagrams, relationship maps, flow diagrams):
+- relation-network-simple-circle-node, relation-network-icon-badge
+- relation-circle-circular-progress, relation-circle-icon-badge
+- relation-dagre-flow-tb-simple-circle-node, relation-dagre-flow-tb-compact-card, relation-dagre-flow-tb-badge-card
+- relation-dagre-flow-lr-simple-circle-node, relation-dagre-flow-lr-compact-card
+- relation-dagre-flow-tb-animated-capsule, relation-dagre-flow-lr-animated-capsule
+
+CHART templates (for pie/donut/bar/line/wordcloud in infographic style):
+- chart-pie-plain-text, chart-pie-compact-card, chart-pie-pill-badge
+- chart-pie-donut-plain-text, chart-pie-donut-compact-card, chart-pie-donut-pill-badge
+- chart-column-simple, chart-bar-plain-text, chart-line-plain-text
+- chart-wordcloud, chart-wordcloud-rotate
+
+QUADRANT templates:
+- quadrant-quarter-simple-card, quadrant-quarter-circular, quadrant-simple-illus
+
+{ "type":"<template id>", "template":"<same template id>", "data": {"title":{"text":"","subtext":""}, "lists":[{"label":"","desc":"","value":0,"icon":"emoji","children":[...]}], "nodes":[{"id":"","label":"","group":""}], "edges":[{"from":"","to":"","label":""}]}, "theme":"light|dark|hand-drawn", "background":"#ffffff", "width":900, "height":600 }
+Infographic data shape rules:
+- list / sequence / chart templates: use "lists" with flat items.
+- hierarchy templates: use "lists" with ONE root whose "children" form the tree.
+- relation templates: use "nodes" and "edges" (edges use "from"/"to" referencing node ids).
+- compare templates: use "lists" with 2 (binary) or 4 (quadrant) top-level groups, each with "children".
+- "icon" can be a single emoji or short keyword.
 
 === Universal rules ===
 - EXTRACT all concrete data from the user's prompt and use it EXACTLY.
