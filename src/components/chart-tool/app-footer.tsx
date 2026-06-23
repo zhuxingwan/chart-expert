@@ -19,16 +19,13 @@ export function AppFooter({ onLicenseClick }: Props) {
   return (
     <footer className="mt-auto border-t bg-background">
       <div className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-xs">
-        {/* Left: NoteRich logo + product name */}
+        {/* Left: NoteRich logo only */}
         <div className="flex items-center gap-2">
           <img
             src={NOTERICH_LOGO_DATA_URL}
             alt="NoteRich"
             style={{ width: '90px', height: '17px' }}
           />
-          <span className="text-muted-foreground">
-            {isZh ? '图表专家' : 'Chart Expert'}
-          </span>
         </div>
 
         {/* Right: PRO status + links */}

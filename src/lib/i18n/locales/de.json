@@ -23,6 +23,7 @@
     "search": "Suchen…"
   },
   "templatePicker": {
+    "title": "Vorlage wählen",
     "description": "{count} Vorlagen nach Verwendungszweck durchsuchen. Klicken Sie auf eine, um zu beginnen.",
     "all": "Alle {count}",
     "noResults": "Keine passenden Vorlagen",
@@ -41,10 +42,12 @@
     "metric": "Messuhr"
   },
   "emptyState": {
+    "title": "Erstellen Sie Ihr Diagramm",
     "description": "Wählen Sie aus unserer umfangreichen Vorlagengalerie oder lassen Sie sich von der KI empfehlen",
     "selectTemplate": "Vorlage auswählen"
   },
   "saveDialog": {
+    "title": "Diagramm speichern",
     "description": "Geben Sie Ihrem Diagramm einen Namen, um es später leicht wiederzufinden.",
     "chartName": "Diagrammname",
     "placeholder": "z. B. Q1-Vertriebsvergleich 2024",
@@ -53,6 +56,7 @@
     "nothingToSave": "Nichts zu speichern"
   },
   "loadDialog": {
+    "title": "Meine Diagramme",
     "description": "Klicken Sie auf ein Diagramm, um es im Editor zu laden.",
     "noPreview": "Keine Vorschau",
     "empty": "Noch keine Diagramme — erstellen Sie eines!",
@@ -62,6 +66,7 @@
     "loaded": "Geladen: {title}"
   },
   "aiDialog": {
+    "title": "KI-Empfehlung",
     "description": "Beschreiben Sie in einem Satz, was Sie visualisieren möchten. Die KI wählt den besten Diagrammtyp und generiert Beispieldaten.",
     "promptLabel": "Beschreiben Sie Ihr Anliegen",
     "promptPlaceholder": "z. B. Vergleich der Quartalsumsätze 2024 über Produktlinien hinweg zeigen",

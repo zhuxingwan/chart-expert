@@ -23,6 +23,7 @@
     "search": "Rechercher…"
   },
   "templatePicker": {
+    "title": "Choisir un modèle",
     "description": "Parcourez {count} modèles par usage. Cliquez sur l'un d'eux pour commencer.",
     "all": "Tous ({count})",
     "noResults": "Aucun modèle correspondant",
@@ -41,10 +42,12 @@
     "metric": "Jauge"
   },
   "emptyState": {
+    "title": "Commencez à créer votre graphique",
     "description": "Choisissez dans notre galerie de modèles, ou laissez l'IA vous recommander",
     "selectTemplate": "Choisir un modèle"
   },
   "saveDialog": {
+    "title": "Enregistrer le graphique",
     "description": "Donnez un nom à votre graphique pour le retrouver facilement plus tard.",
     "chartName": "Nom du graphique",
     "placeholder": "ex. Comparaison des ventes Q1 2024",
@@ -53,6 +56,7 @@
     "nothingToSave": "Rien à enregistrer pour le moment"
   },
   "loadDialog": {
+    "title": "Mes graphiques",
     "description": "Cliquez sur un graphique pour le charger dans l'éditeur.",
     "noPreview": "Pas d'aperçu",
     "empty": "Aucun graphique pour l'instant — créez-en un !",
@@ -62,6 +66,7 @@
     "loaded": "Chargé : {title}"
   },
   "aiDialog": {
+    "title": "Recommandation IA",
     "description": "Décrivez en une phrase ce que vous voulez visualiser. L'IA choisira le meilleur type de graphique et générera des données d'exemple.",
     "promptLabel": "Décrivez votre besoin",
     "promptPlaceholder": "ex. Comparaison des ventes trimestrielles 2024 par gamme de produits",

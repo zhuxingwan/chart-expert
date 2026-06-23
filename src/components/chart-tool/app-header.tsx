@@ -27,7 +27,7 @@ export function AppHeader({
       <div className="mx-auto flex w-full max-w-[1600px] flex-wrap items-center justify-between gap-3 px-4 py-2.5">
         {/* Brand: NoteRich icon + product name */}
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-foreground">
             <NoteRichIcon size={20} />
           </div>
           <div>
