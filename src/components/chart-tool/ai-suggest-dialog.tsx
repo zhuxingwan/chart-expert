@@ -30,6 +30,7 @@ interface AISuggestion {
   recommendedTypeName: string
   reason: string
   config: unknown
+  calibrationNote?: string
 }
 
 const PROMPT_IDEAS: Record<string, string[]> = {
@@ -362,6 +363,11 @@ export function AISuggestDialog({ open, onOpenChange, engine, onApply }: Props) 
                     <span className="font-medium">{suggestion.recommendedTypeName}</span>
                   </div>
                   <p className="text-xs text-muted-foreground">{suggestion.reason}</p>
+                  {suggestion.calibrationNote && (
+                    <p className="rounded-md bg-amber-100 px-2 py-1 text-[11px] text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+                      ⚠ {suggestion.calibrationNote}
+                    </p>
+                  )}
                   <pre className="mt-2 max-h-40 overflow-auto rounded bg-background p-2 text-[10px] leading-relaxed">
 {JSON.stringify(suggestion.config, null, 2)}
                   </pre>

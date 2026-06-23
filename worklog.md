@@ -650,3 +650,32 @@ Stage Summary:
 - ✅ AI prompt is multilingual — generates text in user's locale
 - ✅ AI supports image upload (VLM) — analyze screenshots/sketches/data tables
 - ✅ Lint passes (0 errors), dev server stable
+
+---
+Task ID: AI-DATA-EXTRACTION-CALIBRATION
+Agent: main
+Task: AI should extract real data from user prompts + add config calibration/fallback
+
+Work Log:
+- **Updated AI system prompt**: Added a "CRITICAL — Data Extraction" section instructing the AI to extract and use REAL data (numbers, percentages, dates, labels, names, relationships) from the user's prompt EXACTLY as provided. Added 3 data extraction examples showing how to map text to chart data structures.
+- **Added calibration layer** in `parseAndCalibrate()`:
+  - Validates the `engine` field (falls back to engineHint or 'echarts' if invalid)
+  - Validates and fixes the `config` object per engine:
+    - ECharts: ensures type, title, arrays (categories, series_names, series_data) exist; adds type-specific arrays (single_series_data for pie/funnel, radar_indicators, scatter_data, gauge_value)
+    - Mermaid: ensures type, code (with valid fallback stub), theme, background
+    - Infographic: ensures template, data (with lists/nodes), theme, dimensions
+  - If config is completely missing/invalid, returns a safe default template
+  - Returns a `calibrationNote` describing what was fixed
+- **UI**: The AI dialog now shows a yellow warning badge with the calibration note when fields were auto-corrected, so the user knows the AI output was adjusted.
+- **Verified with user's exact example**: "In 2020, focused on the Asia-Pacific market, accounting for 60%..." → AI correctly extracted:
+  - categories: ["2020", "2021", "2022", "2023"]
+  - series_names: ["Asia-Pacific", "Europe", "North America", "Latin America", "Middle East"]
+  - series_data: [[60,40,40,40], [0,25,30,30], [0,0,25,25], [0,0,0,10], [0,0,0,5]]
+  - Selected stacked line chart to show market share evolution
+
+Stage Summary:
+- ✅ AI extracts real data from user prompts (numbers, percentages, labels, dates)
+- ✅ Calibration layer validates and auto-fixes missing/invalid config fields
+- ✅ Safe fallback to default template if AI output is unusable
+- ✅ Yellow warning badge shows when calibration was applied
+- ✅ Lint passes, verified end-to-end in browser with user's example
