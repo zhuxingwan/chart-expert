@@ -63,6 +63,16 @@ export function LicenseDialog({ open, onOpenChange }: Props) {
         setLicenseKey('')
         setLicenseEmail('')
       } else {
+        // Debug: show the salt and key info in console to help diagnose
+        const webiconEl = document.getElementById('webicon')
+        const salt = webiconEl?.getElementsByTagName('path')[0]?.getAttribute('d')?.slice(0, 50) ?? 'FIXED_DERIVE_SALT'
+        console.log('License validation failed', {
+          error: result.error,
+          saltUsed: salt,
+          keyLength: licenseKey.length,
+          email: licenseEmail,
+          hasWebicon: !!webiconEl,
+        })
         toast.error(result.error || (isZh ? 'License 验证失败。' : 'License verification failed.'))
       }
     } catch (e) {
