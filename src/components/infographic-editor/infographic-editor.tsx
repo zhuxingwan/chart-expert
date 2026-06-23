@@ -95,27 +95,37 @@ import {
   getInfographicCategoryLabel,
 } from '@/lib/i18n/template-names'
 
-// ─── Color palette presets (aesthetically curated) ──────────────────────
+// ─── Color palette presets (multi-color combinations) ───────────────────
+// Each preset is a harmonious color combination: primary color + background
 const COLOR_PRESETS: { name: string; color: string; bg?: string }[] = [
-  { name: 'AntV Blue', color: '#1783FF' },
-  { name: 'Coral', color: '#FF6B6B' },
-  { name: 'Emerald', color: '#10B981' },
-  { name: 'Amber', color: '#F59E0B' },
-  { name: 'Violet', color: '#8B5CF6' },
-  { name: 'Rose', color: '#F43F5E' },
-  { name: 'Cyan', color: '#06B6D4' },
-  { name: 'Indigo', color: '#6366F1' },
-  { name: 'Teal', color: '#14B8A6' },
-  { name: 'Orange', color: '#F97316' },
-  { name: 'Magenta', color: '#D946EF' },
-  { name: 'Lime', color: '#84CC16' },
+  { name: 'Ocean', color: '#1783FF', bg: '#F0F7FF' },
+  { name: 'Sunset', color: '#FF6B6B', bg: '#FFF5F5' },
+  { name: 'Forest', color: '#10B981', bg: '#F0FDF4' },
+  { name: 'Honey', color: '#F59E0B', bg: '#FFFBEB' },
+  { name: 'Lavender', color: '#8B5CF6', bg: '#F5F3FF' },
+  { name: 'Cherry', color: '#F43F5E', bg: '#FFF1F2' },
+  { name: 'Sky', color: '#06B6D4', bg: '#ECFEFF' },
+  { name: 'Iris', color: '#6366F1', bg: '#EEF2FF' },
+  { name: 'Mint', color: '#14B8A6', bg: '#F0FDFA' },
+  { name: 'Pumpkin', color: '#F97316', bg: '#FFF7ED' },
+  { name: 'Orchid', color: '#D946EF', bg: '#FDF4FF' },
+  { name: 'Grass', color: '#84CC16', bg: '#F7FEE7' },
+  { name: 'Rosewood', color: '#BE123C', bg: '#FFF1F2' },
+  { name: 'Royal', color: '#3730A3', bg: '#EEF2FF' },
+  { name: 'Teal Dark', color: '#0F766E', bg: '#F0FDFA' },
+  { name: 'Slate', color: '#475569', bg: '#F8FAFC' },
 ]
 
-// Random aesthetically pleasing colors (curated, not fully random)
-const RANDOM_COLORS = [
-  '#1783FF', '#FF6B6B', '#10B981', '#F59E0B', '#8B5CF6', '#F43F5E',
-  '#06B6D4', '#6366F1', '#14B8A6', '#F97316', '#D946EF', '#84CC16',
-  '#EC4899', '#3B82F6', '#22C55E', '#A855F7', '#EF4444', '#0EA5E9',
+// Random aesthetically pleasing color combinations
+const RANDOM_PALETTE: { color: string; bg: string }[] = [
+  { color: '#1783FF', bg: '#F0F7FF' }, { color: '#FF6B6B', bg: '#FFF5F5' },
+  { color: '#10B981', bg: '#F0FDF4' }, { color: '#F59E0B', bg: '#FFFBEB' },
+  { color: '#8B5CF6', bg: '#F5F3FF' }, { color: '#F43F5E', bg: '#FFF1F2' },
+  { color: '#06B6D4', bg: '#ECFEFF' }, { color: '#6366F1', bg: '#EEF2FF' },
+  { color: '#14B8A6', bg: '#F0FDFA' }, { color: '#F97316', bg: '#FFF7ED' },
+  { color: '#D946EF', bg: '#FDF4FF' }, { color: '#84CC16', bg: '#F7FEE7' },
+  { color: '#EC4899', bg: '#FDF2F8' }, { color: '#3B82F6', bg: '#EFF6FF' },
+  { color: '#22C55E', bg: '#F0FDF4' }, { color: '#A855F7', bg: '#FAF5FF' },
 ]
 
 // Icon registry — maps template icon names to lucide components
@@ -643,7 +653,7 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
       }
     }, 250)
     return () => clearTimeout(timer)
-  }, [config.template, config.data, config.theme, fullscreen])
+  }, [config.template, config.data, config.theme, config.colorPrimary, config.background, fullscreen])
 
   const handleZoomIn = () => setZoom((z) => Math.min(2.5, z + 0.2))
   const handleZoomOut = () => setZoom((z) => Math.max(0.4, z - 0.2))
@@ -947,11 +957,11 @@ function ConfigPanel({ config, template, update }: ConfigProps) {
                 {/* Random palette button */}
                 <button
                   onClick={() => {
-                    const random = RANDOM_COLORS[Math.floor(Math.random() * RANDOM_COLORS.length)]
-                    update({ colorPrimary: random, background: config.theme === 'dark' ? '#1F1F1F' : '#ffffff' })
+                    const random = RANDOM_PALETTE[Math.floor(Math.random() * RANDOM_PALETTE.length)]
+                    update({ colorPrimary: random.color, background: random.bg })
                   }}
                   className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-muted text-xs hover:border-foreground/40"
-                  title={locale.startsWith('zh') ? '随机颜色' : 'Random'}
+                  title={locale.startsWith('zh') ? '随机配色' : 'Random'}
                 >
                   🎲
                 </button>
