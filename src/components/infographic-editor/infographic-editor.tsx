@@ -3,11 +3,6 @@
 import * as React from 'react'
 import { Infographic as InfographicEngine } from '@antv/infographic'
 import { toast } from 'sonner'
-import { installIconServiceInterceptor } from '@/lib/infographic/icon-service-interceptor'
-
-// Install icon service fetch interceptor once on module load.
-// This adds retry + concurrency queue for the unstable icon service.
-installIconServiceInterceptor()
 import {
   Download,
   Plus,

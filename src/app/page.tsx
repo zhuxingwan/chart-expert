@@ -6,8 +6,6 @@ import { LicenseProvider } from '@/lib/license/provider'
 import { ChartToolApp } from '@/components/chart-tool/chart-tool-app'
 
 export default function Home() {
-  // Prevent SSR hydration mismatch: render a minimal placeholder on the server
-  // and during the client's first render, then swap to the real app on mount.
   const [mounted, setMounted] = React.useState(false)
   React.useEffect(() => {
     setMounted(true)

@@ -32,6 +32,98 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
         suppressHydrationWarning
       >
+        {/* Inline script to patch fetch for the icon service BEFORE any JS bundle loads.
+            The @antv/infographic engine captures globalThis.fetch at import time,
+            so this must run first. Adds retry (3x) + concurrency queue (max 3). */}
+        <script dangerouslySetInnerHTML={{ __html: `
+          (function() {
+            var ICON_HOST = 'www.weavefox.cn';
+            var MAX_CONCURRENT = 3;
+            var MAX_RETRIES = 3;
+            var RETRY_DELAY = 500;
+            var originalFetch = window.fetch;
+            var activeCount = 0;
+            var queue = [];
+            var cache = {};
+
+            function processQueue() {
+              while (activeCount < MAX_CONCURRENT && queue.length > 0) {
+                var item = queue.shift();
+                activeCount++;
+                processItem(item);
+              }
+            }
+
+            function processItem(item) {
+              if (cache[item.url]) {
+                item.resolve(cache[item.url].clone());
+                activeCount--;
+                processQueue();
+                return;
+              }
+
+              var attempt = 0;
+              function tryFetch() {
+                originalFetch(item.url).then(function(response) {
+                  if (response.ok) {
+                    response.clone().json().then(function(json) {
+                      if (json && json.success === false) {
+                        attempt++;
+                        if (attempt <= MAX_RETRIES) {
+                          setTimeout(tryFetch, RETRY_DELAY * attempt);
+                        } else {
+                          item.resolve(response);
+                          activeCount--;
+                          processQueue();
+                        }
+                      } else {
+                        cache[item.url] = response.clone();
+                        item.resolve(response);
+                        activeCount--;
+                        processQueue();
+                      }
+                    }).catch(function() {
+                      cache[item.url] = response.clone();
+                      item.resolve(response);
+                      activeCount--;
+                      processQueue();
+                    });
+                  } else {
+                    attempt++;
+                    if (attempt <= MAX_RETRIES) {
+                      setTimeout(tryFetch, RETRY_DELAY * attempt);
+                    } else {
+                      item.resolve(response);
+                      activeCount--;
+                      processQueue();
+                    }
+                  }
+                }).catch(function() {
+                  attempt++;
+                  if (attempt <= MAX_RETRIES) {
+                    setTimeout(tryFetch, RETRY_DELAY * attempt);
+                  } else {
+                    item.resolve(new Response('{"success":false}', {status: 503}));
+                    activeCount--;
+                    processQueue();
+                  }
+                });
+              }
+              tryFetch();
+            }
+
+            window.fetch = function(input, init) {
+              var url = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : input.url);
+              if (url && url.indexOf(ICON_HOST) !== -1 && (!init || !init.method || init.method === 'GET')) {
+                return new Promise(function(resolve) {
+                  queue.push({url: url, resolve: resolve});
+                  processQueue();
+                });
+              }
+              return originalFetch(input, init);
+            };
+          })();
+        `}} />
         {/* Hidden NoteRich webicon SVG — used by the license key derivation
             salt (getDeriveSalt reads the path 'd' attribute, matching the
             note app's logic). Must be present in the DOM before any license
