@@ -1291,6 +1291,7 @@ function RadarDataEditor({ config, patch }: SubEditorProps) {
 
 // Gauge editor
 function GaugeDataEditor({ config, patch }: SubEditorProps) {
+  const t = useT()
   const value = Number(config.gauge_value) || 0
   const max = Number(config.gauge_max) || 100
   return (
