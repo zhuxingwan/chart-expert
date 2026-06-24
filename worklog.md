@@ -1040,3 +1040,63 @@ Stage Summary:
   - **Cross-group conversion (user data):** line with randomized data (cats Mon–Sun) → pie → 7 pie slices named Mon–Sun (cartesian categories converted to single_series_data) ✓
   - **Pie variant selector in Style panel:** directly switching Pie→Rose via the new selector applies roseType and preserves 7-item user data ✓
   - **URL preselect:** `?chart=echarts:pie` now correctly shows "Pie Chart" in the Chart-Type dropdown (was "Bar Chart" before fix F) ✓
+
+---
+Task ID: FIX-echarts-special-type-editors
+Agent: main
+Task: ECharts candlestick and all types below it (boxplot, graph, sankey, sunburst, parallel, themeRiver) had no editable data inputs — the DataEditor fell through to CartesianDataEditor which edits `categories`/`series_data` that these types don't use. Build dedicated editors for each.
+
+Work Log:
+
+**Root cause:** `DataEditor` dispatch only handled pie/funnel, radar, gauge, scatter, heatmap → everything else fell into the `CartesianDataEditor` fallback (edits `categories`/`series_data`). But candlestick uses `candlestick_data`, boxplot uses `boxplot_data`, graph uses `graph_nodes`/`graph_links`, sankey uses `sankey_nodes`/`sankey_links`, sunburst uses nested `sunburst_data`, parallel uses `parallel_dims`/`parallel_data`, themeRiver uses `themeriver_data`. So for these 7 types the editor either showed nothing useful or edited fields the option-builder ignores → data couldn't be input/edited.
+
+**Fix A — 7 new dedicated data editors (`echarts-editor.tsx`):**
+- `CandlestickDataEditor` — table with Date / Open / Close / Low / High columns, edits `categories` + `candlestick_data` (4-tuples [open,close,low,high]).
+- `BoxplotDataEditor` — table with Name / Min / Q1 / Median / Q3 / Max, edits `categories` + `boxplot_data` (5-tuples).
+- `GraphDataEditor` — two tables: Nodes (ID/Name/Category) + Links (Source/Target via `<Select>` of node IDs). Removing a node prunes its links.
+- `SankeyDataEditor` — two tables: Nodes (Name) + Links (Source/Target via `<Select>` of node names / Value). Renaming a node updates all links referencing it; removing a node prunes its links.
+- `SunburstDataEditor` — recursive tree editor for nested `{name, value?, children?}`. Path-indexed immutable update/add-child/remove-node; "Add root" + per-node "Add child" / delete. Add-child clears the parent's `value` (becomes an inner node).
+- `ParallelDataEditor` — dimension chips (name + remove) + records table whose columns are the dimensions. Add/remove dimension keeps data rows in sync.
+- `ThemeRiverDataEditor` — table with Date / Name / Value editing `[string, number, string]` tuples.
+
+**Fix B — wired dispatch (`DataEditor`):** Added 7 new `type ===` branches routing to the new editors + 7 new `dataEditorHint*` hint strings in the ternary.
+
+**Fix C — `handleRandomData` extended:** Added branches for candlestick (random OHLC around a base), boxplot (random 5-number summary), graph (random node categories), sankey (random link values), sunburst (recursive leaf-only randomization), parallel (random cell values), themeRiver (random values, preserve date/name).
+
+**Fix D — i18n keys (en.json + zh.json):** Added `keepAtLeast1Link`, 7 `dataEditorHint*` strings, and field/section labels: `fieldDate/Open/Close/Low/High/Min/Q1/Median/Q3/Max/Category/Source/Target/Name/ValueOptional`, `nodes/links/addNode/addLink/hierarchy/addRoot/addChild/hierarchyEmpty/dimensions/addDimension/dataRecords/addRecord`.
+
+**Fix E — `SunburstNode` type import:** Added to the `import type` from `@/types/chart` (used by SunburstDataEditor + the randomizer).
+
+**Pre-existing ECharts 6.0.0 CDN error (NOT a regression):** `TypeError: Cannot read properties of undefined (reading 'x')` thrown from echarts internal `_executeOneToOne` during `setOption` — reproduces on ALL chart types including plain `bar` (verified). Charts still render correctly (sankey canvas 59% non-blank, graph 4.5%, bar/line/pie/scatter all display data). This is an internal ECharts 6.0.0 bug, non-fatal, unrelated to the new editors.
+
+Stage Summary:
+- ✅ `bun run lint` — 0 errors, 0 warnings.
+- ✅ Dev server stable on port 3000.
+- ✅ Agent Browser end-to-end verification of all 7 new editors:
+  - candlestick: editor shows Date/Open/Close/Low/High columns; edited Open 180.5→999 → chart firstPoint became [999,183.2,179.8,184] ✓
+  - boxplot: editor shows Min/Q1/Median/Q3/Max; Add point → dataCount 5→6 ✓
+  - graph: editor shows Nodes(ID/Name/Category)+Links(Source/Target selects); chart renders 9 nodes + 13 links ✓
+  - sankey: editor shows Nodes(Name)+Links(Source/Target/Value); Add link → linkCount 11→12; canvas 59% non-blank ✓
+  - sunburst: editor shows recursive hierarchy with Add child per node; Add child to Engineering → children 4→5, Child 5 reflected in chart ✓
+  - parallel: editor shows dimension chips + records table; chart renders 5 dims × 10 rows ✓
+  - themeRiver: editor shows Date/Name/Value; Random data → all values changed ✓
+- ✅ Each chart type renders its dedicated editor and accepts data edits that propagate to the live chart.
+
+---
+Task ID: BUILD-dist-package
+Agent: main
+Task: User asked to build the dist package after testing.
+
+Work Log:
+- `bun run build` initially failed: Next.js 16 defaults to Turbopack but the project uses a custom webpack config (for CDN externals + license obfuscation), so the build aborted with "This build is using Turbopack, with a `webpack` config and no `turbopack` config."
+- Fixed by adding `--webpack` flag to the `build` script in `package.json` (matching the `dev` script which already used `--webpack`):
+  `"build": "next build --webpack && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/"`
+- Re-ran `bun run build` — completed successfully in ~2.5 min (build trace `next-build` duration 152780990µs).
+
+Stage Summary:
+- ✅ Production build succeeded. Standalone package at `.next/standalone/`:
+  - `server.js` (production Node server)
+  - `package.json`, `node_modules/`, `public/`
+  - `.next/static/` copied in (BUILD_ID `PgrwhkGq3EJ7vOytXCsaK`, 37 chunks, 2 CSS files)
+- ✅ Package size: 165MB (includes node_modules for self-contained deployment).
+- ✅ Deploy/run: `bun .next/standalone/server.js` (or `bun run start`) serves the production build.

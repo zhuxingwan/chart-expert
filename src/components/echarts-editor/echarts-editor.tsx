@@ -33,7 +33,7 @@ import {
 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
-import type { EChartsConfig } from '@/types/chart'
+import type { EChartsConfig, SunburstNode } from '@/types/chart'
 import { useT, useI18n } from '@/lib/i18n'
 import { useProFeature } from '@/lib/license/use-pro-feature'
 import { drawWatermark } from '@/lib/license/watermark'
@@ -733,6 +733,61 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
         row.map(() => Math.floor(Math.random() * 100)),
       )
       patch({ series_data: data })
+    } else if (type === 'candlestick') {
+      const data = (local.candlestick_data ?? []).map(() => {
+        const base = Math.floor(Math.random() * 100) + 100
+        const swing = Math.floor(Math.random() * 20) + 5
+        const open = base
+        const close = base + Math.floor(Math.random() * swing * 2) - swing
+        const low = Math.min(open, close) - Math.floor(Math.random() * swing)
+        const high = Math.max(open, close) + Math.floor(Math.random() * swing)
+        return [open, close, low, high] as [number, number, number, number]
+      })
+      patch({ candlestick_data: data })
+    } else if (type === 'boxplot') {
+      const data = (local.boxplot_data ?? []).map(() => {
+        const min = Math.floor(Math.random() * 40) + 10
+        const q1 = min + Math.floor(Math.random() * 10) + 5
+        const median = q1 + Math.floor(Math.random() * 15) + 5
+        const q3 = median + Math.floor(Math.random() * 15) + 5
+        const max = q3 + Math.floor(Math.random() * 15) + 5
+        return [min, q1, median, q3, max] as [number, number, number, number, number]
+      })
+      patch({ boxplot_data: data })
+    } else if (type === 'graph') {
+      patch({
+        graph_nodes: (local.graph_nodes ?? []).map((n) => ({
+          ...n,
+          category: Math.floor(Math.random() * 3),
+        })),
+      })
+    } else if (type === 'sankey') {
+      patch({
+        sankey_links: (local.sankey_links ?? []).map((l) => ({
+          ...l,
+          value: Math.floor(Math.random() * 4000) + 500,
+        })),
+      })
+    } else if (type === 'sunburst') {
+      const rand = (nodes: SunburstNode[]): SunburstNode[] =>
+        nodes.map((n) => ({
+          ...n,
+          value: n.children?.length ? undefined : Math.floor(Math.random() * 50) + 5,
+          ...(n.children ? { children: rand(n.children) } : {}),
+        }))
+      patch({ sunburst_data: rand(local.sunburst_data ?? []) })
+    } else if (type === 'parallel') {
+      patch({
+        parallel_data: (local.parallel_data ?? []).map((row) =>
+          row.map(() => Math.floor(Math.random() * 100)),
+        ),
+      })
+    } else if (type === 'themeRiver') {
+      patch({
+        themeriver_data: (local.themeriver_data ?? []).map(
+          (row) => [row[0], Math.floor(Math.random() * 400) + 20, row[2]] as [string, number, string],
+        ),
+      })
     } else {
       // bar / line
       const data = local.series_data.map((row) =>
@@ -1136,7 +1191,21 @@ function DataEditor({ config, patch, onRandom }: SubEditorProps & { onRandom: ()
                   ? t('echarts.dataEditorHintScatter')
                   : type === 'heatmap'
                     ? t('echarts.dataEditorHintHeatmap')
-                    : t('echarts.dataEditorHintCartesian')}
+                    : type === 'candlestick'
+                      ? t('echarts.dataEditorHintCandlestick')
+                      : type === 'boxplot'
+                        ? t('echarts.dataEditorHintBoxplot')
+                        : type === 'graph'
+                          ? t('echarts.dataEditorHintGraph')
+                          : type === 'sankey'
+                            ? t('echarts.dataEditorHintSankey')
+                            : type === 'sunburst'
+                              ? t('echarts.dataEditorHintSunburst')
+                              : type === 'parallel'
+                                ? t('echarts.dataEditorHintParallel')
+                                : type === 'themeRiver'
+                                  ? t('echarts.dataEditorHintThemeRiver')
+                                  : t('echarts.dataEditorHintCartesian')}
         </p>
         <Button size="sm" variant="secondary" onClick={onRandom} className="shrink-0">
           <Shuffle className="size-3.5" /> {t('echarts.randomData')}
@@ -1153,6 +1222,20 @@ function DataEditor({ config, patch, onRandom }: SubEditorProps & { onRandom: ()
         <ScatterDataEditor config={config} patch={patch} />
       ) : type === 'heatmap' ? (
         <CartesianDataEditor config={config} patch={patch} hideCategories />
+      ) : type === 'candlestick' ? (
+        <CandlestickDataEditor config={config} patch={patch} />
+      ) : type === 'boxplot' ? (
+        <BoxplotDataEditor config={config} patch={patch} />
+      ) : type === 'graph' ? (
+        <GraphDataEditor config={config} patch={patch} />
+      ) : type === 'sankey' ? (
+        <SankeyDataEditor config={config} patch={patch} />
+      ) : type === 'sunburst' ? (
+        <SunburstDataEditor config={config} patch={patch} />
+      ) : type === 'parallel' ? (
+        <ParallelDataEditor config={config} patch={patch} />
+      ) : type === 'themeRiver' ? (
+        <ThemeRiverDataEditor config={config} patch={patch} />
       ) : (
         <CartesianDataEditor config={config} patch={patch} />
       )}
@@ -1593,6 +1676,723 @@ function ScatterDataEditor({ config, patch }: SubEditorProps) {
                     onClick={() => remove(i)}
                     aria-label={t('actions.delete')}
                   >
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Candlestick editor — [open, close, low, high][] with date/label categories
+// ---------------------------------------------------------------------------
+function CandlestickDataEditor({ config, patch }: SubEditorProps) {
+  const t = useT()
+  const cats = config.categories ?? []
+  const data = config.candlestick_data ?? []
+
+  const updateCat = (i: number, val: string) =>
+    patch({ categories: cats.map((c, idx) => (idx === i ? val : c)) })
+  const updateField = (i: number, field: 0 | 1 | 2 | 3, val: string) => {
+    const n = Number(val)
+    patch({
+      candlestick_data: data.map((row, idx) =>
+        idx === i
+          ? (row.map((v, fi) => (fi === field ? n : v)) as [number, number, number, number])
+          : row,
+      ),
+    })
+  }
+  const add = () =>
+    patch({
+      categories: [...cats, `Day ${cats.length + 1}`],
+      candlestick_data: [...data, [100, 110, 95, 115]],
+    })
+  const remove = (i: number) => {
+    if (data.length <= 1) {
+      toast.error(t('echarts.keepAtLeast1Point'))
+      return
+    }
+    patch({
+      categories: cats.filter((_, idx) => idx !== i),
+      candlestick_data: data.filter((_, idx) => idx !== i),
+    })
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <Label>{t('echarts.dataPoints')}</Label>
+        <Button size="sm" variant="outline" onClick={add}>
+          <Plus className="size-3.5" /> {t('echarts.addPoint')}
+        </Button>
+      </div>
+      <div className="max-h-72 overflow-y-auto rounded-md border">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/50 sticky top-0">
+            <tr>
+              <th className="px-2 py-1.5 text-left font-medium">{t('echarts.fieldDate')}</th>
+              <th className="px-2 py-1.5 text-left font-medium">{t('echarts.fieldOpen')}</th>
+              <th className="px-2 py-1.5 text-left font-medium">{t('echarts.fieldClose')}</th>
+              <th className="px-2 py-1.5 text-left font-medium">{t('echarts.fieldLow')}</th>
+              <th className="px-2 py-1.5 text-left font-medium">{t('echarts.fieldHigh')}</th>
+              <th className="w-10 px-2 py-1.5"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((row, i) => (
+              <tr key={i} className="border-t">
+                <td className="px-2 py-1.5">
+                  <Input value={cats[i] ?? ''} onChange={(e) => updateCat(i, e.target.value)} className="h-8 w-24" />
+                </td>
+                <td className="px-2 py-1.5">
+                  <Input type="number" value={row[0]} onChange={(e) => updateField(i, 0, e.target.value)} className="h-8" />
+                </td>
+                <td className="px-2 py-1.5">
+                  <Input type="number" value={row[1]} onChange={(e) => updateField(i, 1, e.target.value)} className="h-8" />
+                </td>
+                <td className="px-2 py-1.5">
+                  <Input type="number" value={row[2]} onChange={(e) => updateField(i, 2, e.target.value)} className="h-8" />
+                </td>
+                <td className="px-2 py-1.5">
+                  <Input type="number" value={row[3]} onChange={(e) => updateField(i, 3, e.target.value)} className="h-8" />
+                </td>
+                <td className="px-2 py-1.5 text-right">
+                  <Button size="icon" variant="ghost" className="size-8 text-muted-foreground hover:text-destructive" onClick={() => remove(i)} aria-label={t('actions.delete')}>
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Boxplot editor — [min, Q1, median, Q3, max][] with categories
+// ---------------------------------------------------------------------------
+function BoxplotDataEditor({ config, patch }: SubEditorProps) {
+  const t = useT()
+  const cats = config.categories ?? []
+  const data = config.boxplot_data ?? []
+
+  const updateCat = (i: number, val: string) =>
+    patch({ categories: cats.map((c, idx) => (idx === i ? val : c)) })
+  const updateField = (i: number, field: 0 | 1 | 2 | 3 | 4, val: string) => {
+    const n = Number(val)
+    patch({
+      boxplot_data: data.map((row, idx) =>
+        idx === i
+          ? (row.map((v, fi) => (fi === field ? n : v)) as [number, number, number, number, number])
+          : row,
+      ),
+    })
+  }
+  const add = () =>
+    patch({
+      categories: [...cats, `Group ${cats.length + 1}`],
+      boxplot_data: [...data, [40, 55, 70, 85, 100]],
+    })
+  const remove = (i: number) => {
+    if (data.length <= 1) {
+      toast.error(t('echarts.keepAtLeast1Point'))
+      return
+    }
+    patch({
+      categories: cats.filter((_, idx) => idx !== i),
+      boxplot_data: data.filter((_, idx) => idx !== i),
+    })
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <Label>{t('echarts.dataPoints')}</Label>
+        <Button size="sm" variant="outline" onClick={add}>
+          <Plus className="size-3.5" /> {t('echarts.addPoint')}
+        </Button>
+      </div>
+      <div className="max-h-72 overflow-y-auto rounded-md border">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/50 sticky top-0">
+            <tr>
+              <th className="px-2 py-1.5 text-left font-medium">{t('echarts.itemName')}</th>
+              <th className="px-2 py-1.5 text-left font-medium">{t('echarts.fieldMin')}</th>
+              <th className="px-2 py-1.5 text-left font-medium">{t('echarts.fieldQ1')}</th>
+              <th className="px-2 py-1.5 text-left font-medium">{t('echarts.fieldMedian')}</th>
+              <th className="px-2 py-1.5 text-left font-medium">{t('echarts.fieldQ3')}</th>
+              <th className="px-2 py-1.5 text-left font-medium">{t('echarts.fieldMax')}</th>
+              <th className="w-10 px-2 py-1.5"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((row, i) => (
+              <tr key={i} className="border-t">
+                <td className="px-2 py-1.5">
+                  <Input value={cats[i] ?? ''} onChange={(e) => updateCat(i, e.target.value)} className="h-8 w-24" />
+                </td>
+                {[0, 1, 2, 3, 4].map((fi) => (
+                  <td key={fi} className="px-2 py-1.5">
+                    <Input type="number" value={row[fi]} onChange={(e) => updateField(i, fi as 0 | 1 | 2 | 3 | 4, e.target.value)} className="h-8" />
+                  </td>
+                ))}
+                <td className="px-2 py-1.5 text-right">
+                  <Button size="icon" variant="ghost" className="size-8 text-muted-foreground hover:text-destructive" onClick={() => remove(i)} aria-label={t('actions.delete')}>
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Graph editor — nodes {id, name, category} + links {source, target}
+// ---------------------------------------------------------------------------
+function GraphDataEditor({ config, patch }: SubEditorProps) {
+  const t = useT()
+  const nodes = config.graph_nodes ?? []
+  const links = config.graph_links ?? []
+
+  const updateNode = (i: number, key: 'id' | 'name' | 'category', val: string) =>
+    patch({
+      graph_nodes: nodes.map((n, idx) =>
+        idx === i
+          ? { ...n, [key]: key === 'category' ? Number(val) || 0 : val }
+          : n,
+      ),
+    })
+  const addNode = () =>
+    patch({
+      graph_nodes: [...nodes, { id: String(nodes.length + 1), name: `Node ${nodes.length + 1}`, category: 0 }],
+    })
+  const removeNode = (i: number) => {
+    if (nodes.length <= 2) {
+      toast.error(t('echarts.keepAtLeast2Items'))
+      return
+    }
+    const removedId = nodes[i].id
+    patch({
+      graph_nodes: nodes.filter((_, idx) => idx !== i),
+      graph_links: links.filter((l) => l.source !== removedId && l.target !== removedId),
+    })
+  }
+  const updateLink = (i: number, key: 'source' | 'target', val: string) =>
+    patch({ graph_links: links.map((l, idx) => (idx === i ? { ...l, [key]: val } : l)) })
+  const addLink = () => {
+    if (nodes.length < 2) return
+    patch({ graph_links: [...links, { source: nodes[0].id, target: nodes[1].id }] })
+  }
+  const removeLink = (i: number) => {
+    if (links.length <= 1) {
+      toast.error(t('echarts.keepAtLeast1Link'))
+      return
+    }
+    patch({ graph_links: links.filter((_, idx) => idx !== i) })
+  }
+
+  const idOptions = nodes.map((n) => n.id)
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label>{t('echarts.nodes')}</Label>
+          <Button size="sm" variant="outline" onClick={addNode}>
+            <Plus className="size-3.5" /> {t('echarts.addNode')}
+          </Button>
+        </div>
+        <div className="max-h-44 overflow-y-auto rounded-md border">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 sticky top-0">
+              <tr>
+                <th className="px-2 py-1.5 text-left font-medium">ID</th>
+                <th className="px-2 py-1.5 text-left font-medium">{t('echarts.itemName')}</th>
+                <th className="px-2 py-1.5 text-left font-medium">{t('echarts.fieldCategory')}</th>
+                <th className="w-10 px-2 py-1.5"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {nodes.map((n, i) => (
+                <tr key={i} className="border-t">
+                  <td className="px-2 py-1.5"><Input value={n.id} onChange={(e) => updateNode(i, 'id', e.target.value)} className="h-8 w-16" /></td>
+                  <td className="px-2 py-1.5"><Input value={n.name} onChange={(e) => updateNode(i, 'name', e.target.value)} className="h-8" /></td>
+                  <td className="px-2 py-1.5"><Input type="number" value={n.category} onChange={(e) => updateNode(i, 'category', e.target.value)} className="h-8 w-16" /></td>
+                  <td className="px-2 py-1.5 text-right">
+                    <Button size="icon" variant="ghost" className="size-8 text-muted-foreground hover:text-destructive" onClick={() => removeNode(i)} aria-label={t('actions.delete')}>
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label>{t('echarts.links')}</Label>
+          <Button size="sm" variant="outline" onClick={addLink} disabled={nodes.length < 2}>
+            <Plus className="size-3.5" /> {t('echarts.addLink')}
+          </Button>
+        </div>
+        <div className="max-h-44 overflow-y-auto rounded-md border">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 sticky top-0">
+              <tr>
+                <th className="px-2 py-1.5 text-left font-medium">{t('echarts.fieldSource')}</th>
+                <th className="px-2 py-1.5 text-left font-medium">{t('echarts.fieldTarget')}</th>
+                <th className="w-10 px-2 py-1.5"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {links.map((l, i) => (
+                <tr key={i} className="border-t">
+                  <td className="px-2 py-1.5">
+                    <Select value={l.source} onValueChange={(v) => updateLink(i, 'source', v)}>
+                      <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {idOptions.map((id) => (<SelectItem key={id} value={id}>{id}</SelectItem>))}
+                      </SelectContent>
+                    </Select>
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <Select value={l.target} onValueChange={(v) => updateLink(i, 'target', v)}>
+                      <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {idOptions.map((id) => (<SelectItem key={id} value={id}>{id}</SelectItem>))}
+                      </SelectContent>
+                    </Select>
+                  </td>
+                  <td className="px-2 py-1.5 text-right">
+                    <Button size="icon" variant="ghost" className="size-8 text-muted-foreground hover:text-destructive" onClick={() => removeLink(i)} aria-label={t('actions.delete')}>
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Sankey editor — nodes {name} + links {source, target, value}
+// ---------------------------------------------------------------------------
+function SankeyDataEditor({ config, patch }: SubEditorProps) {
+  const t = useT()
+  const nodes = config.sankey_nodes ?? []
+  const links = config.sankey_links ?? []
+  const nameOptions = nodes.map((n) => n.name)
+
+  const updateNode = (i: number, val: string) =>
+    patch({
+      sankey_nodes: nodes.map((n, idx) => (idx === i ? { name: val } : n)),
+      sankey_links: links.map((l) => ({
+        source: l.source === nodes[i].name ? val : l.source,
+        target: l.target === nodes[i].name ? val : l.target,
+        value: l.value,
+      })),
+    })
+  const addNode = () =>
+    patch({ sankey_nodes: [...nodes, { name: `Node ${nodes.length + 1}` }] })
+  const removeNode = (i: number) => {
+    if (nodes.length <= 2) {
+      toast.error(t('echarts.keepAtLeast2Items'))
+      return
+    }
+    const removedName = nodes[i].name
+    patch({
+      sankey_nodes: nodes.filter((_, idx) => idx !== i),
+      sankey_links: links.filter((l) => l.source !== removedName && l.target !== removedName),
+    })
+  }
+  const updateLink = (i: number, key: 'source' | 'target' | 'value', val: string) =>
+    patch({
+      sankey_links: links.map((l, idx) =>
+        idx === i
+          ? { ...l, [key]: key === 'value' ? Number(val) || 0 : val }
+          : l,
+      ),
+    })
+  const addLink = () => {
+    if (nodes.length < 2) return
+    patch({ sankey_links: [...links, { source: nodes[0].name, target: nodes[1].name, value: 1000 }] })
+  }
+  const removeLink = (i: number) => {
+    if (links.length <= 1) {
+      toast.error(t('echarts.keepAtLeast1Link'))
+      return
+    }
+    patch({ sankey_links: links.filter((_, idx) => idx !== i) })
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label>{t('echarts.nodes')}</Label>
+          <Button size="sm" variant="outline" onClick={addNode}>
+            <Plus className="size-3.5" /> {t('echarts.addNode')}
+          </Button>
+        </div>
+        <div className="max-h-40 overflow-y-auto rounded-md border">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 sticky top-0">
+              <tr>
+                <th className="px-2 py-1.5 text-left font-medium">{t('echarts.itemName')}</th>
+                <th className="w-10 px-2 py-1.5"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {nodes.map((n, i) => (
+                <tr key={i} className="border-t">
+                  <td className="px-2 py-1.5"><Input value={n.name} onChange={(e) => updateNode(i, e.target.value)} className="h-8" /></td>
+                  <td className="px-2 py-1.5 text-right">
+                    <Button size="icon" variant="ghost" className="size-8 text-muted-foreground hover:text-destructive" onClick={() => removeNode(i)} aria-label={t('actions.delete')}>
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label>{t('echarts.links')}</Label>
+          <Button size="sm" variant="outline" onClick={addLink} disabled={nodes.length < 2}>
+            <Plus className="size-3.5" /> {t('echarts.addLink')}
+          </Button>
+        </div>
+        <div className="max-h-44 overflow-y-auto rounded-md border">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 sticky top-0">
+              <tr>
+                <th className="px-2 py-1.5 text-left font-medium">{t('echarts.fieldSource')}</th>
+                <th className="px-2 py-1.5 text-left font-medium">{t('echarts.fieldTarget')}</th>
+                <th className="px-2 py-1.5 text-left font-medium">{t('echarts.itemValue')}</th>
+                <th className="w-10 px-2 py-1.5"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {links.map((l, i) => (
+                <tr key={i} className="border-t">
+                  <td className="px-2 py-1.5">
+                    <Select value={l.source} onValueChange={(v) => updateLink(i, 'source', v)}>
+                      <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {nameOptions.map((nm) => (<SelectItem key={nm} value={nm}>{nm}</SelectItem>))}
+                      </SelectContent>
+                    </Select>
+                  </td>
+                  <td className="px-2 py-1.5">
+                    <Select value={l.target} onValueChange={(v) => updateLink(i, 'target', v)}>
+                      <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {nameOptions.map((nm) => (<SelectItem key={nm} value={nm}>{nm}</SelectItem>))}
+                      </SelectContent>
+                    </Select>
+                  </td>
+                  <td className="px-2 py-1.5"><Input type="number" value={l.value} onChange={(e) => updateLink(i, 'value', e.target.value)} className="h-8 w-24" /></td>
+                  <td className="px-2 py-1.5 text-right">
+                    <Button size="icon" variant="ghost" className="size-8 text-muted-foreground hover:text-destructive" onClick={() => removeLink(i)} aria-label={t('actions.delete')}>
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Sunburst editor — recursive nested tree {name, value?, children?}
+// ---------------------------------------------------------------------------
+function SunburstDataEditor({ config, patch }: SubEditorProps) {
+  const t = useT()
+  const tree = config.sunburst_data ?? []
+
+  // Immutably update a node located at `path` (array of child indices).
+  const updateNode = (
+    path: number[],
+    key: 'name' | 'value',
+    val: string,
+    nodes: SunburstNode[] = tree,
+  ): SunburstNode[] =>
+    nodes.map((n, i) => {
+      if (i !== path[0]) return n
+      if (path.length === 1) {
+        return { ...n, [key]: key === 'value' ? Number(val) || 0 : val }
+      }
+      return { ...n, children: updateNode(path.slice(1), key, val, n.children ?? []) }
+    })
+
+  const addChild = (path: number[], nodes: SunburstNode[] = tree): SunburstNode[] =>
+    nodes.map((n, i) => {
+      if (i !== path[0]) return n
+      if (path.length === 1) {
+        const child: SunburstNode = { name: `Child ${(n.children?.length ?? 0) + 1}`, value: 10 }
+        return { ...n, children: [...(n.children ?? []), child], value: undefined }
+      }
+      return { ...n, children: addChild(path.slice(1), n.children ?? []) }
+    })
+
+  const removeNode = (path: number[], nodes: SunburstNode[] = tree): SunburstNode[] =>
+    nodes
+      .filter((_, i) => i !== path[0])
+      .map((n, i) =>
+        i === path[0] && path.length > 1
+          ? { ...n, children: removeNode(path.slice(1), n.children ?? []) }
+          : n,
+      )
+
+  const addRoot = () =>
+    patch({ sunburst_data: [...tree, { name: `Root ${tree.length + 1}`, children: [{ name: 'Child 1', value: 10 }] }] })
+
+  const renderNode = (node: SunburstNode, path: number[], depth: number): React.ReactNode => (
+    <div key={path.join('-')} style={{ marginLeft: depth * 16 }} className="space-y-1">
+      <div className="flex items-center gap-1.5">
+        <Input
+          value={node.name}
+          onChange={(e) => patch({ sunburst_data: updateNode(path, 'name', e.target.value) })}
+          className="h-8 flex-1"
+        />
+        <Input
+          type="number"
+          value={node.value ?? 0}
+          onChange={(e) => patch({ sunburst_data: updateNode(path, 'value', e.target.value) })}
+          className="h-8 w-20"
+          placeholder={node.children?.length ? t('echarts.fieldValueOptional') : t('echarts.itemValue')}
+        />
+        <Button
+          size="icon"
+          variant="ghost"
+          className="size-8 shrink-0 text-primary"
+          onClick={() => patch({ sunburst_data: addChild(path) })}
+          title={t('echarts.addChild')}
+          aria-label={t('echarts.addChild')}
+        >
+          <Plus className="size-3.5" />
+        </Button>
+        {!(depth === 0 && tree.length <= 1) && (
+          <Button
+            size="icon"
+            variant="ghost"
+            className="size-8 shrink-0 text-muted-foreground hover:text-destructive"
+            onClick={() => patch({ sunburst_data: removeNode(path) })}
+            aria-label={t('actions.delete')}
+          >
+            <Trash2 className="size-3.5" />
+          </Button>
+        )}
+      </div>
+      {node.children?.map((child, ci) => renderNode(child, [...path, ci], depth + 1))}
+    </div>
+  )
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <Label>{t('echarts.hierarchy')}</Label>
+        <Button size="sm" variant="outline" onClick={addRoot}>
+          <Plus className="size-3.5" /> {t('echarts.addRoot')}
+        </Button>
+      </div>
+      <div className="max-h-80 overflow-y-auto rounded-md border p-2 space-y-1.5">
+        {tree.length === 0 ? (
+          <p className="text-xs text-muted-foreground px-1 py-2">{t('echarts.hierarchyEmpty')}</p>
+        ) : (
+          tree.map((n, i) => renderNode(n, [i], 0))
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Parallel editor — dims: string[] + parallel_data: number[][]
+// ---------------------------------------------------------------------------
+function ParallelDataEditor({ config, patch }: SubEditorProps) {
+  const t = useT()
+  const dims = config.parallel_dims ?? []
+  const data = config.parallel_data ?? []
+
+  const updateDim = (i: number, val: string) =>
+    patch({ parallel_dims: dims.map((d, idx) => (idx === i ? val : d)) })
+  const addDim = () => {
+    patch({
+      parallel_dims: [...dims, `Dim ${dims.length + 1}`],
+      parallel_data: data.map((row) => [...row, 0]),
+    })
+  }
+  const removeDim = (i: number) => {
+    if (dims.length <= 2) {
+      toast.error(t('echarts.keepAtLeast2Items'))
+      return
+    }
+    patch({
+      parallel_dims: dims.filter((_, idx) => idx !== i),
+      parallel_data: data.map((row) => row.filter((_, idx) => idx !== i)),
+    })
+  }
+  const updateCell = (row: number, col: number, val: string) => {
+    const n = Number(val)
+    patch({
+      parallel_data: data.map((r, ri) =>
+        ri === row ? (r.map((v, ci) => (ci === col ? n : v))) : r,
+      ),
+    })
+  }
+  const addRow = () =>
+    patch({ parallel_data: [...data, dims.map(() => 0)] })
+  const removeRow = (i: number) => {
+    if (data.length <= 1) {
+      toast.error(t('echarts.keepAtLeast1Point'))
+      return
+    }
+    patch({ parallel_data: data.filter((_, idx) => idx !== i) })
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label>{t('echarts.dimensions')}</Label>
+          <Button size="sm" variant="outline" onClick={addDim}>
+            <Plus className="size-3.5" /> {t('echarts.addDimension')}
+          </Button>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {dims.map((d, i) => (
+            <div key={i} className="flex items-center gap-1 rounded-md border bg-card px-1.5 py-1">
+              <Input value={d} onChange={(e) => updateDim(i, e.target.value)} className="h-7 w-24 border-0 px-1" />
+              <Button size="icon" variant="ghost" className="size-6 text-muted-foreground hover:text-destructive" onClick={() => removeDim(i)} aria-label={t('actions.delete')}>
+                <Trash2 className="size-3" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Label>{t('echarts.dataRecords')}</Label>
+          <Button size="sm" variant="outline" onClick={addRow}>
+            <Plus className="size-3.5" /> {t('echarts.addRecord')}
+          </Button>
+        </div>
+        <div className="max-h-60 overflow-auto rounded-md border">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 sticky top-0">
+              <tr>
+                {dims.map((d, i) => (
+                  <th key={i} className="px-2 py-1.5 text-left font-medium whitespace-nowrap">{d}</th>
+                ))}
+                <th className="w-10 px-2 py-1.5"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((row, ri) => (
+                <tr key={ri} className="border-t">
+                  {dims.map((_, ci) => (
+                    <td key={ci} className="px-1.5 py-1">
+                      <Input type="number" value={row[ci] ?? 0} onChange={(e) => updateCell(ri, ci, e.target.value)} className="h-8 w-20" />
+                    </td>
+                  ))}
+                  <td className="px-2 py-1.5 text-right">
+                    <Button size="icon" variant="ghost" className="size-8 text-muted-foreground hover:text-destructive" onClick={() => removeRow(ri)} aria-label={t('actions.delete')}>
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// ThemeRiver editor — [date, value, name][] (time-series river)
+// ---------------------------------------------------------------------------
+function ThemeRiverDataEditor({ config, patch }: SubEditorProps) {
+  const t = useT()
+  const data = config.themeriver_data ?? []
+
+  const update = (i: number, field: 0 | 1 | 2, val: string) => {
+    patch({
+      themeriver_data: data.map((row, idx) =>
+        idx === i
+          ? (field === 1
+              ? ([row[0], Number(val) || 0, row[2]] as [string, number, string])
+              : field === 0
+                ? [val, row[1], row[2]] as [string, number, string]
+                : [row[0], row[1], val] as [string, number, string])
+          : row,
+      ),
+    })
+  }
+  const add = () => {
+    const lastDate = data.length ? data[data.length - 1][0] : '2024-01-01'
+    const lastName = data.length ? data[data.length - 1][2] : 'Series 1'
+    patch({ themeriver_data: [...data, [lastDate, 100, lastName]] })
+  }
+  const remove = (i: number) => {
+    if (data.length <= 1) {
+      toast.error(t('echarts.keepAtLeast1Point'))
+      return
+    }
+    patch({ themeriver_data: data.filter((_, idx) => idx !== i) })
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <Label>{t('echarts.dataPoints')}</Label>
+        <Button size="sm" variant="outline" onClick={add}>
+          <Plus className="size-3.5" /> {t('echarts.addPoint')}
+        </Button>
+      </div>
+      <div className="max-h-72 overflow-y-auto rounded-md border">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/50 sticky top-0">
+            <tr>
+              <th className="px-2 py-1.5 text-left font-medium">{t('echarts.fieldDate')}</th>
+              <th className="px-2 py-1.5 text-left font-medium">{t('echarts.fieldName')}</th>
+              <th className="px-2 py-1.5 text-left font-medium">{t('echarts.itemValue')}</th>
+              <th className="w-10 px-2 py-1.5"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((row, i) => (
+              <tr key={i} className="border-t">
+                <td className="px-2 py-1.5"><Input value={row[0]} onChange={(e) => update(i, 0, e.target.value)} className="h-8 w-32" /></td>
+                <td className="px-2 py-1.5"><Input value={row[2]} onChange={(e) => update(i, 2, e.target.value)} className="h-8" /></td>
+                <td className="px-2 py-1.5"><Input type="number" value={row[1]} onChange={(e) => update(i, 1, e.target.value)} className="h-8 w-24" /></td>
+                <td className="px-2 py-1.5 text-right">
+                  <Button size="icon" variant="ghost" className="size-8 text-muted-foreground hover:text-destructive" onClick={() => remove(i)} aria-label={t('actions.delete')}>
                     <Trash2 className="size-3.5" />
                   </Button>
                 </td>
