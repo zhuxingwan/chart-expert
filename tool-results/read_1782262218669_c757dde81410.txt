@@ -1,0 +1,1455 @@
+     1→'use client'
+     2→
+     3→import * as React from 'react'
+     4→import { toast } from 'sonner'
+     5→import { useVizLibs, getECharts } from '@/lib/viz-libs/cdn-loader'
+     6→import {
+     7→  BarChart3,
+     8→  LineChart as LineChartIcon,
+     9→  PieChart as PieChartIcon,
+    10→  Activity,
+    11→  Target,
+    12→  Triangle,
+    13→  Gauge,
+    14→  Grid3x3,
+    15→  Share2,
+    16→  Workflow,
+    17→  Sun,
+    18→  Waves,
+    19→  AlignVerticalDistributeCenter,
+    20→  ChartCandlestick,
+    21→  Plus,
+    22→  Trash2,
+    23→  Shuffle,
+    24→  Download,
+    25→  Copy,
+    26→  AlignLeft,
+    27→  Loader2,
+    28→  ZoomIn,
+    29→  ZoomOut,
+    30→  Maximize,
+    31→  Maximize2,
+    32→  Minimize2,
+    33→} from 'lucide-react'
+    34→
+    35→import { cn } from '@/lib/utils'
+    36→import type { EChartsConfig } from '@/types/chart'
+    37→import { useT, useI18n } from '@/lib/i18n'
+    38→import { useProFeature } from '@/lib/license/use-pro-feature'
+    39→import { drawWatermark } from '@/lib/license/watermark'
+    40→import {
+    41→  getEChartsTemplateName,
+    42→  getEChartsCategoryLabel,
+    43→} from '@/lib/i18n/template-names'
+    44→import { useIsMobile } from '@/hooks/use-mobile'
+    45→import {
+    46→  ResizablePanelGroup,
+    47→  ResizablePanel,
+    48→  ResizableHandle,
+    49→} from '@/components/ui/resizable'
+    50→import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+    51→import {
+    52→  Accordion,
+    53→  AccordionItem,
+    54→  AccordionTrigger,
+    55→  AccordionContent,
+    56→} from '@/components/ui/accordion'
+    57→import {
+    58→  Select,
+    59→  SelectTrigger,
+    60→  SelectValue,
+    61→  SelectContent,
+    62→  SelectGroup,
+    63→  SelectItem,
+    64→  SelectLabel,
+    65→} from '@/components/ui/select'
+    66→import { Input } from '@/components/ui/input'
+    67→import { Label } from '@/components/ui/label'
+    68→import { Switch } from '@/components/ui/switch'
+    69→import { Slider } from '@/components/ui/slider'
+    70→import { Button } from '@/components/ui/button'
+    71→import { ScrollArea } from '@/components/ui/scroll-area'
+    72→import {
+    73→  ECHARTS_TEMPLATES,
+    74→  ECHARTS_TEMPLATE_CATEGORIES,
+    75→  TEMPLATE_BY_ID,
+    76→  DEFAULT_TEMPLATE,
+    77→  THEME_OPTIONS,
+    78→  type EChartsTemplate,
+    79→} from './echarts-templates'
+    80→import { buildEChartsOption } from './echarts-option-builder'
+    81→
+    82→// ECharts is loaded from CDN via <VizLibLoader>. getECharts() returns
+    83→// window.echarts — the FULL bundle, with every chart type and component
+    84→// already registered. No `echarts.use([...])` registration is needed here.
+    85→// Themes shipped in the CDN build (dark / vintage / macarons) are passed
+    86→// directly to echarts.init(dom, themeName); unknown names fall back silently.
+    87→
+    88→// ---------------------------------------------------------------------------
+    89→// Helpers
+    90→// ---------------------------------------------------------------------------
+    91→
+    92→function deepClone<T>(v: T): T {
+    93→  if (typeof structuredClone === 'function') return structuredClone(v)
+    94→  return JSON.parse(JSON.stringify(v)) as T
+    95→}
+    96→
+    97→function configKey(c: EChartsConfig | null): string {
+    98→  if (!c) return ''
+    99→  return JSON.stringify(c)
+   100→}
+   101→
+   102→/** Map a template's type to a lucide icon. */
+   103→function iconForType(type: string) {
+   104→  switch (type) {
+   105→    case 'bar':
+   106→      return BarChart3
+   107→    case 'line':
+   108→      return LineChartIcon
+   109→    case 'pie':
+   110→      return PieChartIcon
+   111→    case 'scatter':
+   112→      return Activity
+   113→    case 'radar':
+   114→      return Target
+   115→    case 'funnel':
+   116→      return Triangle
+   117→    case 'gauge':
+   118→      return Gauge
+   119→    case 'heatmap':
+   120→      return Grid3x3
+   121→    case 'candlestick':
+   122→      return ChartCandlestick
+   123→    case 'boxplot':
+   124→      return BarChart3
+   125→    case 'graph':
+   126→      return Share2
+   127→    case 'sankey':
+   128→      return Workflow
+   129→    case 'treemap':
+   130→      return Grid3x3
+   131→    case 'sunburst':
+   132→      return Sun
+   133→    case 'parallel':
+   134→      return AlignVerticalDistributeCenter
+   135→    case 'themeRiver':
+   136→      return Waves
+   137→    default:
+   138→      return BarChart3
+   139→  }
+   140→}
+   141→
+   142→// ---------------------------------------------------------------------------
+   143→// Props
+   144→// ---------------------------------------------------------------------------
+   145→
+   146→export interface EChartsEditorProps {
+   147→  config: EChartsConfig | null
+   148→  onChange: (cfg: EChartsConfig) => void
+   149→  onTemplateChange?: (templateId: string) => void
+   150→  previewRef: React.RefObject<HTMLDivElement | null>
+   151→}
+   152→
+   153→// ===========================================================================
+   154→// Component
+   155→// ===========================================================================
+   156→
+   157→export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }: EChartsEditorProps) {
+   158→  const t = useT()
+   159→  const { locale } = useI18n()
+   160→  const { isPro, requirePro } = useProFeature()
+   161→  // CDN-loaded echarts — status flips to 'loaded' once the <script> tag from
+   162→  // VizLibLoader finishes. We render a loading placeholder until then.
+   163→  const { status } = useVizLibs()
+   164→  const echartsLoaded = status.echarts === 'loaded'
+   165→  // Switch between mobile (vertical tabs) and desktop (horizontal panels) layout.
+   166→  const isMobile = useIsMobile()
+   167→
+   168→  // Local "live" config — the editor's source of truth between parent updates.
+   169→  const [local, setLocal] = React.useState<EChartsConfig>(() =>
+   170→    config ? deepClone(config) : deepClone(DEFAULT_TEMPLATE.defaultConfig),
+   171→  )
+   172→
+   173→  // Track which template is currently applied so the chart-type Select can show
+   174→  // the right value. Initialized from the first template; updated whenever the
+   175→  // user picks a template from the gallery or dropdown. When the parent pushes
+   176→  // a config (AI suggestion / loaded chart) we best-effort match by template id
+   177→  // — if we can't, we fall back to the first template whose type matches.
+   178→  const [currentTemplateId, setCurrentTemplateId] = React.useState<string>(
+   179→    DEFAULT_TEMPLATE.id,
+   180→  )
+   181→
+   182→  // Track the last config we accepted from props to avoid feedback loops.
+   183→  const lastAppliedKey = React.useRef<string>(configKey(config))
+   184→
+   185→  // Accept new config from the parent (AI suggestion / loaded chart) — only
+   186→  // when the JSON actually differs from what we last applied.
+   187→  React.useEffect(() => {
+   188→    const incomingKey = configKey(config)
+   189→    if (incomingKey && incomingKey !== lastAppliedKey.current) {
+   190→      lastAppliedKey.current = incomingKey
+   191→      const next = deepClone(config as EChartsConfig)
+   192→      setLocal(next)
+   193→      // Best-effort template match by exact defaultConfig equality, then by type.
+   194→      const exact = ECHARTS_TEMPLATES.find(
+   195→        (t) => configKey(t.defaultConfig) === incomingKey,
+   196→      )
+   197→      if (exact) {
+   198→        setCurrentTemplateId(exact.id)
+   199→      } else {
+   200→        const byType = ECHARTS_TEMPLATES.find((t) => t.type === next.type)
+   201→        if (byType) setCurrentTemplateId(byType.id)
+   202→      }
+   203→    }
+   204→  }, [config])
+   205→
+   206→  // Push local edits up to the parent.
+   207→  const commit = React.useCallback(
+   208→    (next: EChartsConfig) => {
+   209→      setLocal(next)
+   210→      const key = configKey(next)
+   211→      lastAppliedKey.current = key
+   212→      onChange(next)
+   213→    },
+   214→    [onChange],
+   215→  )
+   216→
+   217→  // ----- ECharts instance -----
+   218→  const chartContainerRef = React.useRef<HTMLDivElement | null>(null)
+   219→  // `any` because echarts is externalized to a CDN global — the ECharts TS
+   220→  // types aren't resolvable at build time. The CDN full build exposes all
+   221→  // runtime methods we need (init / setOption / dispose / resize / getDataURL).
+   222→  const chartRef = React.useRef<any>(null)
+   223→  const currentTheme = React.useRef<string>('default')
+   224→  const resizeObsRef = React.useRef<ResizeObserver | null>(null)
+   225→
+   226→  // ----- Fullscreen preview state (must be declared before effects that use it) -----
+   227→  const [fullscreen, setFullscreen] = React.useState(false)
+   228→
+   229→  // Build the option with useMemo so re-renders are cheap.
+   230→  const option = React.useMemo(() => buildEChartsOption(local), [local])
+   231→
+   232→  const renderChart = React.useCallback(() => {
+   233→    if (!chartContainerRef.current) return
+   234→    const echartsLib = getECharts()
+   235→    if (!echartsLib) return // CDN not ready yet — re-runs when status changes
+   236→    const theme = local.theme || 'default'
+   237→
+   238→    // Re-create the instance if the theme changed. The CDN build auto-
+   239→    // registers every theme shipped in the bundle (dark / vintage / macarons).
+   240→    // Unknown theme names silently fall back to the default theme.
+   241→    if (!chartRef.current || currentTheme.current !== theme) {
+   242→      chartRef.current?.dispose()
+   243→      chartRef.current = echartsLib.init(
+   244→        chartContainerRef.current,
+   245→        theme === 'default' ? undefined : theme,
+   246→        { renderer: 'canvas' },
+   247→      )
+   248→      currentTheme.current = theme
+   249→    }
+   250→    chartRef.current.setOption(option, true)
+   251→  }, [option, local.theme])
+   252→
+   253→  // Debounced re-render (150ms) when the option changes OR once the CDN
+   254→  // finishes loading. Skipped entirely until echarts is ready.
+   255→  React.useEffect(() => {
+   256→    if (!echartsLoaded) return
+   257→    const t = window.setTimeout(() => {
+   258→      renderChart()
+   259→    }, 150)
+   260→    return () => window.clearTimeout(t)
+   261→  }, [renderChart, echartsLoaded])
+   262→
+   263→  // Init ResizeObserver + dispose on unmount. The actual first render is
+   264→  // triggered by the debounced effect above once the CDN is ready.
+   265→  // Re-runs on `isMobile` change so the observer (and chart instance) rebinds
+   266→  // to the new container that mounts when the layout switches.
+   267→  // Also re-runs on `fullscreen` toggle so the chart rebinds to the new
+   268→  // container inside the fullscreen overlay.
+   269→  React.useEffect(() => {
+   270→    if (!chartContainerRef.current) return
+   271→
+   272→    const ro = new ResizeObserver(() => {
+   273→      chartRef.current?.resize()
+   274→    })
+   275→    ro.observe(chartContainerRef.current)
+   276→    resizeObsRef.current = ro
+   277→
+   278→    return () => {
+   279→      ro.disconnect()
+   280→      resizeObsRef.current = null
+   281→      chartRef.current?.dispose()
+   282→      chartRef.current = null
+   283→    }
+   284→  }, [isMobile, fullscreen])
+   285→
+   286→  // Force a re-render after the layout switches so the freshly mounted
+   287→  // chart container gets the option applied.
+   288→  React.useEffect(() => {
+   289→    if (!echartsLoaded) return
+   290→    const id = window.setTimeout(() => renderChart(), 50)
+   291→    return () => window.clearTimeout(id)
+   292→  }, [isMobile, fullscreen, renderChart, echartsLoaded])
+   293→
+   294→  // ----- Mutators (keep immutable) -----
+   295→  const patch = React.useCallback(
+   296→    (p: Partial<EChartsConfig>) => commit({ ...local, ...p }),
+   297→    [commit, local],
+   298→  )
+   299→
+   300→  const applyTemplate = React.useCallback(
+   301→    (tpl: EChartsTemplate, keepTitle = false) => {
+   302→      const next = deepClone(tpl.defaultConfig)
+   303→      if (keepTitle && local.title) next.title = deepClone(local.title)
+   304→      commit(next)
+   305→      setCurrentTemplateId(tpl.id)
+   306→      onTemplateChange?.('echarts:' + tpl.id)
+   307→      toast.success(
+   308→        t('toasts.applied', { name: getEChartsTemplateName(locale, tpl.id, tpl.name) }),
+   309→      )
+   310→    },
+   311→    [commit, local.title, t, onTemplateChange],
+   312→  )
+   313→
+   314→  const onTemplateIdChange = React.useCallback(
+   315→    (id: string) => {
+   316→      const tpl = TEMPLATE_BY_ID[id]
+   317→      if (tpl) applyTemplate(tpl, true)
+   318→    },
+   319→    [applyTemplate],
+   320→  )
+   321→
+   322→  // ----- Zoom -----
+   323→  const [zoom, setZoom] = React.useState(1)
+   324→  const handleZoomIn = () => setZoom((z) => Math.min(2.5, z + 0.2))
+   325→  const handleZoomOut = () => setZoom((z) => Math.max(0.4, z - 0.2))
+   326→  const handleReset = () => setZoom(1)
+   327→
+   328→  // Listen for Escape key to exit fullscreen
+   329→  React.useEffect(() => {
+   330→    if (!fullscreen) return
+   331→    const handleEsc = (e: KeyboardEvent) => {
+   332→      if (e.key === 'Escape') setFullscreen(false)
+   333→    }
+   334→    window.addEventListener('keydown', handleEsc)
+   335→    return () => window.removeEventListener('keydown', handleEsc)
+   336→  }, [fullscreen])
+   337→
+   338→  // ----- Export handlers -----
+   339→  const handleDownloadPNG = React.useCallback(() => {
+   340→    if (!chartRef.current) {
+   341→      toast.error(t('toasts.noContent'))
+   342→      return
+   343→    }
+   344→    try {
+   345→      const url = chartRef.current.getDataURL({
+   346→        type: 'png',
+   347→        pixelRatio: 2,
+   348→        backgroundColor: '#fff',
+   349→      })
+   350→      if (isPro) {
+   351→        // Pro: download directly
+   352→        const a = document.createElement('a')
+   353→        a.href = url
+   354→        a.download = `${local.title?.text || 'chart'}.png`
+   355→        document.body.appendChild(a)
+   356→        a.click()
+   357→        document.body.removeChild(a)
+   358→        toast.success(t('toasts.exported'))
+   359→      } else {
+   360→        // Free: add watermark
+   361→        const img = new Image()
+   362→        img.crossOrigin = 'anonymous'
+   363→        img.onload = async () => {
+   364→          const canvas = document.createElement('canvas')
+   365→          canvas.width = img.naturalWidth
+   366→          canvas.height = img.naturalHeight
+   367→          const ctx = canvas.getContext('2d')
+   368→          if (!ctx) return
+   369→          ctx.drawImage(img, 0, 0)
+   370→          await drawWatermark(ctx, canvas.width, canvas.height)
+   371→          canvas.toBlob((blob) => {
+   372→            if (!blob) return
+   373→            const a = document.createElement('a')
+   374→            a.href = URL.createObjectURL(blob)
+   375→            a.download = `${local.title?.text || 'chart'}.png`
+   376→            a.click()
+   377→            setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+   378→          }, 'image/png')
+   379→          toast.success(t('toasts.exported'))
+   380→        }
+   381→        img.src = url
+   382→      }
+   383→    } catch {
+   384→      toast.error(t('toasts.exportFailed', { error: 'PNG' }))
+   385→    }
+   386→  }, [local.title, t, isPro])
+   387→
+   388→  // Render the option into a hidden, off-screen SVG-renderer ECharts instance
+   389→  // and serialize the resulting SVG. The live preview uses the canvas renderer
+   390→  // (which can't produce SVG), so we spin up a temporary SVG-renderer instance
+   391→  // with the same option / size / theme, grab its <svg>, and tear it down.
+   392→  const handleDownloadSvg = React.useCallback(() => {
+   393→    if (!requirePro()) return
+   394→    const echartsLib = getECharts()
+   395→    if (!echartsLib || !chartContainerRef.current) {
+   396→      toast.error(t('toasts.noContent'))
+   397→      return
+   398→    }
+   399→    const temp = document.createElement('div')
+   400→    temp.style.width = chartContainerRef.current.clientWidth + 'px'
+   401→    temp.style.height = chartContainerRef.current.clientHeight + 'px'
+   402→    temp.style.position = 'absolute'
+   403→    temp.style.left = '-9999px'
+   404→    document.body.appendChild(temp)
+   405→    let tempChart: any = null
+   406→    try {
+   407→      const themeName =
+   408→        local.theme && local.theme !== 'default' ? local.theme : undefined
+   409→      tempChart = echartsLib.init(temp, themeName, { renderer: 'svg' })
+   410→      tempChart.setOption(option, true)
+   411→      const svg = temp.querySelector('svg')
+   412→      if (!svg) {
+   413→        toast.error(t('toasts.noContent'))
+   414→        return
+   415→      }
+   416→      svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+   417→      const svgStr = new XMLSerializer().serializeToString(svg)
+   418→      const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' })
+   419→      const url = URL.createObjectURL(blob)
+   420→      const a = document.createElement('a')
+   421→      a.href = url
+   422→      a.download = `${local.title?.text || 'chart'}.svg`
+   423→      document.body.appendChild(a)
+   424→      a.click()
+   425→      document.body.removeChild(a)
+   426→      setTimeout(() => URL.revokeObjectURL(url), 1000)
+   427→      toast.success(t('toasts.exported'))
+   428→    } catch (e) {
+   429→      toast.error(t('toasts.exportFailed', { error: (e as Error).message }))
+   430→    } finally {
+   431→      try {
+   432→        tempChart?.dispose()
+   433→      } catch {
+   434→        // ignore
+   435→      }
+   436→      if (temp.parentNode) document.body.removeChild(temp)
+   437→    }
+   438→  }, [option, local.theme, local.title, t, requirePro])
+   439→
+   440→  const handleCopyAsMarkdown = React.useCallback(async () => {
+   441→    if (!requirePro()) return
+   442→    try {
+   443→      const markdown = '```echarts\n' + JSON.stringify(option, null, 2) + '\n```'
+   444→      await navigator.clipboard.writeText(markdown)
+   445→      toast.success(t('toasts.markdownCopied'))
+   446→    } catch {
+   447→      toast.error(t('toasts.copyFailed'))
+   448→    }
+   449→  }, [option, t, requirePro])
+   450→
+   451→  // ----- Random data -----
+   452→  const handleRandomData = React.useCallback(() => {
+   453→    const type = local.type
+   454→    if (type === 'pie' || type === 'funnel') {
+   455→      const data = (local.single_series_data ?? []).map((d) => ({
+   456→        name: d.name,
+   457→        value: Math.floor(Math.random() * 900) + 100,
+   458→      }))
+   459→      patch({ single_series_data: data })
+   460→    } else if (type === 'gauge') {
+   461→      const max = Number(local.gauge_max) || 100
+   462→      patch({ gauge_value: Math.floor(Math.random() * max) })
+   463→    } else if (type === 'scatter') {
+   464→      const data = (local.scatter_data ?? []).map(() => [
+   465→        Math.floor(Math.random() * 200) + 100,
+   466→        Math.floor(Math.random() * 60) + 40,
+   467→      ]) as [number, number][]
+   468→      patch({ scatter_data: data })
+   469→    } else if (type === 'heatmap') {
+   470→      const data = local.series_data.map((row) =>
+   471→        row.map(() => Math.floor(Math.random() * 50)),
+   472→      )
+   473→      patch({ series_data: data })
+   474→    } else if (type === 'radar') {
+   475→      const data = local.series_data.map((row) =>
+   476→        row.map(() => Math.floor(Math.random() * 100)),
+   477→      )
+   478→      patch({ series_data: data })
+   479→    } else {
+   480→      // bar / line
+   481→      const data = local.series_data.map((row) =>
+   482→        row.map(() => Math.floor(Math.random() * 200) + 20),
+   483→      )
+   484→      patch({ series_data: data })
+   485→    }
+   486→    toast.success(t('toasts.randomData'))
+   487→  }, [local, patch, t])
+   488→
+   489→  // ---------------------------------------------------------------------------
+   490→  // Render
+   491→  // ---------------------------------------------------------------------------
+   492→  // Extract the three sections as JSX variables so they can be rendered in
+   493→  // EITHER the mobile tab layout OR the desktop resizable-panel layout —
+   494→  // without duplicating the inner logic. Only one layout is in the DOM at a
+   495→  // time (driven by `useIsMobile`), so `previewRef` / `chartContainerRef`
+   496→  // always point at the actually-visible element.
+   497→  const templateGalleryEl = (
+   498→    <div className="flex h-full flex-col">
+   499→      <div className="border-b px-4 py-3">
+   500→        <h3 className="text-sm font-semibold">{t('echarts.templateGallery')}</h3>
+   501→        <p className="text-xs text-muted-foreground mt-1">
+   502→          Click a template to apply it; the config panel refreshes accordingly.
+   503→        </p>
+   504→      </div>
+   505→      <ScrollArea className="min-h-0 flex-1">
+   506→        <div className="grid grid-cols-1 gap-2 p-3">
+   507→          {ECHARTS_TEMPLATE_CATEGORIES.map((cat) => {
+   508→            const items = ECHARTS_TEMPLATES.filter((t) => t.category === cat.id)
+   509→            if (items.length === 0) return null
+   510→            return (
+   511→              <div key={cat.id} className="space-y-2">
+   512→                <div className="px-1 pt-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+   513→                  {getEChartsCategoryLabel(locale, cat.id, cat.label)}
+   514→                </div>
+   515→                {items.map((tpl) => {
+   516→                  const Icon = iconForType(tpl.type)
+   517→                  const active = currentTemplateId === tpl.id
+   518→                  return (
+   519→                    <button
+   520→                      key={tpl.id}
+   521→                      type="button"
+   522→                      onClick={() => applyTemplate(tpl)}
+   523→                      className={cn(
+   524→                        'group flex w-full items-start gap-3 rounded-lg border bg-card p-3 text-left transition-all hover:border-primary/50 hover:shadow-sm',
+   525→                        active && 'border-primary',
+   526→                      )}
+   527→                      title={tpl.description}
+   528→                    >
+   529→                      <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-primary">
+   530→                        <Icon className="size-4" />
+   531→                      </span>
+   532→                      <span className="flex flex-col gap-0.5 overflow-hidden">
+   533→                        <span className="truncate text-sm font-medium">
+   534→                          {getEChartsTemplateName(locale, tpl.id, tpl.name)}
+   535→                        </span>
+   536→                        <span className="line-clamp-2 text-[11px] text-muted-foreground">
+   537→                          {tpl.description}
+   538→                        </span>
+   539→                      </span>
+   540→                    </button>
+   541→                  )
+   542→                })}
+   543→              </div>
+   544→            )
+   545→          })}
+   546→        </div>
+   547→      </ScrollArea>
+   548→    </div>
+   549→  )
+   550→
+   551→  const previewToolbar = (
+   552→    <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
+   553→      <div className="flex items-center gap-1.5">
+   554→        <Button
+   555→          size="sm"
+   556→          variant="ghost"
+   557→          onClick={handleZoomOut}
+   558→          aria-label="Zoom out"
+   559→          className="h-7 w-7 p-0"
+   560→        >
+   561→          <ZoomOut className="h-4 w-4" />
+   562→        </Button>
+   563→        <span className="w-12 text-center text-xs tabular-nums text-muted-foreground">
+   564→          {Math.round(zoom * 100)}%
+   565→        </span>
+   566→        <Button
+   567→          size="sm"
+   568→          variant="ghost"
+   569→          onClick={handleZoomIn}
+   570→          aria-label="Zoom in"
+   571→          className="h-7 w-7 p-0"
+   572→        >
+   573→          <ZoomIn className="h-4 w-4" />
+   574→        </Button>
+   575→        <Button
+   576→          size="sm"
+   577→          variant="ghost"
+   578→          onClick={handleReset}
+   579→          aria-label="Reset zoom"
+   580→          className="h-7 w-7 p-0"
+   581→        >
+   582→          <Maximize className="h-4 w-4" />
+   583→        </Button>
+   584→      </div>
+   585→      <div className="flex items-center gap-1">
+   586→        <Button
+   587→          size="sm"
+   588→          variant="ghost"
+   589→          onClick={handleDownloadSvg}
+   590→          className="h-7 gap-1 px-2 text-xs"
+   591→        >
+   592→          <Download className="h-3 w-3" /> SVG
+   593→        </Button>
+   594→        <Button
+   595→          size="sm"
+   596→          variant="ghost"
+   597→          onClick={handleDownloadPNG}
+   598→          className="h-7 gap-1 px-2 text-xs"
+   599→        >
+   600→          <Download className="h-3 w-3" /> PNG
+   601→        </Button>
+   602→        <Button
+   603→          size="sm"
+   604→          variant="ghost"
+   605→          onClick={handleCopyAsMarkdown}
+   606→          className="h-7 gap-1 px-2 text-xs"
+   607→        >
+   608→          <Copy className="h-3 w-3" /> Markdown
+   609→        </Button>
+   610→        <Button
+   611→          size="sm"
+   612→          variant="ghost"
+   613→          onClick={() => setFullscreen((f) => !f)}
+   614→          className="h-7 gap-1 px-2 text-xs"
+   615→          aria-label={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+   616→        >
+   617→          {fullscreen ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
+   618→          {fullscreen ? 'Exit' : 'Fullscreen'}
+   619→        </Button>
+   620→      </div>
+   621→    </div>
+   622→  )
+   623→
+   624→  const previewCanvas = (
+   625→    <div
+   626→      ref={previewRef}
+   627→      className="relative min-h-0 flex-1 overflow-auto"
+   628→      style={{ background: '#fff' }}
+   629→    >
+   630→      <div
+   631→        style={{
+   632→          transform: `scale(${zoom})`,
+   633→          transformOrigin: 'center center',
+   634→          transition: 'transform 0.15s ease',
+   635→          width: '100%',
+   636→          height: '100%',
+   637→        }}
+   638→      >
+   639→        <div
+   640→          ref={chartContainerRef}
+   641→          style={{ width: '100%', height: '100%', minHeight: 400 }}
+   642→        />
+   643→      </div>
+   644→      {!echartsLoaded && (
+   645→        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/80 backdrop-blur-sm">
+   646→          <Loader2 className="size-6 animate-spin text-primary" />
+   647→          <span className="text-sm text-muted-foreground">
+   648→            {t('app.loadingLib')}
+   649→          </span>
+   650→        </div>
+   651→      )}
+   652→    </div>
+   653→  )
+   654→
+   655→  const previewEl = (
+   656→    <div className="flex h-full flex-col">
+   657→      {!fullscreen && previewToolbar}
+   658→      {!fullscreen && previewCanvas}
+   659→    </div>
+   660→  )
+   661→
+   662→  // Fullscreen overlay — when active, takes over the entire viewport.
+   663→  // The toolbar + canvas JSX are the SAME elements (refs to previewRef /
+   664→  // chartContainerRef point here), so the ECharts instance rebinds via the
+   665→  // ResizeObserver effect keyed on `fullscreen`.
+   666→  const fullscreenOverlay = fullscreen ? (
+   667→    <div className="fixed inset-0 z-50 flex flex-col bg-background">
+   668→      {previewToolbar}
+   669→      {previewCanvas}
+   670→    </div>
+   671→  ) : null
+   672→
+   673→  const configEl = (
+   674→    <div className="flex h-full flex-col">
+   675→      <div className="border-b px-4 py-3">
+   676→        <h3 className="text-sm font-semibold">{t('echarts.configPanel')}</h3>
+   677→        <p className="text-xs text-muted-foreground mt-1">
+   678→          All changes sync to the preview instantly — no save button needed.
+   679→        </p>
+   680→      </div>
+   681→      <ScrollArea className="min-h-0 flex-1">
+   682→        <div className="p-3">
+   683→          <Accordion
+   684→            type="multiple"
+   685→            defaultValue={['type', 'title', 'data', 'style']}
+   686→            className="w-full"
+   687→          >
+   688→            {/* 1. Chart type */}
+   689→            <AccordionItem value="type">
+   690→              <AccordionTrigger>
+   691→                <span className="flex items-center gap-2 font-medium">
+   692→                  <BarChart3 className="size-4 text-primary" /> {t('echarts.chartType')}
+   693→                </span>
+   694→              </AccordionTrigger>
+   695→              <AccordionContent>
+   696→                <div className="space-y-2">
+   697→                  <Label className="text-xs text-muted-foreground">Switching type resets sample data but keeps the title</Label>
+   698→                  <Select value={currentTemplateId} onValueChange={onTemplateIdChange}>
+   699→                    <SelectTrigger className="w-full">
+   700→                      <SelectValue placeholder="Select chart type" />
+   701→                    </SelectTrigger>
+   702→                    <SelectContent>
+   703→                      {ECHARTS_TEMPLATE_CATEGORIES.map((cat) => {
+   704→                        const items = ECHARTS_TEMPLATES.filter((t) => t.category === cat.id)
+   705→                        if (items.length === 0) return null
+   706→                        return (
+   707→                          <SelectGroup key={cat.id}>
+   708→                            <SelectLabel>
+   709→                              {getEChartsCategoryLabel(locale, cat.id, cat.label)}
+   710→                            </SelectLabel>
+   711→                            {items.map((tpl) => (
+   712→                              <SelectItem key={tpl.id} value={tpl.id}>
+   713→                                {getEChartsTemplateName(locale, tpl.id, tpl.name)}
+   714→                              </SelectItem>
+   715→                            ))}
+   716→                          </SelectGroup>
+   717→                        )
+   718→                      })}
+   719→                    </SelectContent>
+   720→                  </Select>
+   721→                </div>
+   722→              </AccordionContent>
+   723→            </AccordionItem>
+   724→
+   725→            {/* 2. Title */}
+   726→            <AccordionItem value="title">
+   727→              <AccordionTrigger>
+   728→                <span className="flex items-center gap-2 font-medium">
+   729→                  <AlignLeft className="size-4 text-primary" /> {t('echarts.title_section')}
+   730→                </span>
+   731→              </AccordionTrigger>
+   732→              <AccordionContent>
+   733→                <div className="space-y-3">
+   734→                  <div className="space-y-1.5">
+   735→                    <Label htmlFor="title-text">{t('echarts.mainTitle')}</Label>
+   736→                    <Input
+   737→                      id="title-text"
+   738→                      value={local.title?.text ?? ''}
+   739→                      onChange={(e) =>
+   740→                        patch({ title: { ...local.title, text: e.target.value } })
+   741→                      }
+   742→                      placeholder="e.g. Quarterly Sales Comparison"
+   743→                    />
+   744→                  </div>
+   745→                  <div className="space-y-1.5">
+   746→                    <Label htmlFor="title-sub">{t('echarts.subtitle')}</Label>
+   747→                    <Input
+   748→                      id="title-sub"
+   749→                      value={local.title?.subtext ?? ''}
+   750→                      onChange={(e) =>
+   751→                        patch({ title: { ...local.title, subtext: e.target.value } })
+   752→                      }
+   753→                      placeholder="Optional, e.g. unit / source"
+   754→                    />
+   755→                  </div>
+   756→                  <p className="text-xs text-muted-foreground">Main and sub titles appear centered at the top of the preview.</p>
+   757→                </div>
+   758→              </AccordionContent>
+   759→            </AccordionItem>
+   760→
+   761→            {/* 3. Data */}
+   762→            <AccordionItem value="data">
+   763→              <AccordionTrigger>
+   764→                <span className="flex items-center gap-2 font-medium">
+   765→                  <Plus className="size-4 text-primary" /> {t('echarts.data')}
+   766→                </span>
+   767→              </AccordionTrigger>
+   768→              <AccordionContent>
+   769→                <DataEditor
+   770→                  config={local}
+   771→                  patch={patch}
+   772→                  onRandom={handleRandomData}
+   773→                />
+   774→              </AccordionContent>
+   775→            </AccordionItem>
+   776→
+   777→            {/* 4. Style */}
+   778→            <AccordionItem value="style">
+   779→              <AccordionTrigger>
+   780→                <span className="flex items-center gap-2 font-medium">
+   781→                  <Activity className="size-4 text-primary" /> {t('echarts.style')}
+   782→                </span>
+   783→              </AccordionTrigger>
+   784→              <AccordionContent>
+   785→                <StyleEditor config={local} patch={patch} />
+   786→              </AccordionContent>
+   787→            </AccordionItem>
+   788→          </Accordion>
+   789→        </div>
+   790→      </ScrollArea>
+   791→    </div>
+   792→  )
+   793→
+   794→  if (isMobile) {
+   795→    // Mobile: vertical tab layout — Template | Preview | Config
+   796→    return (
+   797→      <>
+   798→        <Tabs defaultValue="preview" className="flex h-full w-full flex-col gap-0">
+   799→          <TabsList className="grid h-10 w-full shrink-0 grid-cols-3 rounded-none border-b">
+   800→            <TabsTrigger value="templates" className="text-xs">
+   801→              {t('echarts.templateGallery')}
+   802→            </TabsTrigger>
+   803→            <TabsTrigger value="preview" className="text-xs">
+   804→              Preview
+   805→            </TabsTrigger>
+   806→            <TabsTrigger value="config" className="text-xs">
+   807→              {t('echarts.configPanel')}
+   808→            </TabsTrigger>
+   809→          </TabsList>
+   810→          <TabsContent value="templates" className="min-h-0 flex-1 overflow-hidden">
+   811→            {templateGalleryEl}
+   812→          </TabsContent>
+   813→          <TabsContent value="preview" className="min-h-0 flex-1 overflow-hidden">
+   814→            {previewEl}
+   815→          </TabsContent>
+   816→          <TabsContent value="config" className="min-h-0 flex-1 overflow-hidden">
+   817→            {configEl}
+   818→          </TabsContent>
+   819→        </Tabs>
+   820→        {fullscreenOverlay}
+   821→      </>
+   822→    )
+   823→  }
+   824→
+   825→  // Desktop: horizontal resizable panels
+   826→  return (
+   827→    <>
+   828→      <ResizablePanelGroup direction="horizontal" className="h-full w-full">
+   829→        {/* ----------------------- LEFT: Template Gallery ----------------------- */}
+   830→        <ResizablePanel defaultSize={20} minSize={14} className="bg-background">
+   831→          {templateGalleryEl}
+   832→        </ResizablePanel>
+   833→
+   834→        <ResizableHandle withHandle />
+   835→
+   836→        {/* ----------------------- MIDDLE: Preview ----------------------- */}
+   837→        <ResizablePanel defaultSize={40} minSize={30} className="bg-muted/20">
+   838→          {previewEl}
+   839→        </ResizablePanel>
+   840→
+   841→        <ResizableHandle withHandle />
+   842→
+   843→        {/* ----------------------- RIGHT: Config Form ----------------------- */}
+   844→        <ResizablePanel defaultSize={40} minSize={30} className="bg-background">
+   845→          {configEl}
+   846→        </ResizablePanel>
+   847→      </ResizablePanelGroup>
+   848→      {fullscreenOverlay}
+   849→    </>
+   850→  )
+   851→}
+   852→
+   853→export default EChartsEditor
+   854→
+   855→// ===========================================================================
+   856→// Sub-editors
+   857→// ===========================================================================
+   858→
+   859→interface SubEditorProps {
+   860→  config: EChartsConfig
+   861→  patch: (p: Partial<EChartsConfig>) => void
+   862→}
+   863→
+   864→// -------- Data editor (varies by chart type) --------
+   865→function DataEditor({ config, patch, onRandom }: SubEditorProps & { onRandom: () => void }) {
+   866→  const t = useT()
+   867→  const type = config.type
+   868→  return (
+   869→    <div className="space-y-3">
+   870→      <div className="flex items-center justify-between">
+   871→        <p className="text-xs text-muted-foreground">
+   872→          {type === 'pie' || type === 'funnel'
+   873→            ? 'Edit each item name and value — left is name, right is value.'
+   874→            : type === 'radar'
+   875→              ? 'Edit dimensions (max) and each series values.'
+   876→              : type === 'gauge'
+   877→                ? 'Drag the slider to set the current gauge value.'
+   878→                : type === 'scatter'
+   879→                  ? 'Edit the (X, Y) coordinates of each data point.'
+   880→                  : type === 'heatmap'
+   881→                    ? 'Edit the matrix: each row is a Y-axis item, each column an X-axis category.'
+   882→                    : 'Edit categories and per-series values, comma-separated.'}
+   883→        </p>
+   884→        <Button size="sm" variant="secondary" onClick={onRandom} className="shrink-0">
+   885→          <Shuffle className="size-3.5" /> {t('echarts.randomData')}
+   886→        </Button>
+   887→      </div>
+   888→
+   889→      {type === 'pie' || type === 'funnel' ? (
+   890→        <SingleSeriesEditor config={config} patch={patch} />
+   891→      ) : type === 'radar' ? (
+   892→        <RadarDataEditor config={config} patch={patch} />
+   893→      ) : type === 'gauge' ? (
+   894→        <GaugeDataEditor config={config} patch={patch} />
+   895→      ) : type === 'scatter' ? (
+   896→        <ScatterDataEditor config={config} patch={patch} />
+   897→      ) : type === 'heatmap' ? (
+   898→        <CartesianDataEditor config={config} patch={patch} hideCategories />
+   899→      ) : (
+   900→        <CartesianDataEditor config={config} patch={patch} />
+   901→      )}
+   902→    </div>
+   903→  )
+   904→}
+   905→
+   906→// Bar / line / heatmap (matrix) editor
+   907→function CartesianDataEditor({
+   908→  config,
+   909→  patch,
+   910→  hideCategories,
+   911→}: SubEditorProps & { hideCategories?: boolean }) {
+   912→  const t = useT()
+   913→  const { categories, series_names, series_data } = config
+   914→
+   915→  const updateSeriesName = (i: number, name: string) => {
+   916→    const next = [...series_names]
+   917→    next[i] = name
+   918→    patch({ series_names: next })
+   919→  }
+   920→
+   921→  const updateSeriesValues = (i: number, raw: string) => {
+   922→    const parts = raw.split(/[,，]/).map((s) => Number(s.trim()))
+   923→    const cleaned = parts.map((n) => (Number.isFinite(n) ? n : 0))
+   924→    const next = series_data.map((row, idx) => (idx === i ? cleaned : row))
+   925→    patch({ series_data: next })
+   926→  }
+   927→
+   928→  const addSeries = () => {
+   929→    const len = categories.length || 1
+   930→    const newRow = Array.from({ length: len }, () => 0)
+   931→    patch({
+   932→      series_names: [...series_names, `Series ${series_names.length + 1}`],
+   933→      series_data: [...series_data, newRow],
+   934→    })
+   935→  }
+   936→
+   937→  const removeSeries = (i: number) => {
+   938→    if (series_names.length <= 1) {
+   939→      toast.error('Keep at least 1 series')
+   940→      return
+   941→    }
+   942→    patch({
+   943→      series_names: series_names.filter((_, idx) => idx !== i),
+   944→      series_data: series_data.filter((_, idx) => idx !== i),
+   945→    })
+   946→  }
+   947→
+   948→  return (
+   949→    <div className="space-y-3">
+   950→      {!hideCategories && (
+   951→        <div className="space-y-1.5">
+   952→          <Label>{t('echarts.categories')}</Label>
+   953→          <Input
+   954→            value={categories.join(', ')}
+   955→            onChange={(e) => {
+   956→              const arr = e.target.value
+   957→                .split(/[,，]/)
+   958→                .map((s) => s.trim())
+   959→                .filter(Boolean)
+   960→              patch({ categories: arr })
+   961→            }}
+   962→            placeholder="e.g. Q1, Q2, Q3, Q4"
+   963→          />
+   964→          <p className="text-xs text-muted-foreground">
+   965→            When the category count changes, each series values array auto-resizes.
+   966→          </p>
+   967→        </div>
+   968→      )}
+   969→
+   970→      <div className="space-y-2">
+   971→        <div className="flex items-center justify-between">
+   972→          <Label>{t('echarts.data')}</Label>
+   973→          <Button size="sm" variant="outline" onClick={addSeries}>
+   974→            <Plus className="size-3.5" /> {t('echarts.addSeries')}
+   975→          </Button>
+   976→        </div>
+   977→        <div className="max-h-72 overflow-y-auto rounded-md border">
+   978→          <table className="w-full text-sm">
+   979→            <thead className="bg-muted/50 sticky top-0">
+   980→              <tr>
+   981→                <th className="px-2 py-1.5 text-left font-medium">{t('echarts.seriesName')}</th>
+   982→                <th className="px-2 py-1.5 text-left font-medium">{t('echarts.seriesValues')}</th>
+   983→                <th className="w-10 px-2 py-1.5"></th>
+   984→              </tr>
+   985→            </thead>
+   986→            <tbody>
+   987→              {series_names.map((name, i) => (
+   988→                <tr key={i} className="border-t">
+   989→                  <td className="px-2 py-1.5">
+   990→                    <Input
+   991→                      value={name}
+   992→                      onChange={(e) => updateSeriesName(i, e.target.value)}
+   993→                      className="h-8"
+   994→                    />
+   995→                  </td>
+   996→                  <td className="px-2 py-1.5">
+   997→                    <Input
+   998→                      value={(series_data[i] ?? []).join(', ')}
+   999→                      onChange={(e) => updateSeriesValues(i, e.target.value)}
+  1000→                      className="h-8"
+  1001→                    />
+  1002→                  </td>
+  1003→                  <td className="px-2 py-1.5 text-right">
+  1004→                    <Button
+  1005→                      size="icon"
+  1006→                      variant="ghost"
+  1007→                      className="size-8 text-muted-foreground hover:text-destructive"
+  1008→                      onClick={() => removeSeries(i)}
+  1009→                      aria-label={t('echarts.removeSeries')}
+  1010→                    >
+  1011→                      <Trash2 className="size-3.5" />
+  1012→                    </Button>
+  1013→                  </td>
+  1014→                </tr>
+  1015→              ))}
+  1016→            </tbody>
+  1017→          </table>
+  1018→        </div>
+  1019→        {!hideCategories && (
+  1020→          <p className="text-xs text-muted-foreground">
+  1021→            Tip: categories are on the X-axis (quarters, months); series are different bars/lines.
+  1022→          </p>
+  1023→        )}
+  1024→      </div>
+  1025→    </div>
+  1026→  )
+  1027→}
+  1028→
+  1029→// Pie / funnel editor
+  1030→function SingleSeriesEditor({ config, patch }: SubEditorProps) {
+  1031→  const t = useT()
+  1032→  const data = config.single_series_data ?? []
+  1033→  const update = (i: number, key: 'name' | 'value', val: string) => {
+  1034→    const next = data.map((d, idx) =>
+  1035→      idx === i
+  1036→        ? { ...d, [key]: key === 'value' ? Number(val) || 0 : val }
+  1037→        : d,
+  1038→    )
+  1039→    patch({ single_series_data: next })
+  1040→  }
+  1041→  const add = () =>
+  1042→    patch({
+  1043→      single_series_data: [...data, { name: `Item ${data.length + 1}`, value: 100 }],
+  1044→    })
+  1045→  const remove = (i: number) => {
+  1046→    if (data.length <= 2) {
+  1047→      toast.error('Keep at least 2 items')
+  1048→      return
+  1049→    }
+  1050→    patch({ single_series_data: data.filter((_, idx) => idx !== i) })
+  1051→  }
+  1052→  return (
+  1053→    <div className="space-y-2">
+  1054→      <div className="flex items-center justify-between">
+  1055→        <Label>{t('echarts.data')}</Label>
+  1056→        <Button size="sm" variant="outline" onClick={add}>
+  1057→          <Plus className="size-3.5" /> {t('echarts.addItem')}
+  1058→        </Button>
+  1059→      </div>
+  1060→      <div className="max-h-72 overflow-y-auto rounded-md border">
+  1061→        <table className="w-full text-sm">
+  1062→          <thead className="bg-muted/50 sticky top-0">
+  1063→            <tr>
+  1064→              <th className="px-2 py-1.5 text-left font-medium">{t('echarts.itemName')}</th>
+  1065→              <th className="px-2 py-1.5 text-left font-medium">{t('echarts.itemValue')}</th>
+  1066→              <th className="w-10 px-2 py-1.5"></th>
+  1067→            </tr>
+  1068→          </thead>
+  1069→          <tbody>
+  1070→            {data.map((d, i) => (
+  1071→              <tr key={i} className="border-t">
+  1072→                <td className="px-2 py-1.5">
+  1073→                  <Input
+  1074→                    value={d.name}
+  1075→                    onChange={(e) => update(i, 'name', e.target.value)}
+  1076→                    className="h-8"
+  1077→                  />
+  1078→                </td>
+  1079→                <td className="px-2 py-1.5">
+  1080→                  <Input
+  1081→                    type="number"
+  1082→                    value={d.value}
+  1083→                    onChange={(e) => update(i, 'value', e.target.value)}
+  1084→                    className="h-8"
+  1085→                  />
+  1086→                </td>
+  1087→                <td className="px-2 py-1.5 text-right">
+  1088→                  <Button
+  1089→                    size="icon"
+  1090→                    variant="ghost"
+  1091→                    className="size-8 text-muted-foreground hover:text-destructive"
+  1092→                    onClick={() => remove(i)}
+  1093→                    aria-label={t('actions.delete')}
+  1094→                  >
+  1095→                    <Trash2 className="size-3.5" />
+  1096→                  </Button>
+  1097→                </td>
+  1098→              </tr>
+  1099→            ))}
+  1100→          </tbody>
+  1101→        </table>
+  1102→      </div>
+  1103→    </div>
+  1104→  )
+  1105→}
+  1106→
+  1107→// Radar editor
+  1108→function RadarDataEditor({ config, patch }: SubEditorProps) {
+  1109→  const t = useT()
+  1110→  const indicators = config.radar_indicators ?? []
+  1111→  const { series_names, series_data } = config
+  1112→
+  1113→  const updateIndicator = (i: number, key: 'name' | 'max', val: string) =>
+  1114→    patch({
+  1115→      radar_indicators: indicators.map((it, idx) =>
+  1116→        idx === i
+  1117→          ? { ...it, [key]: key === 'max' ? Number(val) || 0 : val }
+  1118→          : it,
+  1119→      ),
+  1120→    })
+  1121→  const addIndicator = () =>
+  1122→    patch({
+  1123→      radar_indicators: [...indicators, { name: `Dimension ${indicators.length + 1}`, max: 100 }],
+  1124→      series_data: series_data.map((row) => [...row, 0]),
+  1125→    })
+  1126→  const removeIndicator = (i: number) => {
+  1127→    if (indicators.length <= 3) {
+  1128→      toast.error('Radar needs at least 3 dimensions')
+  1129→      return
+  1130→    }
+  1131→    patch({
+  1132→      radar_indicators: indicators.filter((_, idx) => idx !== i),
+  1133→      series_data: series_data.map((row) => row.filter((_, idx) => idx !== i)),
+  1134→    })
+  1135→  }
+  1136→
+  1137→  return (
+  1138→    <div className="space-y-3">
+  1139→      <div className="space-y-1.5">
+  1140→        <div className="flex items-center justify-between">
+  1141→          <Label>Dimensions (Indicators)</Label>
+  1142→          <Button size="sm" variant="outline" onClick={addIndicator}>
+  1143→            <Plus className="size-3.5" /> Add dimension
+  1144→          </Button>
+  1145→        </div>
+  1146→        <div className="max-h-44 overflow-y-auto rounded-md border">
+  1147→          <table className="w-full text-sm">
+  1148→            <thead className="bg-muted/50 sticky top-0">
+  1149→              <tr>
+  1150→                <th className="px-2 py-1.5 text-left font-medium">Dimension</th>
+  1151→                <th className="px-2 py-1.5 text-left font-medium">Max</th>
+  1152→                <th className="w-10 px-2 py-1.5"></th>
+  1153→              </tr>
+  1154→            </thead>
+  1155→            <tbody>
+  1156→              {indicators.map((it, i) => (
+  1157→                <tr key={i} className="border-t">
+  1158→                  <td className="px-2 py-1.5">
+  1159→                    <Input
+  1160→                      value={it.name}
+  1161→                      onChange={(e) => updateIndicator(i, 'name', e.target.value)}
+  1162→                      className="h-8"
+  1163→                    />
+  1164→                  </td>
+  1165→                  <td className="px-2 py-1.5">
+  1166→                    <Input
+  1167→                      type="number"
+  1168→                      value={it.max}
+  1169→                      onChange={(e) => updateIndicator(i, 'max', e.target.value)}
+  1170→                      className="h-8"
+  1171→                    />
+  1172→                  </td>
+  1173→                  <td className="px-2 py-1.5 text-right">
+  1174→                    <Button
+  1175→                      size="icon"
+  1176→                      variant="ghost"
+  1177→                      className="size-8 text-muted-foreground hover:text-destructive"
+  1178→                      onClick={() => removeIndicator(i)}
+  1179→                      aria-label={t('actions.delete')}
+  1180→                    >
+  1181→                      <Trash2 className="size-3.5" />
+  1182→                    </Button>
+  1183→                  </td>
+  1184→                </tr>
+  1185→              ))}
+  1186→            </tbody>
+  1187→          </table>
+  1188→        </div>
+  1189→      </div>
+  1190→
+  1191→      <div className="space-y-1.5">
+  1192→        <Label>Series values (in dimension order, comma-separated)</Label>
+  1193→        <div className="max-h-44 overflow-y-auto rounded-md border">
+  1194→          <table className="w-full text-sm">
+  1195→            <thead className="bg-muted/50 sticky top-0">
+  1196→              <tr>
+  1197→                <th className="px-2 py-1.5 text-left font-medium">{t('echarts.seriesName')}</th>
+  1198→                <th className="px-2 py-1.5 text-left font-medium">Values</th>
+  1199→              </tr>
+  1200→            </thead>
+  1201→            <tbody>
+  1202→              {series_names.map((name, i) => (
+  1203→                <tr key={i} className="border-t">
+  1204→                  <td className="px-2 py-1.5">
+  1205→                    <Input
+  1206→                      value={name}
+  1207→                      onChange={(e) => {
+  1208→                        const next = [...series_names]
+  1209→                        next[i] = e.target.value
+  1210→                        patch({ series_names: next })
+  1211→                      }}
+  1212→                      className="h-8"
+  1213→                    />
+  1214→                  </td>
+  1215→                  <td className="px-2 py-1.5">
+  1216→                    <Input
+  1217→                      value={(series_data[i] ?? []).join(', ')}
+  1218→                      onChange={(e) => {
+  1219→                        const cleaned = e.target.value
+  1220→                          .split(/[,，]/)
+  1221→                          .map((s) => Number(s.trim()))
+  1222→                          .map((n) => (Number.isFinite(n) ? n : 0))
+  1223→                        const next = series_data.map((row, idx) =>
+  1224→                          idx === i ? cleaned : row,
+  1225→                        )
+  1226→                        patch({ series_data: next })
+  1227→                      }}
+  1228→                      className="h-8"
+  1229→                    />
+  1230→                  </td>
+  1231→                </tr>
+  1232→              ))}
+  1233→            </tbody>
+  1234→          </table>
+  1235→        </div>
+  1236→      </div>
+  1237→    </div>
+  1238→  )
+  1239→}
+  1240→
+  1241→// Gauge editor
+  1242→function GaugeDataEditor({ config, patch }: SubEditorProps) {
+  1243→  const value = Number(config.gauge_value) || 0
+  1244→  const max = Number(config.gauge_max) || 100
+  1245→  return (
+  1246→    <div className="space-y-3">
+  1247→      <div className="space-y-2">
+  1248→        <div className="flex items-center justify-between">
+  1249→          <Label>Current value</Label>
+  1250→          <span className="text-sm font-medium tabular-nums">{value}</span>
+  1251→        </div>
+  1252→        <Slider
+  1253→          min={0}
+  1254→          max={max}
+  1255→          step={1}
+  1256→          value={[value]}
+  1257→          onValueChange={(v) => patch({ gauge_value: v[0] ?? 0 })}
+  1258→        />
+  1259→      </div>
+  1260→      <div className="space-y-1.5">
+  1261→        <Label htmlFor="gauge-max">Max</Label>
+  1262→        <Input
+  1263→          id="gauge-max"
+  1264→          type="number"
+  1265→          value={max}
+  1266→          onChange={(e) => patch({ gauge_max: Number(e.target.value) || 0 })}
+  1267→        />
+  1268→        <p className="text-xs text-muted-foreground">Gauge scale goes from 0 to max — usually 100 for percentage.</p>
+  1269→      </div>
+  1270→    </div>
+  1271→  )
+  1272→}
+  1273→
+  1274→// Scatter editor
+  1275→function ScatterDataEditor({ config, patch }: SubEditorProps) {
+  1276→  const t = useT()
+  1277→  const data = config.scatter_data ?? []
+  1278→  const update = (i: number, axis: 0 | 1, val: string) => {
+  1279→    const n = Number(val)
+  1280→    const next = data.map((p, idx) =>
+  1281→      idx === i ? ([axis === 0 ? n : p[0], axis === 1 ? n : p[1]] as [number, number]) : p,
+  1282→    )
+  1283→    patch({ scatter_data: next })
+  1284→  }
+  1285→  const add = () =>
+  1286→    patch({ scatter_data: [...data, [Math.floor(Math.random() * 200) + 100, Math.floor(Math.random() * 60) + 40]] })
+  1287→  const remove = (i: number) => {
+  1288→    if (data.length <= 1) {
+  1289→      toast.error('Keep at least 1 data point')
+  1290→      return
+  1291→    }
+  1292→    patch({ scatter_data: data.filter((_, idx) => idx !== i) })
+  1293→  }
+  1294→  return (
+  1295→    <div className="space-y-2">
+  1296→      <div className="flex items-center justify-between">
+  1297→        <Label>Data points</Label>
+  1298→        <Button size="sm" variant="outline" onClick={add}>
+  1299→          <Plus className="size-3.5" /> Add point
+  1300→        </Button>
+  1301→      </div>
+  1302→      <div className="max-h-72 overflow-y-auto rounded-md border">
+  1303→        <table className="w-full text-sm">
+  1304→          <thead className="bg-muted/50 sticky top-0">
+  1305→            <tr>
+  1306→              <th className="px-2 py-1.5 text-left font-medium">X</th>
+  1307→              <th className="px-2 py-1.5 text-left font-medium">Y</th>
+  1308→              <th className="w-10 px-2 py-1.5"></th>
+  1309→            </tr>
+  1310→          </thead>
+  1311→          <tbody>
+  1312→            {data.map((p, i) => (
+  1313→              <tr key={i} className="border-t">
+  1314→                <td className="px-2 py-1.5">
+  1315→                  <Input
+  1316→                    type="number"
+  1317→                    value={p[0]}
+  1318→                    onChange={(e) => update(i, 0, e.target.value)}
+  1319→                    className="h-8"
+  1320→                  />
+  1321→                </td>
+  1322→                <td className="px-2 py-1.5">
+  1323→                  <Input
+  1324→                    type="number"
+  1325→                    value={p[1]}
+  1326→                    onChange={(e) => update(i, 1, e.target.value)}
+  1327→                    className="h-8"
+  1328→                  />
+  1329→                </td>
+  1330→                <td className="px-2 py-1.5 text-right">
+  1331→                  <Button
+  1332→                    size="icon"
+  1333→                    variant="ghost"
+  1334→                    className="size-8 text-muted-foreground hover:text-destructive"
+  1335→                    onClick={() => remove(i)}
+  1336→                    aria-label={t('actions.delete')}
+  1337→                  >
+  1338→                    <Trash2 className="size-3.5" />
+  1339→                  </Button>
+  1340→                </td>
+  1341→              </tr>
+  1342→            ))}
+  1343→          </tbody>
+  1344→        </table>
+  1345→      </div>
+  1346→    </div>
+  1347→  )
+  1348→}
+  1349→
+  1350→// Style toggle row (declared outside to satisfy react-hooks/static-components)
+  1351→function StyleToggle({
+  1352→  id,
+  1353→  label,
+  1354→  checked,
+  1355→  onChange,
+  1356→  hint,
+  1357→  disabled,
+  1358→}: {
+  1359→  id: string
+  1360→  label: string
+  1361→  checked: boolean
+  1362→  onChange: (v: boolean) => void
+  1363→  hint?: string
+  1364→  disabled?: boolean
+  1365→}) {
+  1366→  return (
+  1367→    <div className={cn('flex items-center justify-between gap-3', disabled && 'opacity-50')}>
+  1368→      <div className="space-y-0.5">
+  1369→        <Label htmlFor={id} className={cn(disabled && 'cursor-not-allowed')}>
+  1370→          {label}
+  1371→        </Label>
+  1372→        {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
+  1373→      </div>
+  1374→      <Switch id={id} checked={checked} onCheckedChange={onChange} disabled={disabled} />
+  1375→    </div>
+  1376→  )
+  1377→}
+  1378→
+  1379→// Style editor
+  1380→function StyleEditor({ config, patch }: SubEditorProps) {
+  1381→  const t = useT()
+  1382→  const type = config.type
+  1383→  const isBar = type === 'bar'
+  1384→  const isLine = type === 'line'
+  1385→
+  1386→  return (
+  1387→    <div className="space-y-4">
+  1388→      <StyleToggle
+  1389→        id="legend"
+  1390→        label={t('echarts.legend')}
+  1391→        checked={config.legend}
+  1392→        onChange={(v) => patch({ legend: v })}
+  1393→        hint="Show color legend for each series at the bottom."
+  1394→      />
+  1395→      <StyleToggle
+  1396→        id="stack"
+  1397→        label={t('echarts.stack')}
+  1398→        checked={config.stack}
+  1399→        onChange={(v) => patch({ stack: v })}
+  1400→        disabled={!isBar && !isLine}
+  1401→        hint={isBar || isLine ? 'Stack multiple series to show totals.' : 'Only available for bar / line charts.'}
+  1402→      />
+  1403→      <StyleToggle
+  1404→        id="smooth"
+  1405→        label={t('echarts.smooth')}
+  1406→        checked={config.smooth}
+  1407→        onChange={(v) => patch({ smooth: v })}
+  1408→        disabled={!isLine}
+  1409→        hint={isLine ? 'Smooth the line into a curve.' : 'Only available for line charts.'}
+  1410→      />
+  1411→      <StyleToggle
+  1412→        id="horizontal"
+  1413→        label={t('echarts.horizontal')}
+  1414→        checked={config.horizontal}
+  1415→        onChange={(v) => patch({ horizontal: v })}
+  1416→        disabled={!isBar}
+  1417→        hint={isBar ? 'Swap X/Y axes to make bars horizontal.' : 'Only available for bar charts.'}
+  1418→      />
+  1419→      <StyleToggle
+  1420→        id="label"
+  1421→        label={t('echarts.showLabel')}
+  1422→        checked={config.showLabel}
+  1423→        onChange={(v) => patch({ showLabel: v })}
+  1424→        hint="Show values directly on data points."
+  1425→      />
+  1426→      <StyleToggle
+  1427→        id="toolbox"
+  1428→        label={t('echarts.showToolbox')}
+  1429→        checked={config.showToolbox}
+  1430→        onChange={(v) => patch({ showToolbox: v })}
+  1431→        hint="Floating toolbar (top-right): view the underlying chart data."
+  1432→      />
+  1433→
+  1434→      <div className="space-y-1.5">
+  1435→        <Label htmlFor="theme">{t('echarts.theme')}</Label>
+  1436→        <Select value={config.theme} onValueChange={(v) => patch({ theme: v })}>
+  1437→          <SelectTrigger id="theme" className="w-full">
+  1438→            <SelectValue placeholder="Select theme" />
+  1439→          </SelectTrigger>
+  1440→          <SelectContent>
+  1441→            {THEME_OPTIONS.map((o) => (
+  1442→              <SelectItem key={o.value} value={o.value}>
+  1443→                {o.label}
+  1444→              </SelectItem>
+  1445→            ))}
+  1446→          </SelectContent>
+  1447→        </Select>
+  1448→        <p className="text-xs text-muted-foreground">
+  1449→          Switching theme re-initializes the chart instance to apply theme styles.
+  1450→        </p>
+  1451→      </div>
+  1452→    </div>
+  1453→  )
+  1454→}
+  1455→

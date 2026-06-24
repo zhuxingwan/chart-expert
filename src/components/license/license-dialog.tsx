@@ -21,7 +21,7 @@ import {
   resetSubDeviceFailCount,
   type UserLicense,
 } from '@/lib/license'
-import { useT, useI18n } from '@/lib/i18n'
+import { useT } from '@/lib/i18n'
 
 interface Props {
   open: boolean
@@ -30,17 +30,14 @@ interface Props {
 
 export function LicenseDialog({ open, onOpenChange }: Props) {
   const t = useT()
-  const { locale } = useI18n()
   const { license, setLicense, resetLicense } = useLicense()
   const [licenseKey, setLicenseKey] = React.useState('')
   const [licenseEmail, setLicenseEmail] = React.useState('')
   const [verifying, setVerifying] = React.useState(false)
 
-  const isZh = locale.startsWith('zh')
-
   const handleVerify = async () => {
     if (!licenseKey.trim() || !licenseEmail.trim()) {
-      toast.error(isZh ? '请输入 License Key 和邮箱' : 'Please enter both License Key and Email.')
+      toast.error(t('toasts.enterKeyAndEmail'))
       return
     }
     setVerifying(true)
@@ -58,7 +55,7 @@ export function LicenseDialog({ open, onOpenChange }: Props) {
         // Save to localStorage using the same keys as the note app
         localStorage.setItem('licenseKey', licenseKey)
         localStorage.setItem('licenseEmail', licenseEmail)
-        toast.success(isZh ? 'License 验证成功！已解锁 Pro 功能。' : 'License verified successfully! Pro features unlocked.')
+        toast.success(t('toasts.licenseVerified'))
         onOpenChange(false)
         setLicenseKey('')
         setLicenseEmail('')
@@ -73,10 +70,10 @@ export function LicenseDialog({ open, onOpenChange }: Props) {
           email: licenseEmail,
           hasWebicon: !!webiconEl,
         })
-        toast.error(result.error || (isZh ? 'License 验证失败。' : 'License verification failed.'))
+        toast.error(result.error || t('toasts.licenseVerifyFailed'))
       }
     } catch (e) {
-      toast.error(isZh ? '验证失败：' + (e as Error).message : 'Verification failed: ' + (e as Error).message)
+      toast.error(t('toasts.licenseVerifyFailedWith', { error: (e as Error).message }))
     } finally {
       setVerifying(false)
     }
@@ -84,23 +81,23 @@ export function LicenseDialog({ open, onOpenChange }: Props) {
 
   const handleReset = () => {
     resetLicense()
-    toast.info(isZh ? '已移除 License，降级为免费用户。' : 'License removed. Downgraded to Free user.')
+    toast.info(t('toasts.licenseRemoved'))
     onOpenChange(false)
   }
 
   const handleGenerateTestKey = async () => {
-    const email = prompt(isZh ? '请输入测试用邮箱地址：' : 'Please enter the email address for testing:')
+    const email = prompt(t('toasts.enterTestEmail'))
     if (!email || !email.trim()) {
-      toast.error(isZh ? '请输入有效的邮箱地址。' : 'Please enter a valid email address.')
+      toast.error(t('toasts.enterValidEmail'))
       return
     }
     try {
       const generatedKey = await generateTestLicenseKey(email)
       setLicenseKey(generatedKey)
       setLicenseEmail(email)
-      toast.success(isZh ? '测试 Key 已生成并填入！' : 'Test Key generated successfully and filled in!')
+      toast.success(t('toasts.testKeyGenerated'))
     } catch {
-      toast.error(isZh ? '生成测试 Key 失败' : 'Failed to generate test Key.')
+      toast.error(t('toasts.testKeyFailed'))
     }
   }
 
@@ -114,32 +111,30 @@ export function LicenseDialog({ open, onOpenChange }: Props) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Crown className="h-5 w-5 text-amber-500" />
-            {isZh ? 'NoteRich Pro 授权' : 'NoteRich Pro License'}
+            {t('license.title')}
           </DialogTitle>
           <DialogDescription>
-            {isZh
-              ? '验证您的 Pro 授权以解锁 SVG 下载和 Markdown 复制等高级功能。'
-              : 'Verify your Pro license to unlock advanced features like SVG download and Markdown copy.'}
+            {t('license.description')}
           </DialogDescription>
         </DialogHeader>
 
         {/* Status card */}
         <div className="rounded-lg border p-3 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">{isZh ? '当前状态' : 'Current Status'}</span>
+            <span className="text-xs text-muted-foreground">{t('license.currentStatus')}</span>
             <Badge variant={license.type === 'pro' ? 'default' : 'secondary'}>
               {license.type.toUpperCase()}
             </Badge>
           </div>
           {license.email && (
             <div className="text-xs">
-              <span className="text-muted-foreground">{isZh ? '邮箱：' : 'Email: '}</span>
+              <span className="text-muted-foreground">{t('license.email')}</span>
               <span>{license.email}</span>
             </div>
           )}
           {license.expiry && (
             <div className="text-xs">
-              <span className="text-muted-foreground">{isZh ? '到期：' : 'Expiry: '}</span>
+              <span className="text-muted-foreground">{t('license.expiry')}</span>
               <span>{new Date(license.expiry).toLocaleDateString()}</span>
             </div>
           )}
@@ -163,17 +158,17 @@ export function LicenseDialog({ open, onOpenChange }: Props) {
               }}
             >
               <Gift className="h-4 w-4" />
-              {isZh ? '升级到 Pro' : 'Upgrade to Pro'}
+              {t('license.upgradeToPro')}
             </Button>
             <p className="mt-2 text-[11px] text-muted-foreground">
-              {isZh ? '解锁高级功能。' : 'Unlock advanced features. '}
+              {t('license.unlockFeatures')}
               <a
                 href="https://noterich.com/#pricing"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-0.5 text-primary hover:underline"
               >
-                {isZh ? '查看定价 →' : 'View Pricing →'}
+                {t('license.viewPricing')}
                 <ExternalLink className="h-2.5 w-2.5" />
               </a>
             </p>
@@ -183,24 +178,24 @@ export function LicenseDialog({ open, onOpenChange }: Props) {
         {/* Input form */}
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="license-key" className="text-xs">{isZh ? 'License Key' : 'License Key'}</Label>
+            <Label htmlFor="license-key" className="text-xs">{t('license.licenseKey')}</Label>
             <Input
               id="license-key"
               type="text"
               value={licenseKey}
               onChange={(e) => setLicenseKey(e.target.value)}
-              placeholder={isZh ? '输入 License Key...' : 'Enter license key...'}
+              placeholder={t('license.licenseKeyPlaceholder')}
               className="h-9 text-sm"
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="license-email" className="text-xs">{isZh ? '邮箱' : 'Email'}</Label>
+            <Label htmlFor="license-email" className="text-xs">{t('license.licenseEmail')}</Label>
             <Input
               id="license-email"
               type="email"
               value={licenseEmail}
               onChange={(e) => setLicenseEmail(e.target.value)}
-              placeholder={isZh ? '输入关联邮箱...' : 'Enter associated email...'}
+              placeholder={t('license.licenseEmailPlaceholder')}
               className="h-9 text-sm"
             />
           </div>
@@ -215,7 +210,7 @@ export function LicenseDialog({ open, onOpenChange }: Props) {
             disabled={license.type === 'free'}
             className="flex-1"
           >
-            {isZh ? '重置' : 'Reset'}
+            {t('actions.reset')}
           </Button>
           <Button
             size="sm"
@@ -224,7 +219,7 @@ export function LicenseDialog({ open, onOpenChange }: Props) {
             className="flex-1 gap-1.5"
           >
             {verifying && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            {isZh ? '验证' : 'Verify'}
+            {t('actions.verify')}
           </Button>
         </div>
 
@@ -233,7 +228,7 @@ export function LicenseDialog({ open, onOpenChange }: Props) {
           onClick={handleGenerateTestKey}
           className="text-center text-[11px] text-muted-foreground hover:text-foreground hover:underline"
         >
-          {isZh ? '生成测试 Key' : 'Generate Test Key'}
+          {t('license.generateTestKey')}
         </button>
       </DialogContent>
     </Dialog>

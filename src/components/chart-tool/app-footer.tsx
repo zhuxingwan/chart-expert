@@ -1,10 +1,9 @@
 'use client'
 
-import * as React from 'react'
 import { Crown, ExternalLink } from 'lucide-react'
 import { useLicense } from '@/lib/license/provider'
-import { useI18n } from '@/lib/i18n'
-import { NoteRichIcon, NOTERICH_LOGO_DATA_URL } from '@/components/brand/noterich-logo'
+import { useT } from '@/lib/i18n'
+import { NOTERICH_LOGO_DATA_URL } from '@/components/brand/noterich-logo'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -13,8 +12,7 @@ interface Props {
 
 export function AppFooter({ onLicenseClick }: Props) {
   const { license, isPro } = useLicense()
-  const { locale } = useI18n()
-  const isZh = locale.startsWith('zh')
+  const t = useT()
 
   return (
     <footer className="mt-auto border-t bg-background">
@@ -39,13 +37,10 @@ export function AppFooter({ onLicenseClick }: Props) {
                 ? 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-950/40 dark:text-amber-300'
                 : 'bg-muted text-muted-foreground hover:bg-muted/70',
             )}
-            title={isPro
-              ? (isZh ? 'Pro 已激活' : 'Pro activated')
-              : (isZh ? '点击升级到 Pro' : 'Click to upgrade to Pro')
-            }
+            title={isPro ? t('footer.proActivated') : t('footer.upgradeToPro')}
           >
             <Crown className="h-3 w-3" />
-            {license.type === 'pro' ? 'PRO' : (isZh ? '免费' : 'FREE')}
+            {license.type === 'pro' ? 'PRO' : t('footer.free')}
           </button>
 
           {/* Website link */}
@@ -55,7 +50,7 @@ export function AppFooter({ onLicenseClick }: Props) {
             rel="noopener noreferrer"
             className="flex items-center gap-0.5 text-muted-foreground hover:text-foreground"
           >
-            {isZh ? '官网' : 'Website'}
+            {t('footer.website')}
             <ExternalLink className="h-2.5 w-2.5" />
           </a>
 
@@ -66,7 +61,7 @@ export function AppFooter({ onLicenseClick }: Props) {
             rel="noopener noreferrer"
             className="flex items-center gap-0.5 text-muted-foreground hover:text-foreground"
           >
-            {isZh ? '定价' : 'Pricing'}
+            {t('footer.pricing')}
             <ExternalLink className="h-2.5 w-2.5" />
           </a>
 

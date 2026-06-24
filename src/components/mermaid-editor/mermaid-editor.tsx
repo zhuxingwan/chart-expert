@@ -191,7 +191,7 @@ export function MermaidEditor({ config, onChange, onTemplateChange, previewRef }
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-sm font-semibold">{t('mermaid.templateGallery')}</h3>
               <span className="text-xs text-muted-foreground">
-                {MERMAID_TEMPLATES.length} templates
+                {t('mermaid.templatesCount', { count: MERMAID_TEMPLATES.length })}
               </span>
             </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -243,7 +243,7 @@ export function MermaidEditor({ config, onChange, onTemplateChange, previewRef }
               onChange={(e) => update({ code: e.target.value })}
               className="max-h-[420px] min-h-[220px] resize-y font-mono text-xs leading-relaxed"
               spellCheck={false}
-              placeholder="Type Mermaid code here…"
+              placeholder={t('mermaid.codePlaceholder')}
             />
             <div className="mt-1 flex items-start gap-1.5 rounded-md bg-amber-50 p-2 text-[11px] text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
               <Sparkles className="mt-0.5 h-3 w-3 shrink-0" />
@@ -334,7 +334,7 @@ export function MermaidEditor({ config, onChange, onTemplateChange, previewRef }
             {t('mermaid.codeEditor')}
           </TabsTrigger>
           <TabsTrigger value="preview" className="text-xs">
-            Preview
+            {t('mermaid.preview')}
           </TabsTrigger>
         </TabsList>
         <TabsContent value="edit" className="min-h-0 flex-1 overflow-hidden">
@@ -542,16 +542,16 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
   const toolbar = (
     <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
       <div className="flex items-center gap-1.5">
-        <Button size="sm" variant="ghost" onClick={handleZoomOut} className="h-7 w-7 p-0">
+        <Button size="sm" variant="ghost" onClick={handleZoomOut} className="h-7 w-7 p-0" aria-label={t('mermaid.zoomOut')}>
           <ZoomOut className="h-4 w-4" />
         </Button>
         <span className="w-12 text-center text-xs tabular-nums text-muted-foreground">
           {Math.round(zoom * 100)}%
         </span>
-        <Button size="sm" variant="ghost" onClick={handleZoomIn} className="h-7 w-7 p-0">
+        <Button size="sm" variant="ghost" onClick={handleZoomIn} className="h-7 w-7 p-0" aria-label={t('mermaid.zoomIn')}>
           <ZoomIn className="h-4 w-4" />
         </Button>
-        <Button size="sm" variant="ghost" onClick={handleReset} className="h-7 w-7 p-0">
+        <Button size="sm" variant="ghost" onClick={handleReset} className="h-7 w-7 p-0" aria-label={t('mermaid.resetZoom')}>
           <Maximize className="h-4 w-4" />
         </Button>
       </div>
@@ -570,10 +570,10 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
           variant="ghost"
           onClick={() => setFullscreen((f) => !f)}
           className="h-7 gap-1 px-2 text-xs"
-          aria-label={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+          aria-label={fullscreen ? t('mermaid.exitFullscreen') : t('mermaid.enterFullscreen')}
         >
           {fullscreen ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
-          {fullscreen ? 'Exit' : 'Fullscreen'}
+          {fullscreen ? t('mermaid.exit') : t('mermaid.fullscreen')}
         </Button>
       </div>
     </div>

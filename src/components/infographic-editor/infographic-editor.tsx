@@ -498,7 +498,7 @@ export function InfographicEditor({ config, onChange, onTemplateChange, previewR
             {t('infographic.templateGallery')}
           </TabsTrigger>
           <TabsTrigger value="preview" className="text-xs">
-            Preview
+            {t('infographic.preview')}
           </TabsTrigger>
           <TabsTrigger value="config" className="text-xs">
             {t('infographic.configPanel')}
@@ -877,16 +877,16 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
   const toolbar = (
     <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
       <div className="flex items-center gap-1.5">
-        <Button size="sm" variant="ghost" onClick={handleZoomOut} className="h-7 w-7 p-0">
+        <Button size="sm" variant="ghost" onClick={handleZoomOut} className="h-7 w-7 p-0" aria-label={t('infographic.zoomOut')}>
           <ZoomOut className="h-4 w-4" />
         </Button>
         <span className="w-12 text-center text-xs tabular-nums text-muted-foreground">
           {Math.round(zoom * 100)}%
         </span>
-        <Button size="sm" variant="ghost" onClick={handleZoomIn} className="h-7 w-7 p-0">
+        <Button size="sm" variant="ghost" onClick={handleZoomIn} className="h-7 w-7 p-0" aria-label={t('infographic.zoomIn')}>
           <ZoomIn className="h-4 w-4" />
         </Button>
-        <Button size="sm" variant="ghost" onClick={handleReset} className="h-7 w-7 p-0">
+        <Button size="sm" variant="ghost" onClick={handleReset} className="h-7 w-7 p-0" aria-label={t('infographic.resetZoom')}>
           <Maximize className="h-4 w-4" />
         </Button>
       </div>
@@ -905,10 +905,10 @@ function PreviewPanel({ config, previewRef }: PreviewProps) {
           variant="ghost"
           onClick={() => setFullscreen((f) => !f)}
           className="h-7 gap-1 px-2 text-xs"
-          aria-label={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+          aria-label={fullscreen ? t('infographic.exitFullscreen') : t('infographic.enterFullscreen')}
         >
           {fullscreen ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
-          {fullscreen ? 'Exit' : 'Fullscreen'}
+          {fullscreen ? t('infographic.exit') : t('infographic.fullscreen')}
         </Button>
       </div>
     </div>
@@ -1004,13 +1004,13 @@ function ConfigPanel({ config, template, update }: ConfigProps) {
           onClick={() => setCodeMode(false)}
           className={cn('rounded-md px-2.5 py-1 text-xs font-medium transition-colors', !codeMode ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground')}
         >
-          {locale.startsWith('zh') ? '表单' : 'Form'}
+          {t('infographic.formMode')}
         </button>
         <button
           onClick={() => setCodeMode(true)}
           className={cn('rounded-md px-2.5 py-1 text-xs font-medium transition-colors', codeMode ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground')}
         >
-          {locale.startsWith('zh') ? '代码' : 'Code'}
+          {t('infographic.codeMode')}
         </button>
       </div>
 
@@ -1021,10 +1021,10 @@ function ConfigPanel({ config, template, update }: ConfigProps) {
             onChange={(e) => handleCodeChange(e.target.value)}
             className="min-h-0 flex-1 resize-none font-mono text-xs leading-relaxed"
             spellCheck={false}
-            placeholder="infographic template-name&#10;data&#10;  title&#10;    text Title&#10;  lists&#10;    - label Item&#10;      desc Description"
+            placeholder={t('infographic.codePlaceholder')}
           />
           <p className="mt-1 text-[10px] text-muted-foreground">
-            {locale.startsWith('zh') ? '编辑代码实时同步到预览' : 'Edits sync to preview in real-time'}
+            {t('infographic.codeSyncHint')}
           </p>
         </div>
       ) : (
@@ -1120,7 +1120,7 @@ function ConfigPanel({ config, template, update }: ConfigProps) {
             {/* Color palette presets */}
             <div>
               <Label className="mb-1 block text-[10px] text-muted-foreground">
-                {locale.startsWith('zh') ? '调色板' : 'Palette'}
+                {t('infographic.palette')}
               </Label>
               <div className="flex flex-wrap gap-1.5">
                 {COLOR_PRESETS.map((preset) => {
@@ -1153,7 +1153,7 @@ function ConfigPanel({ config, template, update }: ConfigProps) {
                     update({ palette: random, colorPrimary: random[0] })
                   }}
                   className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-muted text-xs hover:border-foreground/40"
-                  title={locale.startsWith('zh') ? '随机配色' : 'Random'}
+                  title={t('infographic.random')}
                 >
                   🎲
                 </button>
@@ -1162,7 +1162,7 @@ function ConfigPanel({ config, template, update }: ConfigProps) {
                   <button
                     onClick={() => update({ palette: undefined, colorPrimary: undefined })}
                     className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-muted text-xs text-muted-foreground hover:border-destructive hover:text-destructive"
-                    title={locale.startsWith('zh') ? '清除' : 'Clear'}
+                    title={t('infographic.clear')}
                   >
                     ✕
                   </button>
@@ -1444,7 +1444,7 @@ function CompareDataEditor({
             <Input
               value={g.label ?? ''}
               onChange={(e) => updateGroup(i, { ...g, label: e.target.value })}
-              placeholder="Group name"
+              placeholder={t('infographic.groupPlaceholder')}
               className="h-7 flex-1 text-xs font-medium"
             />
             <Button size="sm" variant="ghost" onClick={() => removeGroup(i)} className="h-7 w-6 p-0 text-destructive" aria-label={t('actions.delete')}>
@@ -1468,7 +1468,7 @@ function CompareDataEditor({
                     children[j] = { ...c, label: e.target.value }
                     updateGroup(i, { ...g, children })
                   }}
-                  placeholder="Point"
+                  placeholder={t('infographic.pointPlaceholder')}
                   className="h-6 flex-1 text-[11px]"
                 />
                 <Button

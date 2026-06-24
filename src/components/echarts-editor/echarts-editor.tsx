@@ -499,7 +499,7 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
       <div className="border-b px-4 py-3">
         <h3 className="text-sm font-semibold">{t('echarts.templateGallery')}</h3>
         <p className="text-xs text-muted-foreground mt-1">
-          Click a template to apply it; the config panel refreshes accordingly.
+          {t('echarts.galleryHint')}
         </p>
       </div>
       <ScrollArea className="min-h-0 flex-1">
@@ -555,7 +555,7 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
           size="sm"
           variant="ghost"
           onClick={handleZoomOut}
-          aria-label="Zoom out"
+          aria-label={t('echarts.zoomOut')}
           className="h-7 w-7 p-0"
         >
           <ZoomOut className="h-4 w-4" />
@@ -567,7 +567,7 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
           size="sm"
           variant="ghost"
           onClick={handleZoomIn}
-          aria-label="Zoom in"
+          aria-label={t('echarts.zoomIn')}
           className="h-7 w-7 p-0"
         >
           <ZoomIn className="h-4 w-4" />
@@ -576,7 +576,7 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
           size="sm"
           variant="ghost"
           onClick={handleReset}
-          aria-label="Reset zoom"
+          aria-label={t('echarts.resetZoom')}
           className="h-7 w-7 p-0"
         >
           <Maximize className="h-4 w-4" />
@@ -612,10 +612,10 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
           variant="ghost"
           onClick={() => setFullscreen((f) => !f)}
           className="h-7 gap-1 px-2 text-xs"
-          aria-label={fullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+          aria-label={fullscreen ? t('echarts.exitFullscreen') : t('echarts.enterFullscreen')}
         >
           {fullscreen ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
-          {fullscreen ? 'Exit' : 'Fullscreen'}
+          {fullscreen ? t('echarts.exit') : t('echarts.fullscreen')}
         </Button>
       </div>
     </div>
@@ -675,7 +675,7 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
       <div className="border-b px-4 py-3">
         <h3 className="text-sm font-semibold">{t('echarts.configPanel')}</h3>
         <p className="text-xs text-muted-foreground mt-1">
-          All changes sync to the preview instantly — no save button needed.
+          {t('echarts.configPanelHint')}
         </p>
       </div>
       <ScrollArea className="min-h-0 flex-1">
@@ -694,10 +694,10 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
               </AccordionTrigger>
               <AccordionContent>
                 <div className="space-y-2">
-                  <Label className="text-xs text-muted-foreground">Switching type resets sample data but keeps the title</Label>
+                  <Label className="text-xs text-muted-foreground">{t('echarts.switchTypeHint')}</Label>
                   <Select value={currentTemplateId} onValueChange={onTemplateIdChange}>
                     <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select chart type" />
+                      <SelectValue placeholder={t('echarts.selectChartType')} />
                     </SelectTrigger>
                     <SelectContent>
                       {ECHARTS_TEMPLATE_CATEGORIES.map((cat) => {
@@ -739,7 +739,7 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
                       onChange={(e) =>
                         patch({ title: { ...local.title, text: e.target.value } })
                       }
-                      placeholder="e.g. Quarterly Sales Comparison"
+                      placeholder={t('echarts.titlePlaceholder')}
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -750,10 +750,10 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
                       onChange={(e) =>
                         patch({ title: { ...local.title, subtext: e.target.value } })
                       }
-                      placeholder="Optional, e.g. unit / source"
+                      placeholder={t('echarts.subtitlePlaceholder')}
                     />
                   </div>
-                  <p className="text-xs text-muted-foreground">Main and sub titles appear centered at the top of the preview.</p>
+                  <p className="text-xs text-muted-foreground">{t('echarts.titleSectionHint')}</p>
                 </div>
               </AccordionContent>
             </AccordionItem>
@@ -801,7 +801,7 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
               {t('echarts.templateGallery')}
             </TabsTrigger>
             <TabsTrigger value="preview" className="text-xs">
-              Preview
+              {t('echarts.preview')}
             </TabsTrigger>
             <TabsTrigger value="config" className="text-xs">
               {t('echarts.configPanel')}
@@ -870,16 +870,16 @@ function DataEditor({ config, patch, onRandom }: SubEditorProps & { onRandom: ()
       <div className="flex items-center justify-between">
         <p className="text-xs text-muted-foreground">
           {type === 'pie' || type === 'funnel'
-            ? 'Edit each item name and value — left is name, right is value.'
+            ? t('echarts.dataEditorHintPie')
             : type === 'radar'
-              ? 'Edit dimensions (max) and each series values.'
+              ? t('echarts.dataEditorHintRadar')
               : type === 'gauge'
-                ? 'Drag the slider to set the current gauge value.'
+                ? t('echarts.dataEditorHintGauge')
                 : type === 'scatter'
-                  ? 'Edit the (X, Y) coordinates of each data point.'
+                  ? t('echarts.dataEditorHintScatter')
                   : type === 'heatmap'
-                    ? 'Edit the matrix: each row is a Y-axis item, each column an X-axis category.'
-                    : 'Edit categories and per-series values, comma-separated.'}
+                    ? t('echarts.dataEditorHintHeatmap')
+                    : t('echarts.dataEditorHintCartesian')}
         </p>
         <Button size="sm" variant="secondary" onClick={onRandom} className="shrink-0">
           <Shuffle className="size-3.5" /> {t('echarts.randomData')}
@@ -936,7 +936,7 @@ function CartesianDataEditor({
 
   const removeSeries = (i: number) => {
     if (series_names.length <= 1) {
-      toast.error('Keep at least 1 series')
+      toast.error(t('echarts.keepAtLeast1Series'))
       return
     }
     patch({
@@ -959,10 +959,10 @@ function CartesianDataEditor({
                 .filter(Boolean)
               patch({ categories: arr })
             }}
-            placeholder="e.g. Q1, Q2, Q3, Q4"
+            placeholder={t('echarts.categoriesPlaceholder')}
           />
           <p className="text-xs text-muted-foreground">
-            When the category count changes, each series values array auto-resizes.
+            {t('echarts.categoriesResizeHint')}
           </p>
         </div>
       )}
@@ -1018,7 +1018,7 @@ function CartesianDataEditor({
         </div>
         {!hideCategories && (
           <p className="text-xs text-muted-foreground">
-            Tip: categories are on the X-axis (quarters, months); series are different bars/lines.
+            {t('echarts.categoriesTipHint')}
           </p>
         )}
       </div>
@@ -1044,7 +1044,7 @@ function SingleSeriesEditor({ config, patch }: SubEditorProps) {
     })
   const remove = (i: number) => {
     if (data.length <= 2) {
-      toast.error('Keep at least 2 items')
+      toast.error(t('echarts.keepAtLeast2Items'))
       return
     }
     patch({ single_series_data: data.filter((_, idx) => idx !== i) })
@@ -1125,7 +1125,7 @@ function RadarDataEditor({ config, patch }: SubEditorProps) {
     })
   const removeIndicator = (i: number) => {
     if (indicators.length <= 3) {
-      toast.error('Radar needs at least 3 dimensions')
+      toast.error(t('echarts.radarNeeds3Dimensions'))
       return
     }
     patch({
@@ -1138,17 +1138,17 @@ function RadarDataEditor({ config, patch }: SubEditorProps) {
     <div className="space-y-3">
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <Label>Dimensions (Indicators)</Label>
+          <Label>{t('echarts.radarDimensionsLabel')}</Label>
           <Button size="sm" variant="outline" onClick={addIndicator}>
-            <Plus className="size-3.5" /> Add dimension
+            <Plus className="size-3.5" /> {t('echarts.addDimension')}
           </Button>
         </div>
         <div className="max-h-44 overflow-y-auto rounded-md border">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 sticky top-0">
               <tr>
-                <th className="px-2 py-1.5 text-left font-medium">Dimension</th>
-                <th className="px-2 py-1.5 text-left font-medium">Max</th>
+                <th className="px-2 py-1.5 text-left font-medium">{t('echarts.dimension')}</th>
+                <th className="px-2 py-1.5 text-left font-medium">{t('echarts.max')}</th>
                 <th className="w-10 px-2 py-1.5"></th>
               </tr>
             </thead>
@@ -1189,13 +1189,13 @@ function RadarDataEditor({ config, patch }: SubEditorProps) {
       </div>
 
       <div className="space-y-1.5">
-        <Label>Series values (in dimension order, comma-separated)</Label>
+        <Label>{t('echarts.seriesValuesOrderLabel')}</Label>
         <div className="max-h-44 overflow-y-auto rounded-md border">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 sticky top-0">
               <tr>
                 <th className="px-2 py-1.5 text-left font-medium">{t('echarts.seriesName')}</th>
-                <th className="px-2 py-1.5 text-left font-medium">Values</th>
+                <th className="px-2 py-1.5 text-left font-medium">{t('echarts.values')}</th>
               </tr>
             </thead>
             <tbody>
@@ -1246,7 +1246,7 @@ function GaugeDataEditor({ config, patch }: SubEditorProps) {
     <div className="space-y-3">
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <Label>Current value</Label>
+          <Label>{t('echarts.currentValue')}</Label>
           <span className="text-sm font-medium tabular-nums">{value}</span>
         </div>
         <Slider
@@ -1258,14 +1258,14 @@ function GaugeDataEditor({ config, patch }: SubEditorProps) {
         />
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="gauge-max">Max</Label>
+        <Label htmlFor="gauge-max">{t('echarts.gaugeMaxLabel')}</Label>
         <Input
           id="gauge-max"
           type="number"
           value={max}
           onChange={(e) => patch({ gauge_max: Number(e.target.value) || 0 })}
         />
-        <p className="text-xs text-muted-foreground">Gauge scale goes from 0 to max — usually 100 for percentage.</p>
+        <p className="text-xs text-muted-foreground">{t('echarts.gaugeMaxHint')}</p>
       </div>
     </div>
   )
@@ -1286,7 +1286,7 @@ function ScatterDataEditor({ config, patch }: SubEditorProps) {
     patch({ scatter_data: [...data, [Math.floor(Math.random() * 200) + 100, Math.floor(Math.random() * 60) + 40]] })
   const remove = (i: number) => {
     if (data.length <= 1) {
-      toast.error('Keep at least 1 data point')
+      toast.error(t('echarts.keepAtLeast1Point'))
       return
     }
     patch({ scatter_data: data.filter((_, idx) => idx !== i) })
@@ -1294,9 +1294,9 @@ function ScatterDataEditor({ config, patch }: SubEditorProps) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <Label>Data points</Label>
+        <Label>{t('echarts.dataPoints')}</Label>
         <Button size="sm" variant="outline" onClick={add}>
-          <Plus className="size-3.5" /> Add point
+          <Plus className="size-3.5" /> {t('echarts.addPoint')}
         </Button>
       </div>
       <div className="max-h-72 overflow-y-auto rounded-md border">
@@ -1390,7 +1390,7 @@ function StyleEditor({ config, patch }: SubEditorProps) {
         label={t('echarts.legend')}
         checked={config.legend}
         onChange={(v) => patch({ legend: v })}
-        hint="Show color legend for each series at the bottom."
+        hint={t('echarts.legendHint')}
       />
       <StyleToggle
         id="stack"
@@ -1398,7 +1398,7 @@ function StyleEditor({ config, patch }: SubEditorProps) {
         checked={config.stack}
         onChange={(v) => patch({ stack: v })}
         disabled={!isBar && !isLine}
-        hint={isBar || isLine ? 'Stack multiple series to show totals.' : 'Only available for bar / line charts.'}
+        hint={isBar || isLine ? t('echarts.stackHint') : t('echarts.stackUnavailable')}
       />
       <StyleToggle
         id="smooth"
@@ -1406,7 +1406,7 @@ function StyleEditor({ config, patch }: SubEditorProps) {
         checked={config.smooth}
         onChange={(v) => patch({ smooth: v })}
         disabled={!isLine}
-        hint={isLine ? 'Smooth the line into a curve.' : 'Only available for line charts.'}
+        hint={isLine ? t('echarts.smoothHint') : t('echarts.smoothUnavailable')}
       />
       <StyleToggle
         id="horizontal"
@@ -1414,28 +1414,28 @@ function StyleEditor({ config, patch }: SubEditorProps) {
         checked={config.horizontal}
         onChange={(v) => patch({ horizontal: v })}
         disabled={!isBar}
-        hint={isBar ? 'Swap X/Y axes to make bars horizontal.' : 'Only available for bar charts.'}
+        hint={isBar ? t('echarts.horizontalHint') : t('echarts.horizontalUnavailable')}
       />
       <StyleToggle
         id="label"
         label={t('echarts.showLabel')}
         checked={config.showLabel}
         onChange={(v) => patch({ showLabel: v })}
-        hint="Show values directly on data points."
+        hint={t('echarts.showLabelHint')}
       />
       <StyleToggle
         id="toolbox"
         label={t('echarts.showToolbox')}
         checked={config.showToolbox}
         onChange={(v) => patch({ showToolbox: v })}
-        hint="Floating toolbar (top-right): view the underlying chart data."
+        hint={t('echarts.showToolboxHint')}
       />
 
       <div className="space-y-1.5">
         <Label htmlFor="theme">{t('echarts.theme')}</Label>
         <Select value={config.theme} onValueChange={(v) => patch({ theme: v })}>
           <SelectTrigger id="theme" className="w-full">
-            <SelectValue placeholder="Select theme" />
+            <SelectValue placeholder={t('echarts.selectTheme')} />
           </SelectTrigger>
           <SelectContent>
             {THEME_OPTIONS.map((o) => (
@@ -1446,7 +1446,7 @@ function StyleEditor({ config, patch }: SubEditorProps) {
           </SelectContent>
         </Select>
         <p className="text-xs text-muted-foreground">
-          Switching theme re-initializes the chart instance to apply theme styles.
+          {t('echarts.themeHint')}
         </p>
       </div>
     </div>

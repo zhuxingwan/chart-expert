@@ -3,7 +3,7 @@
 import { Sparkles, Save, FolderOpen, Plus, FileInput } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { LanguageSwitcher } from './language-switcher'
-import { useT, useI18n } from '@/lib/i18n'
+import { useT } from '@/lib/i18n'
 import { NoteRichIcon } from '@/components/brand/noterich-logo'
 
 interface Props {
@@ -22,9 +22,7 @@ export function AppHeader({
   onAISuggest,
 }: Props) {
   const t = useT()
-  const { locale } = useI18n()
   const isPlugin = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('plugin') === 'true'
-  const isZh = locale.startsWith('zh')
 
   return (
     <header className="sticky top-0 z-30 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70">
@@ -71,7 +69,7 @@ export function AppHeader({
           </Button>
           <Button size="sm" onClick={onSave} className="h-8 gap-1.5 px-2 sm:px-3">
             {isPlugin ? <FileInput className="h-4 w-4" /> : <Save className="h-4 w-4" />}
-            <span className="hidden sm:inline">{isPlugin ? (isZh ? '插入' : 'Insert') : t('actions.save')}</span>
+            <span className="hidden sm:inline">{isPlugin ? t('actions.insert') : t('actions.save')}</span>
           </Button>
           <LanguageSwitcher />
         </div>

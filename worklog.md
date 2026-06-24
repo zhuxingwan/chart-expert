@@ -811,3 +811,92 @@ Stage Summary:
 - ✅ PRO features unlock immediately after verification (SVG download + Markdown copy work)
 - ✅ Secret + algorithm protected by webpack-obfuscator in production builds
 - ✅ Lint passes, verified end-to-end in browser
+
+---
+Task ID: I18N-COMPLETE
+Agent: main
+Task: Replace all hardcoded English strings in editor components with i18n `t()` calls and add missing locale keys
+
+Work Log:
+
+**Locale files (`src/lib/i18n/locales/en.json` + `zh.json`)**
+- Added 50+ new keys to `echarts` section: `zoomOut`, `zoomIn`, `resetZoom`, `enterFullscreen`, `exitFullscreen`, `selectChartType`, `titlePlaceholder`, `subtitlePlaceholder`, `categoriesPlaceholder`, `selectTheme`, `legendHint`, `stackHint`, `stackUnavailable`, `smoothHint`, `smoothUnavailable`, `horizontalHint`, `horizontalUnavailable`, `showLabelHint`, `showToolboxHint`, `switchTypeHint`, `titleSectionHint`, `configPanelHint`, `galleryHint`, `categoriesResizeHint`, `categoriesTipHint`, `themeHint`, `radarDimensionsLabel`, `addDimension`, `dimension`, `max`, `seriesValuesOrderLabel`, `values`, `currentValue`, `gaugeMaxLabel`, `gaugeMaxHint`, `dataPoints`, `addPoint`, `keepAtLeast1Series`, `keepAtLeast2Items`, `radarNeeds3Dimensions`, `keepAtLeast1Point`, `dataEditorHintPie/Radar/Gauge/Scatter/Heatmap/Cartesian`, plus `preview`/`fullscreen`/`exit` for mobile tab + toolbar.
+- Added new keys to `mermaid` section: `codePlaceholder`, `preview`, `resetZoom`, `enterFullscreen`, `exitFullscreen`, `fullscreen`, `exit`, `templatesCount`.
+- Added new keys to `infographic` section: `groupPlaceholder`, `pointPlaceholder`, `codeSyncHint`, `palette`, `random`, `clear`, `formMode`, `codeMode`, `codePlaceholder`, `resetZoom`, `enterFullscreen`, `exitFullscreen`, `fullscreen`, `exit`, `preview`.
+- Added new `license` section with 14 keys (`title`, `description`, `currentStatus`, `email`, `expiry`, `licenseKey`, `licenseEmail`, `licenseKeyPlaceholder`, `licenseEmailPlaceholder`, `upgradeToPro`, `unlockFeatures`, `viewPricing`, `generateTestKey`).
+- Extended `footer` section with `website`, `pricing`, `free`, `proActivated`, `upgradeToPro`.
+- Extended `actions` section with `insert`, `verify`, `reset`.
+- Extended `toasts` section with `noTemplateSelected`, `inserted`, `licenseVerified`, `licenseVerifyFailed`, `licenseVerifyFailedWith`, `licenseRemoved`, `testKeyGenerated`, `testKeyFailed`, `enterKeyAndEmail`, `enterTestEmail`, `enterValidEmail`, `imageTooLarge`, `imageReadFailed`.
+- All Chinese translations provided for the matching keys. JSON validated for all 16 locale files.
+
+**`src/components/echarts-editor/echarts-editor.tsx`**
+- Template gallery header hint: hardcoded `"Click a template to apply it; the config panel refreshes accordingly."` → `t('echarts.galleryHint')`.
+- Toolbar aria-labels: `"Zoom out"`, `"Zoom in"`, `"Reset zoom"` → `t('echarts.zoomOut')`, `t('echarts.zoomIn')`, `t('echarts.resetZoom')`.
+- Fullscreen button aria-label + visible label: hardcoded `Exit/Enter fullscreen` + `Exit/Fullscreen` → `t('echarts.exitFullscreen')` / `t('echarts.enterFullscreen')` + `t('echarts.exit')` / `t('echarts.fullscreen')`.
+- Config panel header hint: `"All changes sync to the preview instantly — no save button needed."` → `t('echarts.configPanelHint')`.
+- Switch-type hint: `"Switching type resets sample data but keeps the title"` → `t('echarts.switchTypeHint')`.
+- Placeholders: `Select chart type`, `e.g. Quarterly Sales Comparison`, `Optional, e.g. unit / source`, `e.g. Q1, Q2, Q3, Q4`, `Select theme` → corresponding `t()` calls.
+- Title section hint: `"Main and sub titles appear centered at the top of the preview."` → `t('echarts.titleSectionHint')`.
+- Style toggle hints: legend/stack/smooth/horizontal/showLabel/showToolbox → `t('echarts.{...}Hint')` (with conditional `…Unavailable` for disabled toggles).
+- Theme hint: `"Switching theme re-initializes the chart instance to apply theme styles."` → `t('echarts.themeHint')`.
+- Mobile tab `Preview` label → `t('echarts.preview')`.
+- DataEditor hint switch (per chart type) → `t('echarts.dataEditorHint{Pie|Radar|Gauge|Scatter|Heatmap|Cartesian}')`.
+- Radar editor labels: `Dimensions (Indicators)`, `Add dimension`, `Dimension`, `Max`, `Series values (in dimension order, comma-separated)`, `Values` → `t()` calls.
+- Gauge editor labels: `Current value`, `Max`, gauge hint → `t()` calls.
+- Scatter editor labels: `Data points`, `Add point` → `t()` calls.
+- Toast error messages: `Keep at least 1 series`, `Keep at least 2 items`, `Radar needs at least 3 dimensions`, `Keep at least 1 data point` → `t('echarts.keepAtLeast...')` calls.
+
+**`src/components/mermaid-editor/mermaid-editor.tsx`**
+- Templates count display: `{MERMAID_TEMPLATES.length} templates` → `t('mermaid.templatesCount', { count: ... })`.
+- Code textarea placeholder: `"Type Mermaid code here…"` → `t('mermaid.codePlaceholder')`.
+- Mobile tab `Preview` label → `t('mermaid.preview')`.
+- Toolbar aria-labels (ZoomOut/ZoomIn/Reset) → `t('mermaid.zoomOut')`, `t('mermaid.zoomIn')`, `t('mermaid.resetZoom')`.
+- Fullscreen button aria-label + visible label → `t('mermaid.exitFullscreen')` / `t('mermaid.enterFullscreen')` + `t('mermaid.exit')` / `t('mermaid.fullscreen')`.
+
+**`src/components/infographic-editor/infographic-editor.tsx`**
+- Mobile tab `Preview` label → `t('infographic.preview')`.
+- Form/Code mode toggle labels (was `locale.startsWith('zh') ? '表单' : 'Form'` etc.) → `t('infographic.formMode')` / `t('infographic.codeMode')`.
+- Code textarea placeholder → `t('infographic.codePlaceholder')`.
+- Code sync hint (was `locale.startsWith('zh') ? '编辑代码实时同步到预览' : 'Edits sync to preview in real-time'`) → `t('infographic.codeSyncHint')`.
+- Palette labels (was `locale.startsWith('zh') ? '调色板' : 'Palette'`) → `t('infographic.palette')`.
+- Random/Clear palette button titles (was `locale.startsWith('zh') ? '随机配色' : 'Random'` etc.) → `t('infographic.random')` / `t('infographic.clear')`.
+- Compare editor placeholders: `"Group name"` → `t('infographic.groupPlaceholder')`, `"Point"` → `t('infographic.pointPlaceholder')`.
+- Toolbar aria-labels (ZoomOut/ZoomIn/Reset) → `t('infographic.zoomOut')`, `t('infographic.zoomIn')`, `t('infographic.resetZoom')`.
+- Fullscreen button aria-label + visible label → `t('infographic.exitFullscreen')` / `t('infographic.enterFullscreen')` + `t('infographic.exit')` / `t('infographic.fullscreen')`.
+
+**`src/components/license/license-dialog.tsx`** (complete rewrite)
+- Removed `useI18n` import + `isZh` variable.
+- All `isZh ? '...' : '...'` patterns replaced with `t('license.*')` and `t('toasts.*')` calls.
+- Toast messages: verify success/fail, license removed, test key generated/failed, enter key/email, enter test email, invalid email → all use `t()` calls.
+- Dialog title, description, status card labels, email/expiry labels, license key/email labels + placeholders, upgrade button, unlock features text, view pricing link, verify/reset buttons, generate test key link → all use `t()` calls.
+- Removed unused `useI18n` import.
+
+**`src/components/chart-tool/app-header.tsx`**
+- Removed `useI18n` import + `isZh` variable.
+- Plugin-mode Save button text: was `isZh ? '插入' : 'Insert'` → `t('actions.insert')`.
+
+**`src/components/chart-tool/app-footer.tsx`**
+- Removed `useI18n` import + `isZh` variable + unused `React` default import.
+- PRO badge tooltip (Pro activated / Click to upgrade) → `t('footer.proActivated')` / `t('footer.upgradeToPro')`.
+- FREE badge text → `t('footer.free')`.
+- Website link → `t('footer.website')`.
+- Pricing link → `t('footer.pricing')`.
+- Removed unused `NoteRichIcon` import.
+
+**`src/components/chart-tool/chart-tool-app.tsx`**
+- "Please select a template first" toast → `t('toasts.noTemplateSelected')`.
+- Plugin-mode "Inserted to note" / "已插入到笔记" toast → `t('toasts.inserted')`.
+
+**`src/components/chart-tool/ai-suggest-dialog.tsx`**
+- "Image too large (max 5MB)" toast → `t('toasts.imageTooLarge')`.
+- "Failed to read image" toast → `t('toasts.imageReadFailed')`.
+- (Multi-locale image-upload labels — 7 languages — kept inline because they provide wider coverage than just en/zh; converting them to `t()` would degrade ja/ko/es/fr/de translations.)
+
+Stage Summary:
+- ✅ All 28 explicitly-requested keys present in both `en.json` and `zh.json` (verified programmatically).
+- ✅ All 16 locale JSON files parse successfully (no broken JSON).
+- ✅ ESLint passes (`bun run lint`) — 0 errors, 0 warnings.
+- ✅ Dev server stable on port 3000; recent requests return HTTP 200 (en/zh, all 3 engines).
+- ✅ All `isZh` patterns removed from echarts/mermaid/infographic editors, license dialog, app header/footer, chart-tool-app (verified by ripgrep — 0 matches).
+- ✅ Only intentional remaining inline translations: ai-suggest-dialog image-upload labels (cover 7 languages natively).
+- ✅ Default content placeholders (e.g. `Item 1`, `Node 2`, `Root`, `Group 1`, `n3`) left as-is — these are user-editable default data values, not UI labels.

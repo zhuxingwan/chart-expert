@@ -308,7 +308,7 @@ export function ChartToolApp() {
           onNewChart={() => setPickerOpen(true)}
           onSave={() => {
             if (!doc) {
-              toast.error('Please select a template first')
+              toast.error(t('toasts.noTemplateSelected'))
               return
             }
             // In plugin mode, generate markdown and postMessage to parent window
@@ -320,7 +320,7 @@ export function ChartToolApp() {
                   { type: 'noterich-chart-insert', markdown },
                   '*',
                 )
-                toast.success(locale.startsWith('zh') ? '已插入到笔记' : 'Inserted to note')
+                toast.success(t('toasts.inserted'))
               }
             }
             // Also open the save dialog (normal save flow)
