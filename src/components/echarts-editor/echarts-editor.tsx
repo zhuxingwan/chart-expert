@@ -298,60 +298,127 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
     [commit, local],
   )
 
+  // Define which chart types are "compatible" — share the same data structure
+  // and can be switched between without data loss.
+  // Group 1 (cartesian): bar, line — use categories + series_data
+  // Group 2 (single-series): pie, funnel, treemap — use single_series_data
+  // Group 3 (radar): radar — uses radar_indicators + series_data
+  // Group 4 (scatter): scatter — uses scatter_data
+  // Group 5 (gauge): gauge — uses gauge_value
+  // Group 6 (heatmap): heatmap — uses categories + series_data (2D)
+  // Group 7 (candlestick): candlestick — uses candlestick_data
+  // Group 8 (boxplot): boxplot — uses boxplot_data
+  // Group 9 (graph): graph — uses graph_nodes + graph_links
+  // Group 10 (sankey): sankey — uses sankey_nodes + sankey_links
+  // Group 11 (sunburst): sunburst — uses sunburst_data
+  // Group 12 (parallel): parallel — uses parallel_data
+  // Group 13 (themeRiver): themeRiver — uses themeriver_data
+  const COMPATIBLE_GROUPS: Record<string, string[]> = {
+    bar: ['bar', 'line', 'heatmap'],
+    line: ['bar', 'line', 'heatmap'],
+    heatmap: ['bar', 'line', 'heatmap'],
+    pie: ['pie', 'funnel', 'treemap'],
+    funnel: ['pie', 'funnel', 'treemap'],
+    treemap: ['pie', 'funnel', 'treemap'],
+    radar: ['radar'],
+    scatter: ['scatter'],
+    gauge: ['gauge'],
+    candlestick: ['candlestick'],
+    boxplot: ['boxplot'],
+    graph: ['graph'],
+    sankey: ['sankey'],
+    sunburst: ['sunburst'],
+    parallel: ['parallel'],
+    themeRiver: ['themeRiver'],
+  }
+
+  // Convert data when switching between compatible types in the same group
+  function convertDataForType(source: EChartsConfig, targetType: string): EChartsConfig {
+    const next = deepClone(source)
+    next.type = targetType
+    const sourceType = source.type
+
+    // Within cartesian group (bar/line/heatmap) — no conversion needed
+    if (COMPATIBLE_GROUPS[sourceType]?.includes(targetType)) {
+      return next
+    }
+
+    // From cartesian (bar/line) → single-series (pie/funnel/treemap)
+    if (['bar', 'line', 'heatmap'].includes(sourceType) && ['pie', 'funnel', 'treemap'].includes(targetType)) {
+      if (next.series_data && next.series_data.length > 0 && (!next.single_series_data || next.single_series_data.length === 0)) {
+        const names = next.categories.length > 0 ? next.categories : next.series_names
+        const values = next.series_data[0] || []
+        next.single_series_data = values.map((v, i) => ({ name: names[i] || `Item ${i + 1}`, value: v }))
+      }
+      return next
+    }
+
+    // From single-series (pie/funnel/treemap) → cartesian (bar/line)
+    if (['pie', 'funnel', 'treemap'].includes(sourceType) && ['bar', 'line', 'heatmap'].includes(targetType)) {
+      if (next.single_series_data && next.single_series_data.length > 0 && (!next.series_data || next.series_data.length === 0)) {
+        next.categories = next.single_series_data.map(d => d.name)
+        next.series_names = ['Series 1']
+        next.series_data = [next.single_series_data.map(d => d.value)]
+      }
+      return next
+    }
+
+    // From cartesian → radar: create indicators from categories
+    if (['bar', 'line'].includes(sourceType) && targetType === 'radar') {
+      if (!next.radar_indicators || next.radar_indicators.length === 0) {
+        const names = next.categories.length > 0 ? next.categories : next.series_names
+        next.radar_indicators = names.map(n => ({ name: n, max: 100 }))
+      }
+      return next
+    }
+
+    // From single-series → radar
+    if (['pie', 'funnel', 'treemap'].includes(sourceType) && targetType === 'radar') {
+      if (!next.radar_indicators || next.radar_indicators.length === 0) {
+        next.radar_indicators = (next.single_series_data || []).map(d => ({ name: d.name, max: 100 }))
+        next.series_data = [(next.single_series_data || []).map(d => d.value)]
+        next.series_names = ['Series 1']
+      }
+      return next
+    }
+
+    // From radar → cartesian
+    if (sourceType === 'radar' && ['bar', 'line'].includes(targetType)) {
+      if (next.radar_indicators && next.radar_indicators.length > 0 && (!next.categories || next.categories.length === 0)) {
+        next.categories = next.radar_indicators.map(i => i.name)
+      }
+      return next
+    }
+
+    return next
+  }
+
   const applyTemplate = React.useCallback(
     (tpl: EChartsTemplate, keepTitle = false) => {
-      // Check if current data is still default (untouched by user).
-      // Compare against the current template's defaultConfig.
-      // If it matches → user hasn't entered data → use new template's default.
-      // If it doesn't match → user has data → preserve it, just switch the chart type.
       const currentTpl = TEMPLATE_BY_ID[currentTemplateId] ?? DEFAULT_TEMPLATE
       const isDataDefault = configKey(local) === configKey(currentTpl.defaultConfig)
 
       if (isDataDefault && !keepTitle) {
         // User hasn't modified data — use new template's default
-        const next = deepClone(tpl.defaultConfig)
-        commit(next)
+        commit(deepClone(tpl.defaultConfig))
       } else {
-        // User has data (or AI generated) — preserve data, only switch type
-        const next = deepClone(local)
-        next.type = tpl.type
-        // Keep title if requested
-        if (!keepTitle && currentTpl.defaultConfig.title) {
-          next.title = deepClone(currentTpl.defaultConfig.title)
-        }
-        // For chart types that use single_series_data (pie/funnel), convert series_data
-        if ((tpl.type === 'pie' || tpl.type === 'funnel') && next.series_data && next.series_data.length > 0) {
-          if (!next.single_series_data || next.single_series_data.length === 0) {
-            // Convert first series to single_series_data format
-            const names = next.categories.length > 0
-              ? next.categories
-              : next.series_names
-            const values = next.series_data[0] || []
-            next.single_series_data = values.map((v, i) => ({
-              name: names[i] || `Item ${i + 1}`,
-              value: v,
-            }))
+        // User has data — check if current type and new type are compatible
+        const compatible = COMPATIBLE_GROUPS[local.type]?.includes(tpl.type) ?? false
+
+        if (compatible) {
+          // Compatible types — convert data and switch
+          const next = convertDataForType(local, tpl.type)
+          if (!keepTitle && currentTpl.defaultConfig.title) {
+            next.title = deepClone(currentTpl.defaultConfig.title)
           }
+          commit(next)
+        } else {
+          // Incompatible types (e.g. bar → scatter, pie → gauge)
+          // Don't force-convert — use the new template's default data
+          const next = deepClone(tpl.defaultConfig)
+          if (keepTitle && local.title) next.title = deepClone(local.title)
+          commit(next)
         }
-        // For chart types that use categories+series_data (bar/line), convert from single_series_data
-        if ((tpl.type === 'bar' || tpl.type === 'line') && next.single_series_data && next.single_series_data.length > 0 && (!next.series_data || next.series_data.length === 0)) {
-          next.categories = next.single_series_data.map(d => d.name)
-          next.series_names = ['Series 1']
-          next.series_data = [next.single_series_data.map(d => d.value)]
-          next.single_series_data = []
-        }
-        // For radar, convert if needed
-        if (tpl.type === 'radar' && (!next.radar_indicators || next.radar_indicators.length === 0)) {
-          // Create indicators from categories or series_names
-          const names = next.categories.length > 0 ? next.categories : next.series_names
-          next.radar_indicators = names.map(n => ({ name: n, max: 100 }))
-          if (next.series_data.length === 0 && next.single_series_data) {
-            next.series_data = [next.single_series_data.map(d => d.value)]
-          }
-        }
-        // For scatter, keep scatter_data as-is
-        // For gauge, keep gauge_value as-is
-        commit(next)
       }
       setCurrentTemplateId(tpl.id)
       onTemplateChange?.('echarts:' + tpl.id)
