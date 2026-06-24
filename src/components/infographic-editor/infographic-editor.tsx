@@ -94,6 +94,7 @@ import { drawWatermark } from '@/lib/license/watermark'
 import {
   getInfographicTemplateName,
   getInfographicCategoryLabel,
+  getInfographicTemplateDescription,
 } from '@/lib/i18n/template-names'
 
 // ─── Color palette presets (multi-color combinations) ───────────────────
@@ -673,7 +674,7 @@ function TemplateCard({ tpl, active, onClick }: CardProps) {
   return (
     <button
       onClick={onClick}
-      title={tpl.description}
+      title={getInfographicTemplateDescription(locale, tpl.id, tpl.description)}
       className={cn(
         'group flex flex-col gap-1.5 rounded-lg border p-2.5 text-left transition-all',
         active
@@ -1040,7 +1041,7 @@ function ConfigPanel({ config, template, update }: ConfigProps) {
               {getInfographicTemplateName(locale, template.id, template.name)}
             </h3>
           </div>
-          <p className="text-xs text-muted-foreground">{template.description}</p>
+          <p className="text-xs text-muted-foreground">{getInfographicTemplateDescription(locale, template.id, template.description)}</p>
         </section>
 
         {/* Title */}

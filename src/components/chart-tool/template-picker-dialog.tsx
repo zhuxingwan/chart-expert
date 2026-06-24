@@ -26,6 +26,9 @@ import {
   getEChartsTemplateName,
   getMermaidTemplateName,
   getInfographicTemplateName,
+  getEChartsTemplateDescription,
+  getMermaidTemplateDescription,
+  getInfographicTemplateDescription,
 } from '@/lib/i18n/template-names'
 
 interface Props {
@@ -76,6 +79,23 @@ function getUnifiedTplName(
   return getInfographicTemplateName(locale, tpl.libraryType, tpl.name)
 }
 
+/**
+ * Get the translated description for a unified template, dispatching to the
+ * right engine-specific helper based on `tpl.engine`.
+ */
+function getUnifiedTplDescription(
+  locale: string,
+  tpl: UnifiedTemplate,
+): string {
+  if (tpl.engine === 'echarts') {
+    return getEChartsTemplateDescription(locale, tpl.libraryType, tpl.description)
+  }
+  if (tpl.engine === 'mermaid') {
+    return getMermaidTemplateDescription(locale, tpl.libraryType, tpl.description)
+  }
+  return getInfographicTemplateDescription(locale, tpl.libraryType, tpl.description)
+}
+
 export function TemplatePickerDialog({ open, onOpenChange, onPick }: Props) {
   const t = useT()
   const { locale } = useI18n()
@@ -94,6 +114,7 @@ export function TemplatePickerDialog({ open, onOpenChange, onPick }: Props) {
         tpl.name.toLowerCase().includes(kw) ||
         getUnifiedTplName(locale, tpl).toLowerCase().includes(kw) ||
         tpl.description.toLowerCase().includes(kw) ||
+        getUnifiedTplDescription(locale, tpl).toLowerCase().includes(kw) ||
         tpl.tags.some((tag) => tag.toLowerCase().includes(kw)),
     )
   }, [keyword, groups, t, locale])
@@ -258,7 +279,7 @@ function TemplateCard({
           {getUnifiedTplName(locale, tpl)}
         </div>
         <div className="mt-0.5 line-clamp-2 text-[11px] leading-tight text-muted-foreground">
-          {tpl.description}
+          {getUnifiedTplDescription(locale, tpl)}
         </div>
       </div>
     </button>

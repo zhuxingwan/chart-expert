@@ -40,6 +40,7 @@ import { drawWatermark } from '@/lib/license/watermark'
 import {
   getEChartsTemplateName,
   getEChartsCategoryLabel,
+  getEChartsTemplateDescription,
 } from '@/lib/i18n/template-names'
 import { useIsMobile } from '@/hooks/use-mobile'
 import {
@@ -524,7 +525,7 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
                         'group flex w-full items-start gap-3 rounded-lg border bg-card p-3 text-left transition-all hover:border-primary/50 hover:shadow-sm',
                         active && 'border-primary',
                       )}
-                      title={tpl.description}
+                      title={getEChartsTemplateDescription(locale, tpl.id, tpl.description)}
                     >
                       <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-primary">
                         <Icon className="size-4" />
@@ -534,7 +535,7 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
                           {getEChartsTemplateName(locale, tpl.id, tpl.name)}
                         </span>
                         <span className="line-clamp-2 text-[11px] text-muted-foreground">
-                          {tpl.description}
+                          {getEChartsTemplateDescription(locale, tpl.id, tpl.description)}
                         </span>
                       </span>
                     </button>

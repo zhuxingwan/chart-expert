@@ -68,7 +68,7 @@ import { exportSvg } from '@/lib/chart/export'
 import { useT, useI18n } from '@/lib/i18n'
 import { useProFeature } from '@/lib/license/use-pro-feature'
 import { drawWatermark } from '@/lib/license/watermark'
-import { getMermaidTemplateName } from '@/lib/i18n/template-names'
+import { getMermaidTemplateName, getMermaidTemplateDescription } from '@/lib/i18n/template-names'
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Workflow,
@@ -208,7 +208,7 @@ export function MermaidEditor({ config, onChange, onTemplateChange, previewRef }
                         ? 'border-primary bg-primary/5 ring-1 ring-primary'
                         : 'hover:border-foreground/30 hover:bg-muted/50',
                     )}
-                    title={tpl.description}
+                    title={getMermaidTemplateDescription(locale, tpl.id, tpl.description)}
                   >
                     <Icon
                       className={cn(
