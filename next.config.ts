@@ -2,12 +2,7 @@ import type { NextConfig } from "next";
 import WebpackObfuscator from "webpack-obfuscator";
 
 const nextConfig: NextConfig = {
-  output: "export",
-  basePath: "/iframeapp/chart",
-  assetPrefix: "/iframeapp/chart/",
-  images: {
-    unoptimized: true,
-  },
+  output: "standalone",
   typescript: {
     ignoreBuildErrors: true,
   },
