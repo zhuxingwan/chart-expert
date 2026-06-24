@@ -300,16 +300,66 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
 
   const applyTemplate = React.useCallback(
     (tpl: EChartsTemplate, keepTitle = false) => {
-      const next = deepClone(tpl.defaultConfig)
-      if (keepTitle && local.title) next.title = deepClone(local.title)
-      commit(next)
+      // Check if current data is still default (untouched by user).
+      // Compare against the current template's defaultConfig.
+      // If it matches → user hasn't entered data → use new template's default.
+      // If it doesn't match → user has data → preserve it, just switch the chart type.
+      const currentTpl = TEMPLATE_BY_ID[currentTemplateId] ?? DEFAULT_TEMPLATE
+      const isDataDefault = configKey(local) === configKey(currentTpl.defaultConfig)
+
+      if (isDataDefault && !keepTitle) {
+        // User hasn't modified data — use new template's default
+        const next = deepClone(tpl.defaultConfig)
+        commit(next)
+      } else {
+        // User has data (or AI generated) — preserve data, only switch type
+        const next = deepClone(local)
+        next.type = tpl.type
+        // Keep title if requested
+        if (!keepTitle && currentTpl.defaultConfig.title) {
+          next.title = deepClone(currentTpl.defaultConfig.title)
+        }
+        // For chart types that use single_series_data (pie/funnel), convert series_data
+        if ((tpl.type === 'pie' || tpl.type === 'funnel') && next.series_data && next.series_data.length > 0) {
+          if (!next.single_series_data || next.single_series_data.length === 0) {
+            // Convert first series to single_series_data format
+            const names = next.categories.length > 0
+              ? next.categories
+              : next.series_names
+            const values = next.series_data[0] || []
+            next.single_series_data = values.map((v, i) => ({
+              name: names[i] || `Item ${i + 1}`,
+              value: v,
+            }))
+          }
+        }
+        // For chart types that use categories+series_data (bar/line), convert from single_series_data
+        if ((tpl.type === 'bar' || tpl.type === 'line') && next.single_series_data && next.single_series_data.length > 0 && (!next.series_data || next.series_data.length === 0)) {
+          next.categories = next.single_series_data.map(d => d.name)
+          next.series_names = ['Series 1']
+          next.series_data = [next.single_series_data.map(d => d.value)]
+          next.single_series_data = []
+        }
+        // For radar, convert if needed
+        if (tpl.type === 'radar' && (!next.radar_indicators || next.radar_indicators.length === 0)) {
+          // Create indicators from categories or series_names
+          const names = next.categories.length > 0 ? next.categories : next.series_names
+          next.radar_indicators = names.map(n => ({ name: n, max: 100 }))
+          if (next.series_data.length === 0 && next.single_series_data) {
+            next.series_data = [next.single_series_data.map(d => d.value)]
+          }
+        }
+        // For scatter, keep scatter_data as-is
+        // For gauge, keep gauge_value as-is
+        commit(next)
+      }
       setCurrentTemplateId(tpl.id)
       onTemplateChange?.('echarts:' + tpl.id)
       toast.success(
         t('toasts.applied', { name: getEChartsTemplateName(locale, tpl.id, tpl.name) }),
       )
     },
-    [commit, local.title, t, onTemplateChange],
+    [commit, local, currentTemplateId, t, onTemplateChange, locale],
   )
 
   const onTemplateIdChange = React.useCallback(

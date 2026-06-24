@@ -190,6 +190,56 @@ export function AISuggestDialog({ open, onOpenChange, engine, onApply }: Props) 
   const [imageDataUrl, setImageDataUrl] = React.useState<string | null>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
+  // AI history — stored in localStorage
+  const HISTORY_KEY = 'noterich-ai-history'
+  const MAX_HISTORY = 10
+
+  interface HistoryItem {
+    prompt: string
+    engine: string
+    recommendedTypeName: string
+    timestamp: number
+  }
+
+  const [history, setHistory] = React.useState<HistoryItem[]>([])
+
+  // Load history on mount / dialog open
+  React.useEffect(() => {
+    if (open) {
+      try {
+        const stored = localStorage.getItem(HISTORY_KEY)
+        if (stored) {
+          setHistory(JSON.parse(stored))
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }, [open])
+
+  const saveToHistory = (item: HistoryItem) => {
+    setHistory((prev) => {
+      // Remove duplicates (same prompt)
+      const filtered = prev.filter(h => h.prompt !== item.prompt)
+      const next = [item, ...filtered].slice(0, MAX_HISTORY)
+      try {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(next))
+      } catch {
+        // ignore
+      }
+      return next
+    })
+  }
+
+  const clearHistory = () => {
+    setHistory([])
+    try {
+      localStorage.removeItem(HISTORY_KEY)
+    } catch {
+      // ignore
+    }
+  }
+
   const handleSuggest = async () => {
     if (!prompt.trim() && !imageDataUrl) {
       toast.error(t('aiDialog.enterPrompt'))
@@ -210,6 +260,13 @@ export function AISuggestDialog({ open, onOpenChange, engine, onApply }: Props) 
       }
       const data = await res.json()
       setSuggestion(data.result as AISuggestion)
+      // Save to history
+      saveToHistory({
+        prompt: prompt.trim(),
+        engine: data.result?.engine ?? engine ?? '',
+        recommendedTypeName: data.result?.recommendedTypeName ?? '',
+        timestamp: Date.now(),
+      })
       toast.success(t('aiDialog.generate'))
     } catch (e) {
       toast.error(t('aiDialog.failed', { error: (e as Error).message }))
@@ -280,15 +337,36 @@ export function AISuggestDialog({ open, onOpenChange, engine, onApply }: Props) 
               className="resize-none"
             />
             <div className="flex flex-wrap gap-1.5">
-              {getPromptIdeas(locale).map((idea) => (
-                <button
-                  key={idea}
-                  onClick={() => setPrompt(idea)}
-                  className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
-                >
-                  {idea.length > 32 ? idea.slice(0, 32) + '…' : idea}
-                </button>
-              ))}
+              {history.length > 0 ? (
+                <>
+                  {history.map((item, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setPrompt(item.prompt)}
+                      className="flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
+                      title={item.recommendedTypeName}
+                    >
+                      {item.prompt.length > 36 ? item.prompt.slice(0, 36) + '…' : item.prompt}
+                    </button>
+                  ))}
+                  <button
+                    onClick={clearHistory}
+                    className="flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] text-destructive transition-colors hover:bg-destructive/20"
+                  >
+                    {locale.startsWith('zh') ? '清空' : 'Clear'}
+                  </button>
+                </>
+              ) : (
+                getPromptIdeas(locale).map((idea) => (
+                  <button
+                    key={idea}
+                    onClick={() => setPrompt(idea)}
+                    className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground"
+                  >
+                    {idea.length > 32 ? idea.slice(0, 32) + '…' : idea}
+                  </button>
+                ))
+              )}
             </div>
           </div>
 
