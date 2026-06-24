@@ -1200,7 +1200,7 @@ function ListDataEditor({
   const add = () => {
     setItems([
       ...items,
-      { label: `Item ${items.length + 1}`, desc: '', value: 50, icon: 'pin' },
+      { label: `Item ${items.length + 1}`, desc: '', value: 50, icon: 'mingcute/pin-line' },
     ])
   }
 
@@ -1229,7 +1229,7 @@ function ListDataEditor({
               value={it.icon ?? ''}
               onChange={(e) => updateItem(i, { icon: e.target.value })}
               placeholder={t('infographic.iconPlaceholder')}
-              className="h-7 w-12 text-center text-xs"
+              className="h-7 w-28 text-xs"
             />
             <Input
               value={it.label ?? ''}
@@ -1567,7 +1567,7 @@ function RelationDataEditor({
               value={n.group ?? ''}
               onChange={(e) => setNodes(nodes.map((nn, idx) => (idx === i ? { ...nn, group: e.target.value } : nn)))}
               placeholder={t('infographic.nodeGroup')}
-              className="h-7 w-12 text-[10px]"
+              className="h-7 w-28 text-[10px]"
             />
             <Button
               size="sm"

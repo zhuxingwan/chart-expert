@@ -278,12 +278,12 @@ export function defaultDataForShape(
   return {
     title: { text: 'Core Strengths', subtext: 'Key advantages across dimensions' },
     lists: [
-      { label: 'Brand Impact', desc: 'Strong recognition in target users', value: 85, icon: 'diamond' },
-      { label: 'Tech R&D', desc: 'Proprietary core systems, continuous innovation', value: 90, icon: 'code' },
-      { label: 'Market Growth', desc: 'Rapid user growth in past year', value: 78, icon: 'growth' },
-      { label: 'Satisfaction', desc: 'High overall service rating', value: 88, icon: 'happy' },
-      { label: 'Data Assets', desc: 'Complete user profiling system', value: 92, icon: 'user' },
-      { label: 'Innovation', desc: 'Above-average launch frequency', value: 83, icon: 'rocket' },
+      { label: 'Brand Impact', desc: 'Strong recognition in target users', value: 85, icon: 'mingcute/diamond-2-fill' },
+      { label: 'Tech R&D', desc: 'Proprietary core systems, continuous innovation', value: 90, icon: 'mingcute/code-fill' },
+      { label: 'Market Growth', desc: 'Rapid user growth in past year', value: 78, icon: 'mingcute/wallet-4-line' },
+      { label: 'Satisfaction', desc: 'High overall service rating', value: 88, icon: 'mingcute/happy-line' },
+      { label: 'Data Assets', desc: 'Complete user profiling system', value: 92, icon: 'mingcute/user-4-line' },
+      { label: 'Innovation', desc: 'Above-average launch frequency', value: 83, icon: 'mingcute/rocket-line' },
     ],
   }
 }

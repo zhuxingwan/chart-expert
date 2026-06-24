@@ -136,7 +136,7 @@ Infographic data shape rules:
   * Item desc: max 40 characters (one short sentence summary)
   * Use keywords, not full sentences
   * Summarize and condense — the visual layout breaks with long text
-- For infographic "icon": use a short English keyword (e.g. "rocket", "trophy", "target", "growth", "idea", "check", "star", "heart", "user", "code", "chart", "globe", "lightbulb"). The engine fetches an SVG icon based on the keyword. Do NOT use emoji. If unsure, omit the icon field.
+- For infographic "icon": use full icon identifiers in the format "mingcute/icon-name" or "lucide/icon-name" (e.g. "mingcute/rocket-line", "mingcute/diamond-2-fill", "lucide/trophy", "mingcute/code-fill", "mingcute/happy-line"). The engine fetches an SVG icon based on the identifier. Do NOT use emoji. If unsure, omit the icon field.
 - Output STRICT JSON only.`
 
 // ─── Domain Signature (EXACT COPY from note app) ────────────────────────

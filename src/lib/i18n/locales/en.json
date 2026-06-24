@@ -175,7 +175,7 @@
     "exportJson": "JSON",
     "renderError": "Render error",
     "applied": "Applied: {name}",
-    "iconPlaceholder": "Icon keyword (e.g. rocket)",
+    "iconPlaceholder": "Icon (e.g. mingcute/rocket-line)",
     "labelPlaceholder": "Title",
     "descPlaceholder": "Description (optional)",
     "valueLabel": "Value",
