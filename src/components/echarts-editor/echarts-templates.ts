@@ -202,6 +202,7 @@ export const ECHARTS_TEMPLATES: EChartsTemplate[] = [
       horizontal: false,
       showLabel: true,
       showToolbox: true,
+      pie_variant: 'pie',
       single_series_data: [
         { name: 'Search Engine', value: 1048 },
         { name: 'Direct', value: 735 },
@@ -230,6 +231,7 @@ export const ECHARTS_TEMPLATES: EChartsTemplate[] = [
       horizontal: false,
       showLabel: true,
       showToolbox: true,
+      pie_variant: 'donut',
       single_series_data: [
         { name: 'iOS', value: 1280 },
         { name: 'Android', value: 1890 },
@@ -691,6 +693,7 @@ export const ECHARTS_TEMPLATES: EChartsTemplate[] = [
       horizontal: false,
       showLabel: true,
       showToolbox: true,
+      pie_variant: 'rose',
       single_series_data: [
         { name: 'JavaScript', value: 9800 },
         { name: 'Python', value: 8600 },
@@ -722,6 +725,7 @@ export const ECHARTS_TEMPLATES: EChartsTemplate[] = [
       horizontal: false,
       showLabel: true,
       showToolbox: true,
+      pie_variant: 'nested',
       single_series_data: [
         { name: 'Subscription', value: 4200 },
         { name: 'One-time License', value: 2800 },
@@ -750,6 +754,7 @@ export const ECHARTS_TEMPLATES: EChartsTemplate[] = [
       horizontal: false,
       showLabel: true,
       showToolbox: true,
+      pie_variant: 'half',
       single_series_data: [
         { name: 'Recurring', value: 6850 },
         { name: 'New', value: 2150 },

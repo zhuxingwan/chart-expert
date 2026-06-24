@@ -981,3 +981,62 @@ Stage Summary:
   - line → line-smooth: `smooth: false→true` ✓
   - line-smooth → line (reverse): `smooth: true→false` ✓ (bidirectional)
 - The fix is minimal, surgical, and preserves the existing data-group caching semantics — only the visual-style fields are now correctly sourced from the selected template on every switch.
+
+---
+Task ID: FIX-echarts-switch-logic-v2
+Agent: main
+Task: Rework the ECharts template-switch logic per user feedback: (1) when data is still the default sample, even same-group switches must change the chart; (2) only when the user has actually edited the data should it be preserved across switches; (3) fix scatter & pie, which still didn't change on switch.
+
+Work Log:
+
+**Diagnosis — three root causes:**
+1. The old same-group branch always kept `local` data, so switching pie→donut→rose (all `singleSeries` group) left the *same* sample data on screen → no visible change. Same for scatter→bubble→matrix (all `scatter` group).
+2. The 5 pie-family templates (pie / pie-donut / pie-rose / pie-half / pie-nested) all shared `type:'pie'` with identical style fields; the option-builder even used a hardcoded `donut = data.length >= 3` heuristic. So there was no field distinguishing a rose from a half-pie — switching was structurally impossible.
+3. `isDataDefault` used full `configKey` (includes style fields), so a pure style toggle (e.g. flipping Horizontal) was wrongly treated as "data modified" and polluted the cache with default sample data.
+4. (Bonus) URL preselect (`?chart=echarts:pie`) left `currentTemplateId` at its `'bar'` default because the props-sync effect was suppressed when `lastAppliedKey === incomingKey` on first mount — so the Chart-Type dropdown showed the wrong template and `isUserDataModified` compared against the wrong template's default.
+
+**Fix A — new `pie_variant` field (`src/types/chart.ts`):**
+- Added `pie_variant?: 'pie' | 'donut' | 'rose' | 'half' | 'nested'` to `EChartsConfig`.
+
+**Fix B — set `pie_variant` in all 5 pie templates (`echarts-templates.ts`):**
+- pie → 'pie', pie-donut → 'donut', pie-rose → 'rose', pie-nested → 'nested', pie-half → 'half'.
+
+**Fix C — render each variant distinctly (`echarts-option-builder.ts`, case 'pie'):**
+- Removed the `donut = data.length >= 3` heuristic.
+- Added a per-variant `shape` object:
+  - 'pie' → radius '65%'
+  - 'donut' → radius ['40%','70%']
+  - 'rose' → roseType 'radius', radius ['20%','75%']
+  - 'half' → startAngle 180, endAngle 360, center ['50%','70%'], radius '70%'
+  - 'nested' → radius ['45%','80%'] (thicker ring, distinct from plain donut)
+
+**Fix D — `dataKey()` helper (`echarts-editor.tsx`, module-level):**
+- New function fingerprints ONLY the data-bearing fields of a config (group-dependent: cartesian→categories/series_names/series_data, singleSeries→single_series_data, scatter→scatter_data, radar→radar_indicators+series_data, gauge→gauge_value/max, …).
+- Moved `TYPE_TO_GROUP` to module level so `dataKey` can use it.
+- `isUserDataModified = dataKey(local) !== dataKey(currentTpl.defaultConfig)` — now a pure style toggle does NOT count as a data edit.
+
+**Fix E — rewrote `applyTemplate` with a clean data/style split:**
+- Branch A (data still default sample) → use the new template's FULL defaultConfig (sample data swaps in — this is the "gallery" behavior the user asked for).
+- Branch B (user data + same group) → keep `local` data, restyle only (user previews same data in different presentations).
+- Branch C (user data + cross-group) → prefer cached user data for the target group; else convert current data across groups via `convertDataForType`; else fall back to template default.
+- ALWAYS apply the new template's STRUCTURAL style fields: `type, horizontal, stack, smooth, pie_variant` (so bar→bar-horizontal flips, bar→bar-stack stacks, line→line-smooth smooths, pie→rose becomes a rose — regardless of which data branch ran).
+- Carry over global UI prefs (`theme, legend, showToolbox`) always; carry `showLabel` only when reusing user data (so scatter's default labels-off is honored on fresh sample data, but a user's label choice survives same-group switches).
+
+**Fix F — fixed URL-preselect template-id mismatch (`echarts-editor.tsx`):**
+- `currentTemplateId` useState initializer now best-effort matches the initial `config` prop (by exact defaultConfig equality, then by type) instead of always defaulting to `'bar'`. Fixes the dropdown label and, critically, makes `isUserDataModified` compare against the correct template.
+
+**Fix G — pie_variant selector in the Style panel (`echarts-editor.tsx`, `StyleEditor`):**
+- Added a `<Select>` listing Pie/Donut/Rose/Half/Nested, visible only when `type === 'pie'`. Patches `pie_variant` directly so users can switch shape without re-picking from the gallery.
+- Added i18n keys `echarts.pieVariant`, `echarts.pieVariantHint`, `echarts.variantPie/Donut/Rose/Half/Nested` to en.json + zh.json (other 14 locales fall back to en).
+
+Stage Summary:
+- ✅ `bun run lint` — 0 errors, 0 warnings.
+- ✅ Dev server stable on port 3000; all routes HTTP 200; no console/runtime errors.
+- ✅ Agent Browser end-to-end verification (reading live `echarts.getInstanceByDom().getOption()` after each switch):
+  - **Pie family (default data → sample swaps + shape changes):** pie(5 items,radius 65%) → donut(4 items iOS,radius [40%,70%]) → rose(8 items JS,roseType radius,radius [20%,75%]) → half(4 items Recurring,startAngle 180/endAngle 360,center [50%,70%]) → nested(5 items Subscription,radius [45%,80%]) ✓
+  - **Pie family (USER data preserved across shape switch):** randomized nested donut data (5 items, Subscription=408) → switched to Rose → roseType applied, SAME 5 items with Subscription=408 preserved (NOT swapped to rose's 8-item sample) ✓
+  - **Scatter family (default data → sample swaps):** scatter(15 pts [161,51]) → bubble(20 pts [50,320]) → clustered(20 pts, first [12,880] high-value / last [80,200] mass-market) ✓
+  - **Bar/line style (default data → sample + style swaps):** bar(cat×val,label top) → horizontal(val×cat,label right,city sample) → stacked(stack total,dept sample) ✓ ; line(smooth false) → smooth line(smooth true) ✓
+  - **Cross-group conversion (user data):** line with randomized data (cats Mon–Sun) → pie → 7 pie slices named Mon–Sun (cartesian categories converted to single_series_data) ✓
+  - **Pie variant selector in Style panel:** directly switching Pie→Rose via the new selector applies roseType and preserves 7-item user data ✓
+  - **URL preselect:** `?chart=echarts:pie` now correctly shows "Pie Chart" in the Chart-Type dropdown (was "Bar Chart" before fix F) ✓

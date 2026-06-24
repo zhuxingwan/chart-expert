@@ -100,6 +100,79 @@ function configKey(c: EChartsConfig | null): string {
   return JSON.stringify(c)
 }
 
+/**
+ * Maps a chart `type` to its "data group" — templates in the same group share
+ * the same data structure and can be switched between freely.
+ */
+const TYPE_TO_GROUP: Record<string, string> = {
+  bar: 'cartesian', line: 'cartesian', heatmap: 'cartesian',
+  pie: 'singleSeries', funnel: 'singleSeries', treemap: 'singleSeries', sunburst: 'singleSeries',
+  radar: 'radar',
+  scatter: 'scatter',
+  gauge: 'gauge',
+  candlestick: 'candlestick',
+  boxplot: 'boxplot',
+  graph: 'graph',
+  sankey: 'sankey',
+  parallel: 'parallel',
+  themeRiver: 'themeRiver',
+}
+
+/**
+ * Fingerprint of ONLY the data-bearing fields of a config (categories,
+ * series_data, single_series_data, scatter_data, radar_indicators, …).
+ *
+ * Used to tell whether the user has actually *edited the data* — independently
+ * of any style toggles (horizontal / stack / smooth / pie_variant) they may
+ * also have flipped. Comparing the full `configKey` would wrongly flag a
+ * pure style toggle as "data modified" and pollute the per-group cache with
+ * default sample data.
+ */
+function dataKey(c: EChartsConfig | null): string {
+  if (!c) return ''
+  const g = TYPE_TO_GROUP[c.type] ?? 'cartesian'
+  const f: Record<string, unknown> = { g }
+  switch (g) {
+    case 'cartesian':
+      f.cat = c.categories; f.sn = c.series_names; f.sd = c.series_data
+      break
+    case 'singleSeries':
+      f.ssd = c.single_series_data
+      break
+    case 'radar':
+      f.ri = c.radar_indicators; f.sn = c.series_names; f.sd = c.series_data
+      break
+    case 'scatter':
+      f.scd = c.scatter_data
+      break
+    case 'gauge':
+      f.gv = c.gauge_value; f.gm = c.gauge_max
+      break
+    case 'candlestick':
+      f.cat = c.categories; f.cd = c.candlestick_data
+      break
+    case 'boxplot':
+      f.cat = c.categories; f.bd = c.boxplot_data
+      break
+    case 'graph':
+      f.gn = c.graph_nodes; f.gl = c.graph_links
+      break
+    case 'sankey':
+      f.skn = c.sankey_nodes; f.skl = c.sankey_links
+      break
+    case 'sunburst':
+      f.sb = c.sunburst_data
+      break
+    case 'parallel':
+      f.pdim = c.parallel_dims; f.pd = c.parallel_data
+      break
+    case 'themeRiver':
+      f.tr = c.themeriver_data
+      break
+  }
+  return JSON.stringify(f)
+}
+
 /** Map a template's type to a lucide icon. */
 function iconForType(type: string) {
   switch (type) {
@@ -172,13 +245,23 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
   )
 
   // Track which template is currently applied so the chart-type Select can show
-  // the right value. Initialized from the first template; updated whenever the
-  // user picks a template from the gallery or dropdown. When the parent pushes
-  // a config (AI suggestion / loaded chart) we best-effort match by template id
-  // — if we can't, we fall back to the first template whose type matches.
-  const [currentTemplateId, setCurrentTemplateId] = React.useState<string>(
-    DEFAULT_TEMPLATE.id,
-  )
+  // the right value. Initialized by best-effort matching the initial `config`
+  // prop (handles URL preselect like `?chart=echarts:pie`), then updated
+  // whenever the user picks a template or the parent pushes a new config.
+  const [currentTemplateId, setCurrentTemplateId] = React.useState<string>(() => {
+    if (config) {
+      const key = configKey(config)
+      const exact = ECHARTS_TEMPLATES.find(
+        (t) => configKey(t.defaultConfig) === key,
+      )
+      if (exact) return exact.id
+      const byType = ECHARTS_TEMPLATES.find(
+        (t) => t.type === (config as EChartsConfig).type,
+      )
+      if (byType) return byType.id
+    }
+    return DEFAULT_TEMPLATE.id
+  })
 
   // Track the last config we accepted from props to avoid feedback loops.
   const lastAppliedKey = React.useRef<string>(configKey(config))
@@ -299,27 +382,13 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
   )
 
   // ─── Data group cache ──────────────────────────────────────────────────
-  // Each chart type belongs to a "data group" that shares the same data structure.
-  // When the user switches templates, we cache the current data by group.
-  // If the user switches back to a group they've used before, we restore the cached data.
-  // If they're entering a group for the first time, we use the template's default data.
-
-  // Map each chart type to its data group
-  const TYPE_TO_GROUP: Record<string, string> = {
-    bar: 'cartesian', line: 'cartesian', heatmap: 'cartesian',
-    pie: 'singleSeries', funnel: 'singleSeries', treemap: 'singleSeries', sunburst: 'singleSeries',
-    radar: 'radar',
-    scatter: 'scatter',
-    gauge: 'gauge',
-    candlestick: 'candlestick',
-    boxplot: 'boxplot',
-    graph: 'graph',
-    sankey: 'sankey',
-    parallel: 'parallel',
-    themeRiver: 'themeRiver',
-  }
-
-  // Cache: group name → last user data (EChartsConfig with that group's data fields)
+  // Templates are grouped by data structure (cartesian / singleSeries / radar /
+  // scatter / …). When the user EDITS the data on a template, we cache that
+  // user data under the group. On the next switch into the same group we
+  // restore the cached user data so the user can preview the same data across
+  // different presentations. Default (unmodified) sample data is NEVER cached —
+  // so switching between two templates whose data the user hasn't touched will
+  // swap in each template's own sample data (the expected "gallery" behavior).
   const groupCacheRef = React.useRef<Record<string, EChartsConfig>>({})
 
   // Convert data when switching between types (handles cross-group conversion)
@@ -396,41 +465,49 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
     (tpl: EChartsTemplate, keepTitle = false) => {
       const currentGroup = TYPE_TO_GROUP[local.type] ?? 'cartesian'
       const targetGroup = TYPE_TO_GROUP[tpl.type] ?? 'cartesian'
-
-      // Step 1: Cache current data into the current group's slot
-      // (only if user has modified it — don't cache default data)
       const currentTpl = TEMPLATE_BY_ID[currentTemplateId] ?? DEFAULT_TEMPLATE
-      const isDataDefault = configKey(local) === configKey(currentTpl.defaultConfig)
-      if (!isDataDefault) {
+
+      // ── Has the user actually edited the DATA (not just toggled style)? ──
+      // `dataKey` fingerprints only the data-bearing fields, so a pure style
+      // toggle (horizontal / stack / smooth / pie_variant) does NOT count as a
+      // data edit. This is the cornerstone of the switching rules below.
+      const isUserDataModified = dataKey(local) !== dataKey(currentTpl.defaultConfig)
+
+      // Cache the user's modified data under the CURRENT group so it can be
+      // restored later when they switch back. Default sample data is never
+      // cached — that keeps the cache a pure "user data" store.
+      if (isUserDataModified) {
         groupCacheRef.current[currentGroup] = deepClone(local)
       }
 
-      // Step 2: Determine what DATA to use for the new template.
-      // Data fields (categories / series_data / single_series_data / radar_indicators / …)
-      // are preserved across switches — either from the user's current data (same group),
-      // from a previously-cached entry for the target group, or from the template default.
+      // ── Decide what DATA the new template should render ──
+      //  • data still default sample  → use the new template's own sample data
+      //    (so flipping through the gallery actually changes what's on screen)
+      //  • user data + same group      → keep the user's data, only restyle
+      //  • user data + cross-group     → prefer a previously-cached entry for
+      //    the target group; otherwise convert the current data across groups
       let next: EChartsConfig
+      let keepUserShowLabel = false // when true, carry over local.showLabel
 
-      if (targetGroup === currentGroup) {
-        // Same group — keep all user data, only the visual style will change (Step 3)
+      if (!isUserDataModified) {
+        // (A) Default sample data → swap to the new template's full default.
+        // This is what makes pie → donut → rose → half → nested each show a
+        // different sample, and scatter → bubble → matrix likewise.
+        next = deepClone(tpl.defaultConfig)
+      } else if (targetGroup === currentGroup) {
+        // (B) User data, same group → keep data, restyle in Step 3.
         next = deepClone(local)
+        keepUserShowLabel = true
       } else {
-        // Different group — check cache
+        // (C) User data, cross-group.
         const cached = groupCacheRef.current[targetGroup]
         if (cached) {
-          // Has cached data for this group — restore it
           next = deepClone(cached)
-          // Carry over UI-appearance preferences from the current config
-          next.theme = local.theme
-          next.legend = local.legend
-          next.showLabel = local.showLabel
-          next.showToolbox = local.showToolbox
+          keepUserShowLabel = true
         } else {
-          // No cache for this group — use template default
-          next = deepClone(tpl.defaultConfig)
-          // Try to convert data from current group (for compatible cross-group conversions)
+          // No cached user data for the target group yet — convert the
+          // current user data across groups so they don't lose their input.
           const converted = convertDataForType(local, tpl.type)
-          // Check if conversion produced meaningful data (not empty)
           const hasConvertedData =
             (targetGroup === 'cartesian' && converted.series_data?.length) ||
             (targetGroup === 'singleSeries' && converted.single_series_data?.length) ||
@@ -439,26 +516,42 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
             (targetGroup === 'gauge' && converted.gauge_value !== undefined)
           if (hasConvertedData) {
             next = converted
-            next.theme = local.theme
-            next.legend = local.legend
-            next.showLabel = local.showLabel
-            next.showToolbox = local.showToolbox
+            keepUserShowLabel = true
+          } else {
+            // Conversion produced nothing usable → fall back to the template's
+            // own sample data for this group.
+            next = deepClone(tpl.defaultConfig)
           }
         }
       }
 
-      // Step 3: ALWAYS apply the new template's visual-style fields.
-      // These define the chart's *form* (orientation / stacking / smoothing / type)
-      // and must follow the selected template — even when reusing user data within
-      // the same group. Without this, switching e.g. bar → bar-horizontal would be
-      // a no-op because both templates share type='bar' and differ only in
-      // `horizontal`. Same goes for bar ↔ bar-stack (stack), line ↔ line-smooth
-      // (smooth), etc.
+      // ── Carry over global UI preferences (theme / legend / toolbox) ──
+      // These are presentation preferences that should follow the user across
+      // every template, regardless of which data branch above ran.
+      next.theme = local.theme
+      next.legend = local.legend
+      next.showToolbox = local.showToolbox
+      // showLabel: when reusing the user's own data, keep their label choice;
+      // when using a template's fresh sample data, honor that template's
+      // default (e.g. scatter defaults to labels off, pie to labels on).
+      if (keepUserShowLabel) next.showLabel = local.showLabel
+
+      // ── ALWAYS apply the new template's STRUCTURAL style fields ──
+      // These define the chart's *form* and must follow the selected template
+      // on every switch — even when reusing user data. Without this:
+      //  • bar → bar-horizontal would be a no-op (both type:'bar', differ only
+      //    in `horizontal`)
+      //  • bar → bar-stack wouldn't stack (differ only in `stack`)
+      //  • line → line-smooth wouldn't smooth (differ only in `smooth`)
+      //  • pie → donut/rose/half/nested would all render identically (differ
+      //    only in `pie_variant`)
       const tdef = tpl.defaultConfig
       next.type = tdef.type
       if (typeof tdef.horizontal === 'boolean') next.horizontal = tdef.horizontal
       if (typeof tdef.stack === 'boolean') next.stack = tdef.stack
       if (typeof tdef.smooth === 'boolean') next.smooth = tdef.smooth
+      if (tdef.pie_variant) next.pie_variant = tdef.pie_variant
+      else if (next.type === 'pie') delete next.pie_variant
 
       // Handle title
       if (keepTitle && local.title) {
@@ -1547,6 +1640,15 @@ function StyleEditor({ config, patch }: SubEditorProps) {
   const type = config.type
   const isBar = type === 'bar'
   const isLine = type === 'line'
+  const isPie = type === 'pie'
+
+  const PIE_VARIANTS: { value: NonNullable<EChartsConfig['pie_variant']>; label: string }[] = [
+    { value: 'pie', label: t('echarts.variantPie') },
+    { value: 'donut', label: t('echarts.variantDonut') },
+    { value: 'rose', label: t('echarts.variantRose') },
+    { value: 'half', label: t('echarts.variantHalf') },
+    { value: 'nested', label: t('echarts.variantNested') },
+  ]
 
   return (
     <div className="space-y-4">
@@ -1581,6 +1683,33 @@ function StyleEditor({ config, patch }: SubEditorProps) {
         disabled={!isBar}
         hint={isBar ? t('echarts.horizontalHint') : t('echarts.horizontalUnavailable')}
       />
+
+      {isPie && (
+        <div className="space-y-1.5">
+          <Label htmlFor="pie-variant">{t('echarts.pieVariant')}</Label>
+          <Select
+            value={config.pie_variant ?? 'pie'}
+            onValueChange={(v) =>
+              patch({ pie_variant: v as EChartsConfig['pie_variant'] })
+            }
+          >
+            <SelectTrigger id="pie-variant" className="w-full">
+              <SelectValue placeholder={t('echarts.pieVariant')} />
+            </SelectTrigger>
+            <SelectContent>
+              {PIE_VARIANTS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            {t('echarts.pieVariantHint')}
+          </p>
+        </div>
+      )}
+
       <StyleToggle
         id="label"
         label={t('echarts.showLabel')}

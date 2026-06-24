@@ -130,8 +130,32 @@ export function buildEChartsOption(config: EChartsConfig): EChartsOption {
 
     case 'pie': {
       const data = config.single_series_data ?? []
-      const total = data.reduce((s, d) => s + (Number(d.value) || 0), 0)
-      const donut = total > 0 && data.length >= 3 // visually feel like donut for richer pie
+      const variant = config.pie_variant ?? 'pie'
+      // Per-variant geometry. The 5 pie-family templates all share type:'pie'
+      // but differ in shape — these props make the difference visible.
+      const shape: Record<string, unknown> = {}
+      if (variant === 'donut') {
+        shape.radius = ['40%', '70%']
+        shape.center = ['50%', '52%']
+      } else if (variant === 'rose') {
+        shape.radius = ['20%', '75%']
+        shape.center = ['50%', '52%']
+        shape.roseType = 'radius'
+      } else if (variant === 'half') {
+        // Semicircle occupying the top half — startAngle 180, endAngle 360
+        shape.radius = '70%'
+        shape.center = ['50%', '70%']
+        shape.startAngle = 180
+        shape.endAngle = 360
+      } else if (variant === 'nested') {
+        // Thick donut ring — visually distinct from the plain donut
+        shape.radius = ['45%', '80%']
+        shape.center = ['50%', '52%']
+      } else {
+        // 'pie' — solid disc
+        shape.radius = '65%'
+        shape.center = ['50%', '52%']
+      }
       return {
         ...base,
         tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
@@ -140,8 +164,7 @@ export function buildEChartsOption(config: EChartsConfig): EChartsOption {
           {
             name: series_names[0] ?? '系列',
             type: 'pie',
-            radius: donut ? ['40%', '70%'] : '65%',
-            center: ['50%', '52%'],
+            ...shape,
             avoidLabelOverlap: true,
             label: { show: showLabel, formatter: '{b}: {d}%' },
             emphasis: {

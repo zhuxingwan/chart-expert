@@ -28,6 +28,9 @@ export interface EChartsConfig {
   horizontal: boolean
   showLabel: boolean
   showToolbox: boolean
+  // for pie — distinguishes the 5 pie-family templates that all share type:'pie'
+  // 'pie' solid · 'donut' ring · 'rose' radius-varied · 'half' semicircle · 'nested' multi-ring
+  pie_variant?: 'pie' | 'donut' | 'rose' | 'half' | 'nested'
   // for pie / funnel / gauge / treemap
   single_series_data?: { name: string; value: number }[]
   // for radar
