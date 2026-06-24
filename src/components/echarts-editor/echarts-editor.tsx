@@ -405,21 +405,22 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
         groupCacheRef.current[currentGroup] = deepClone(local)
       }
 
-      // Step 2: Determine what data to use for the new template
+      // Step 2: Determine what DATA to use for the new template.
+      // Data fields (categories / series_data / single_series_data / radar_indicators / …)
+      // are preserved across switches — either from the user's current data (same group),
+      // from a previously-cached entry for the target group, or from the template default.
       let next: EChartsConfig
 
       if (targetGroup === currentGroup) {
-        // Same group — just switch type, keep all data
+        // Same group — keep all user data, only the visual style will change (Step 3)
         next = deepClone(local)
-        next.type = tpl.type
       } else {
         // Different group — check cache
         const cached = groupCacheRef.current[targetGroup]
         if (cached) {
-          // Has cached data for this group — use it, just switch type
+          // Has cached data for this group — restore it
           next = deepClone(cached)
-          next.type = tpl.type
-          // Copy over style settings from current config
+          // Carry over UI-appearance preferences from the current config
           next.theme = local.theme
           next.legend = local.legend
           next.showLabel = local.showLabel
@@ -445,6 +446,19 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
           }
         }
       }
+
+      // Step 3: ALWAYS apply the new template's visual-style fields.
+      // These define the chart's *form* (orientation / stacking / smoothing / type)
+      // and must follow the selected template — even when reusing user data within
+      // the same group. Without this, switching e.g. bar → bar-horizontal would be
+      // a no-op because both templates share type='bar' and differ only in
+      // `horizontal`. Same goes for bar ↔ bar-stack (stack), line ↔ line-smooth
+      // (smooth), etc.
+      const tdef = tpl.defaultConfig
+      next.type = tdef.type
+      if (typeof tdef.horizontal === 'boolean') next.horizontal = tdef.horizontal
+      if (typeof tdef.stack === 'boolean') next.stack = tdef.stack
+      if (typeof tdef.smooth === 'boolean') next.smooth = tdef.smooth
 
       // Handle title
       if (keepTitle && local.title) {

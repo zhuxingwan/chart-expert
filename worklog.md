@@ -950,3 +950,34 @@ Stage Summary:
 - ✅ Keyword search in template picker now matches translated descriptions too.
 - ✅ ESLint passes (`bun run lint`) — 0 errors, 0 warnings.
 - ✅ Dev server stable on port 3000; recent requests for all three engines return HTTP 200.
+
+---
+Task ID: FIX-echarts-same-group-switch
+Agent: main
+Task: Fix the bug where switching between same-group ECharts templates (e.g. bar → bar-horizontal) produced no visual change — the chart stayed identical.
+
+Work Log:
+- Root-caused the issue in `applyTemplate` (`src/components/echarts-editor/echarts-editor.tsx`):
+  - `bar` and `bar-horizontal` templates both have `type: 'bar'`; they differ only in the `horizontal` flag (likewise `bar` ↔ `bar-stack` differ in `stack`, `line` ↔ `line-smooth` differ in `smooth`).
+  - In the same-group branch the code only did `next.type = tpl.type`, which was a no-op for these template pairs because `tpl.type` === `local.type`. The `horizontal` / `stack` / `smooth` fields were left at the user's current values, so the rendered chart didn't change.
+  - The cross-group branches had the same gap — they carried over `theme/legend/showLabel/showToolbox` from `local` but never applied the new template's `horizontal/stack/smooth`.
+- Refactored `applyTemplate` to introduce a single "Step 3" that ALWAYS applies the new template's visual-style fields right before `commit`:
+  ```ts
+  const tdef = tpl.defaultConfig
+  next.type = tdef.type
+  if (typeof tdef.horizontal === 'boolean') next.horizontal = tdef.horizontal
+  if (typeof tdef.stack === 'boolean') next.stack = tdef.stack
+  if (typeof tdef.smooth === 'boolean') next.smooth = tdef.smooth
+  ```
+- Removed the now-redundant `next.type = tpl.type` lines from the same-group branch and the cross-group cache-hit branch (Step 3 handles them uniformly).
+- Updated inline comments to explain *why* Step 3 is necessary (the bar↔bar-horizontal no-op trap).
+
+Stage Summary:
+- ✅ `bun run lint` passes — 0 errors, 0 warnings.
+- ✅ Dev server stable on port 3000.
+- ✅ Agent Browser end-to-end verification (reading live `echarts.getInstanceByDom().getOption()` after each switch):
+  - bar → bar-horizontal: `xAxis: category→value`, `yAxis: value→category`, `labelPos: top→right` ✓
+  - bar-horizontal → bar-stack: `stack: undefined→"total"`, `xAxis: value→category`, `labelPos: right→top` ✓
+  - line → line-smooth: `smooth: false→true` ✓
+  - line-smooth → line (reverse): `smooth: true→false` ✓ (bidirectional)
+- The fix is minimal, surgical, and preserves the existing data-group caching semantics — only the visual-style fields are now correctly sourced from the selected template on every switch.
