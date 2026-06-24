@@ -298,54 +298,44 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
     [commit, local],
   )
 
-  // Define which chart types are "compatible" — share the same data structure
-  // and can be switched between without data loss.
-  // Group 1 (cartesian): bar, line — use categories + series_data
-  // Group 2 (single-series): pie, funnel, treemap — use single_series_data
-  // Group 3 (radar): radar — uses radar_indicators + series_data
-  // Group 4 (scatter): scatter — uses scatter_data
-  // Group 5 (gauge): gauge — uses gauge_value
-  // Group 6 (heatmap): heatmap — uses categories + series_data (2D)
-  // Group 7 (candlestick): candlestick — uses candlestick_data
-  // Group 8 (boxplot): boxplot — uses boxplot_data
-  // Group 9 (graph): graph — uses graph_nodes + graph_links
-  // Group 10 (sankey): sankey — uses sankey_nodes + sankey_links
-  // Group 11 (sunburst): sunburst — uses sunburst_data
-  // Group 12 (parallel): parallel — uses parallel_data
-  // Group 13 (themeRiver): themeRiver — uses themeriver_data
-  const COMPATIBLE_GROUPS: Record<string, string[]> = {
-    bar: ['bar', 'line', 'heatmap'],
-    line: ['bar', 'line', 'heatmap'],
-    heatmap: ['bar', 'line', 'heatmap'],
-    pie: ['pie', 'funnel', 'treemap'],
-    funnel: ['pie', 'funnel', 'treemap'],
-    treemap: ['pie', 'funnel', 'treemap'],
-    radar: ['radar'],
-    scatter: ['scatter'],
-    gauge: ['gauge'],
-    candlestick: ['candlestick'],
-    boxplot: ['boxplot'],
-    graph: ['graph'],
-    sankey: ['sankey'],
-    sunburst: ['sunburst'],
-    parallel: ['parallel'],
-    themeRiver: ['themeRiver'],
+  // ─── Data group cache ──────────────────────────────────────────────────
+  // Each chart type belongs to a "data group" that shares the same data structure.
+  // When the user switches templates, we cache the current data by group.
+  // If the user switches back to a group they've used before, we restore the cached data.
+  // If they're entering a group for the first time, we use the template's default data.
+
+  // Map each chart type to its data group
+  const TYPE_TO_GROUP: Record<string, string> = {
+    bar: 'cartesian', line: 'cartesian', heatmap: 'cartesian',
+    pie: 'singleSeries', funnel: 'singleSeries', treemap: 'singleSeries', sunburst: 'singleSeries',
+    radar: 'radar',
+    scatter: 'scatter',
+    gauge: 'gauge',
+    candlestick: 'candlestick',
+    boxplot: 'boxplot',
+    graph: 'graph',
+    sankey: 'sankey',
+    parallel: 'parallel',
+    themeRiver: 'themeRiver',
   }
 
-  // Convert data when switching between compatible types in the same group
+  // Cache: group name → last user data (EChartsConfig with that group's data fields)
+  const groupCacheRef = React.useRef<Record<string, EChartsConfig>>({})
+
+  // Convert data when switching between types (handles cross-group conversion)
   function convertDataForType(source: EChartsConfig, targetType: string): EChartsConfig {
     const next = deepClone(source)
     next.type = targetType
     const sourceType = source.type
+    const sourceGroup = TYPE_TO_GROUP[sourceType] ?? 'cartesian'
+    const targetGroup = TYPE_TO_GROUP[targetType] ?? 'cartesian'
 
-    // Within cartesian group (bar/line/heatmap) — no conversion needed
-    if (COMPATIBLE_GROUPS[sourceType]?.includes(targetType)) {
-      return next
-    }
+    // Same group — no conversion needed
+    if (sourceGroup === targetGroup) return next
 
-    // From cartesian (bar/line) → single-series (pie/funnel/treemap)
-    if (['bar', 'line', 'heatmap'].includes(sourceType) && ['pie', 'funnel', 'treemap'].includes(targetType)) {
-      if (next.series_data && next.series_data.length > 0 && (!next.single_series_data || next.single_series_data.length === 0)) {
+    // cartesian → singleSeries: extract first series into single_series_data
+    if (sourceGroup === 'cartesian' && targetGroup === 'singleSeries') {
+      if (next.series_data?.length && (!next.single_series_data?.length)) {
         const names = next.categories.length > 0 ? next.categories : next.series_names
         const values = next.series_data[0] || []
         next.single_series_data = values.map((v, i) => ({ name: names[i] || `Item ${i + 1}`, value: v }))
@@ -353,9 +343,9 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
       return next
     }
 
-    // From single-series (pie/funnel/treemap) → cartesian (bar/line)
-    if (['pie', 'funnel', 'treemap'].includes(sourceType) && ['bar', 'line', 'heatmap'].includes(targetType)) {
-      if (next.single_series_data && next.single_series_data.length > 0 && (!next.series_data || next.series_data.length === 0)) {
+    // singleSeries → cartesian: expand single_series_data into categories + series_data
+    if (sourceGroup === 'singleSeries' && targetGroup === 'cartesian') {
+      if (next.single_series_data?.length && (!next.series_data?.length)) {
         next.categories = next.single_series_data.map(d => d.name)
         next.series_names = ['Series 1']
         next.series_data = [next.single_series_data.map(d => d.value)]
@@ -363,18 +353,18 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
       return next
     }
 
-    // From cartesian → radar: create indicators from categories
-    if (['bar', 'line'].includes(sourceType) && targetType === 'radar') {
-      if (!next.radar_indicators || next.radar_indicators.length === 0) {
+    // cartesian → radar: create indicators from categories
+    if (sourceGroup === 'cartesian' && targetGroup === 'radar') {
+      if (!next.radar_indicators?.length) {
         const names = next.categories.length > 0 ? next.categories : next.series_names
         next.radar_indicators = names.map(n => ({ name: n, max: 100 }))
       }
       return next
     }
 
-    // From single-series → radar
-    if (['pie', 'funnel', 'treemap'].includes(sourceType) && targetType === 'radar') {
-      if (!next.radar_indicators || next.radar_indicators.length === 0) {
+    // singleSeries → radar
+    if (sourceGroup === 'singleSeries' && targetGroup === 'radar') {
+      if (!next.radar_indicators?.length) {
         next.radar_indicators = (next.single_series_data || []).map(d => ({ name: d.name, max: 100 }))
         next.series_data = [(next.single_series_data || []).map(d => d.value)]
         next.series_names = ['Series 1']
@@ -382,10 +372,19 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
       return next
     }
 
-    // From radar → cartesian
-    if (sourceType === 'radar' && ['bar', 'line'].includes(targetType)) {
-      if (next.radar_indicators && next.radar_indicators.length > 0 && (!next.categories || next.categories.length === 0)) {
+    // radar → cartesian
+    if (sourceGroup === 'radar' && targetGroup === 'cartesian') {
+      if (next.radar_indicators?.length && (!next.categories?.length)) {
         next.categories = next.radar_indicators.map(i => i.name)
+      }
+      return next
+    }
+
+    // radar → singleSeries
+    if (sourceGroup === 'radar' && targetGroup === 'singleSeries') {
+      if (!next.single_series_data?.length && next.radar_indicators?.length) {
+        const values = next.series_data?.[0] || []
+        next.single_series_data = next.radar_indicators.map((ind, i) => ({ name: ind.name, value: values[i] || 0 }))
       }
       return next
     }
@@ -395,31 +394,64 @@ export function EChartsEditor({ config, onChange, onTemplateChange, previewRef }
 
   const applyTemplate = React.useCallback(
     (tpl: EChartsTemplate, keepTitle = false) => {
+      const currentGroup = TYPE_TO_GROUP[local.type] ?? 'cartesian'
+      const targetGroup = TYPE_TO_GROUP[tpl.type] ?? 'cartesian'
+
+      // Step 1: Cache current data into the current group's slot
+      // (only if user has modified it — don't cache default data)
       const currentTpl = TEMPLATE_BY_ID[currentTemplateId] ?? DEFAULT_TEMPLATE
       const isDataDefault = configKey(local) === configKey(currentTpl.defaultConfig)
+      if (!isDataDefault) {
+        groupCacheRef.current[currentGroup] = deepClone(local)
+      }
 
-      if (isDataDefault && !keepTitle) {
-        // User hasn't modified data — use new template's default
-        commit(deepClone(tpl.defaultConfig))
+      // Step 2: Determine what data to use for the new template
+      let next: EChartsConfig
+
+      if (targetGroup === currentGroup) {
+        // Same group — just switch type, keep all data
+        next = deepClone(local)
+        next.type = tpl.type
       } else {
-        // User has data — check if current type and new type are compatible
-        const compatible = COMPATIBLE_GROUPS[local.type]?.includes(tpl.type) ?? false
-
-        if (compatible) {
-          // Compatible types — convert data and switch
-          const next = convertDataForType(local, tpl.type)
-          if (!keepTitle && currentTpl.defaultConfig.title) {
-            next.title = deepClone(currentTpl.defaultConfig.title)
-          }
-          commit(next)
+        // Different group — check cache
+        const cached = groupCacheRef.current[targetGroup]
+        if (cached) {
+          // Has cached data for this group — use it, just switch type
+          next = deepClone(cached)
+          next.type = tpl.type
+          // Copy over style settings from current config
+          next.theme = local.theme
+          next.legend = local.legend
+          next.showLabel = local.showLabel
+          next.showToolbox = local.showToolbox
         } else {
-          // Incompatible types (e.g. bar → scatter, pie → gauge)
-          // Don't force-convert — use the new template's default data
-          const next = deepClone(tpl.defaultConfig)
-          if (keepTitle && local.title) next.title = deepClone(local.title)
-          commit(next)
+          // No cache for this group — use template default
+          next = deepClone(tpl.defaultConfig)
+          // Try to convert data from current group (for compatible cross-group conversions)
+          const converted = convertDataForType(local, tpl.type)
+          // Check if conversion produced meaningful data (not empty)
+          const hasConvertedData =
+            (targetGroup === 'cartesian' && converted.series_data?.length) ||
+            (targetGroup === 'singleSeries' && converted.single_series_data?.length) ||
+            (targetGroup === 'radar' && converted.radar_indicators?.length) ||
+            (targetGroup === 'scatter' && converted.scatter_data?.length) ||
+            (targetGroup === 'gauge' && converted.gauge_value !== undefined)
+          if (hasConvertedData) {
+            next = converted
+            next.theme = local.theme
+            next.legend = local.legend
+            next.showLabel = local.showLabel
+            next.showToolbox = local.showToolbox
+          }
         }
       }
+
+      // Handle title
+      if (keepTitle && local.title) {
+        next.title = deepClone(local.title)
+      }
+
+      commit(next)
       setCurrentTemplateId(tpl.id)
       onTemplateChange?.('echarts:' + tpl.id)
       toast.success(

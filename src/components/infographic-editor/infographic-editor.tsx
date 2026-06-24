@@ -381,108 +381,84 @@ export function InfographicEditor({ config, onChange, onTemplateChange, previewR
     [local.template],
   )
 
+  // Data group cache — same concept as ECharts
+  const SHAPE_TO_GROUP: Record<string, string> = {
+    list: 'flat', sequence: 'flat', chart: 'flat',
+    hierarchy: 'hierarchy',
+    compare: 'compare',
+    relation: 'relation',
+  }
+  const groupCacheRef = React.useRef<Record<string, any>>({})
+
+  function flattenItems(data: any): any[] {
+    if (data.lists) {
+      const result: any[] = []
+      const walk = (items: any[]) => {
+        for (const item of items) {
+          result.push({ label: item.label, desc: item.desc, value: item.value, icon: item.icon })
+          if (item.children) walk(item.children)
+        }
+      }
+      walk(data.lists)
+      return result
+    }
+    if (data.nodes) return data.nodes.map((n: any) => ({ label: n.label, desc: n.group }))
+    return []
+  }
+
+  function adaptDataToShape(source: any, targetShape: string): any {
+    const flatItems = flattenItems(source)
+    const adapted: any = { title: source.title }
+    if (targetShape === 'hierarchy') {
+      adapted.lists = [{ label: flatItems[0]?.label || 'Root', desc: flatItems[0]?.desc, children: flatItems.slice(1).map(i => ({ label: i.label, desc: i.desc })) }]
+    } else if (targetShape === 'compare') {
+      const mid = Math.ceil(flatItems.length / 2)
+      adapted.lists = [
+        { label: 'Group A', children: flatItems.slice(0, mid).map(i => ({ label: i.label, desc: i.desc })) },
+        { label: 'Group B', children: flatItems.slice(mid).map(i => ({ label: i.label, desc: i.desc })) },
+      ]
+    } else if (targetShape === 'relation') {
+      adapted.nodes = flatItems.map((item, i) => ({ id: `n${i+1}`, label: item.label || `Node ${i+1}`, group: i === 0 ? 'A' : 'B' }))
+      adapted.edges = flatItems.slice(1).map((_, i) => ({ from: `n${i+1}`, to: `n${i+2}` }))
+    } else {
+      adapted.lists = flatItems
+    }
+    return adapted
+  }
+
   const applyTemplate = React.useCallback((tpl: TemplateMeta) => {
     setLocal((prev) => {
-      const prevShape = currentTemplate?.dataShape
+      const prevShape = currentTemplate?.dataShape ?? 'list'
       const newShape = tpl.dataShape
+      const prevGroup = SHAPE_TO_GROUP[prevShape] ?? 'flat'
+      const newGroup = SHAPE_TO_GROUP[newShape] ?? 'flat'
 
-      // Check if the current data is "default" (untouched by user).
-      // We compare against the default data for the current shape.
-      // If it matches, the user hasn't entered data → use new template's default.
-      // If it doesn't match, the user has data → preserve/adapt it.
-      const prevDefault = defaultDataForShape(prevShape ?? 'list')
+      // Cache current data if user modified it
+      const prevDefault = defaultDataForShape(prevShape)
       const isDataDefault = JSON.stringify(prev.data) === JSON.stringify(prevDefault)
+      if (!isDataDefault) {
+        groupCacheRef.current[prevGroup] = deepClone(prev.data)
+      }
 
-      // If data is still default, just switch to new template's default
-      if (isDataDefault) {
-        return {
-          ...prev,
-          type: tpl.id,
-          template: tpl.id,
-          data: defaultDataForShape(newShape),
+      // Determine data for new template
+      let data: any
+      if (prevGroup === newGroup) {
+        data = prev.data
+      } else {
+        const cached = groupCacheRef.current[newGroup]
+        if (cached) {
+          data = deepClone(cached)
+        } else if (isDataDefault) {
+          data = defaultDataForShape(newShape)
+        } else {
+          data = adaptDataToShape(prev.data, newShape)
         }
       }
 
-      // User has data — try to preserve it
-      let data = prev.data
-
-      if (prevShape !== newShape) {
-        const flatShapes = ['list', 'sequence', 'chart']
-        const isFlatToFlat = flatShapes.includes(prevShape ?? '') && flatShapes.includes(newShape)
-
-        if (!isFlatToFlat) {
-          // Adapt data structure when shapes differ
-          const prevData = prev.data
-          const adapted: { title?: { text?: string; subtext?: string }; lists?: any[]; nodes?: any[]; edges?: any[] } = {
-            title: prevData.title,
-          }
-
-          // Extract flat items from any shape
-          let flatItems: any[] = []
-          if (prevData.lists) {
-            // For hierarchy/compare, flatten the tree
-            const flatten = (items: any[]): any[] => {
-              const result: any[] = []
-              for (const item of items) {
-                result.push({ label: item.label, desc: item.desc, value: item.value, icon: item.icon })
-                if (item.children) result.push(...flatten(item.children))
-              }
-              return result
-            }
-            flatItems = flatten(prevData.lists)
-          } else if (prevData.nodes) {
-            flatItems = prevData.nodes.map((node: any) => ({
-              label: node.label,
-              desc: node.group,
-            }))
-          }
-
-          if (newShape === 'hierarchy') {
-            adapted.lists = [{
-              label: flatItems[0]?.label || 'Root',
-              desc: flatItems[0]?.desc,
-              children: flatItems.slice(1).map(item => ({
-                label: item.label,
-                desc: item.desc,
-              })),
-            }]
-          } else if (newShape === 'compare') {
-            const mid = Math.ceil(flatItems.length / 2)
-            adapted.lists = [
-              { label: 'Group A', children: flatItems.slice(0, mid).map(i => ({ label: i.label, desc: i.desc })) },
-              { label: 'Group B', children: flatItems.slice(mid).map(i => ({ label: i.label, desc: i.desc })) },
-            ]
-          } else if (newShape === 'relation') {
-            adapted.nodes = flatItems.map((item, i) => ({
-              id: `n${i + 1}`,
-              label: item.label || `Node ${i + 1}`,
-              group: i === 0 ? 'A' : 'B',
-            }))
-            adapted.edges = flatItems.slice(1).map((_, i) => ({
-              from: `n${i + 1}`,
-              to: `n${i + 2}`,
-            }))
-          } else if (flatShapes.includes(newShape)) {
-            adapted.lists = flatItems
-          }
-
-          data = adapted as any
-        }
-      }
-
-      return {
-        ...prev,
-        type: tpl.id,
-        template: tpl.id,
-        data,
-      }
+      return { ...prev, type: tpl.id, template: tpl.id, data }
     })
     onTemplateChange?.('infographic:' + tpl.id)
-    toast.success(
-      t('infographic.applied', {
-        name: getInfographicTemplateName(locale, tpl.id, tpl.name),
-      }),
-    )
+    toast.success(t('infographic.applied', { name: getInfographicTemplateName(locale, tpl.id, tpl.name) }))
   }, [t, onTemplateChange, locale, currentTemplate])
 
   // Three panel contents are already factored into separate components —
